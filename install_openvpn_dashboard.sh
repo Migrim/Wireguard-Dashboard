@@ -6,6 +6,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y openvpn easy-rsa ufw python3 python3-venv python3-pip git
 
+
 OVPN_DIR=/etc/openvpn
 EASYRSA_DIR=/etc/openvpn/easy-rsa
 PKI_DIR=/etc/openvpn/pki
@@ -16,8 +17,22 @@ UDP_PORT=1194
 DASH_PORT=8088
 NET_IF=$(ip route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++){if($i=="dev"){print $(i+1); exit}}}')
 
-mkdir -p ${EASYRSA_DIR}
-make-cadir ${EASYRSA_DIR} >/dev/null 2>&1 || true
+export EASYRSA_PKI=${PKI_DIR}
+export EASYRSA_BATCH=1
+mkdir -p "${EASYRSA_DIR}" "${PKI_DIR}"
+if [ ! -x "${EASYRSA_DIR}/easyrsa" ]; then
+  if [ -f /usr/share/easy-rsa/easyrsa ]; then
+    cp -r /usr/share/easy-rsa/* "${EASYRSA_DIR}/"
+    chmod +x "${EASYRSA_DIR}/easyrsa"
+  else
+    if command -v make-cadir >/dev/null 2>&1; then
+      make-cadir "${EASYRSA_DIR}"
+    else
+      echo "easy-rsa is not available. Install the easy-rsa package." >&2
+      exit 1
+    fi
+  fi
+fi
 
 cd ${EASYRSA_DIR}
 ./easyrsa init-pki
