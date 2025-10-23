@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OpenVPN Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<style>
+:root{--bg:#0a0a0b;--card:#101114;--soft:#0d0e10;--text:#e5e7eb;--muted:#94a3b8;--border:#1f2430;--accent:#6366f1;--ok:#16a34a;--warn:#f59e0b;--bad:#ef4444;--chip:#1a1b20;--radius:14px}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Roboto,system-ui,-apple-system,Segoe UI,Arial,sans-serif}
+.wrap{max-width:1400px;margin:24px auto;padding:0 16px;display:grid;gap:18px}
+.header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.h-left{display:flex;align-items:center;gap:12px}
+.brand{display:flex;align-items:center;gap:10px}
+.logo{width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,#6d6ef9,#2e2f72)}
+.title{font-size:18px;font-weight:700}
+.h-actions{display:flex;align-items:center;gap:8px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 14px;border:1px solid var(--border);border-radius:12px;background:var(--soft);color:#e5e7eb;font-size:13px;text-decoration:none;transition:.2s}
+.btn .material-icons{font-size:18px}
+.btn:hover{background:#1a1b20}
+.btn.primary{background:var(--accent);border-color:transparent}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:grid;gap:10px}
+.metric-h{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px}
+.metric-v{font-size:28px;font-weight:700;letter-spacing:.2px}
+.metric-sub{font-size:12px;color:var(--muted)}
+.btn-group{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:8px}
+.toolbar{display:flex;align-items:center;gap:10px}
+.search{flex:1;display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px 12px}
+.search input{all:unset;flex:1;color:var(--text);font-size:14px}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--border);border-radius:12px;background:var(--card);font-size:13px;color:var(--text)}
+.table{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.table-head{display:grid;grid-template-columns:40px 1.2fr 1.6fr 1.2fr 1fr 1fr 1fr 1fr 80px;padding:12px 14px;color:var(--muted);font-size:12px;background:var(--soft);border-bottom:1px solid var(--border)}
+.row{display:grid;grid-template-columns:40px 1.2fr 1.6fr 1.2fr 1fr 1fr 1fr 1fr 80px;align-items:center;padding:14px;border-bottom:1px solid var(--border)}
+.row:hover{background:#0e1014}
+.cbox{width:18px;height:18px;border:1px solid var(--border);border-radius:6px;background:transparent}
+.name{display:flex;align-items:center;gap:10px}
+.avatar{width:28px;height:28px;border-radius:8px;background:#1f2430}
+.name a{color:#cbd5e1;text-decoration:none;font-weight:500}
+.small{font-size:12px;color:var(--muted)}
+.pill{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:999px;font-size:12px}
+.pill.active{background:rgba(22,163,74,.12);color:#a7f3d0;border:1px solid rgba(22,163,74,.25)}
+.pill.inactive{background:rgba(148,163,184,.08);color:#cbd5e1;border:1px solid rgba(148,163,184,.2)}
+.pill.warn{background:rgba(245,158,11,.12);color:#fde68a;border:1px solid rgba(245,158,11,.25)}
+.pill.bad{background:rgba(239,68,68,.12);color:#fecaca;border:1px solid rgba(239,68,68,.25)}
+.role{display:inline-flex;align-items:center;gap:8px;color:#d1d5db;font-size:13px}
+.role .material-icons{font-size:16px;color:#94a3b8}
+.more{display:flex;justify-content:flex-end}
+.icon-btn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border:1px solid var(--border);border-radius:10px;background:var(--card);color:#cbd5e1}
+.kpi{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
+.kpi .dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+@media (max-width:1100px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.table-head,.row{grid-template-columns:40px 1.4fr 1.6fr 1.2fr .9fr .9fr .9fr 1fr 60px}}
+@media (max-width:770px){.grid{grid-template-columns:1fr}.h-actions{display:none}.table-head,.row{grid-template-columns:40px 1.5fr 1.5fr 1.2fr .9fr .9fr 1fr 60px}.hide-sm{display:none}}
+.modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);z-index:50}
+.modal.show{display:flex}
+.dialog{width:min(640px,96vw);background:var(--card);border:1px solid var(--border);border-radius:18px;box-shadow:0 20px 80px rgba(0,0,0,.5);display:grid}
+.d-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--border)}
+.d-title{font-weight:700}
+.d-close{all:unset;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border:1px solid var(--border);border-radius:12px;background:var(--soft);color:#cbd5e1;cursor:pointer}
+.d-body{padding:18px;display:grid;gap:14px}
+.d-foot{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:16px 18px;border-top:1px solid var(--border)}
+.btn.ghost{background:var(--card)}
+.steps{display:grid;gap:10px}
+.s-row{display:grid;grid-template-columns:20px 1fr auto;gap:10px;align-items:center;padding:10px;border:1px solid var(--border);border-radius:12px;background:var(--soft)}
+.s-dot{width:10px;height:10px;border-radius:50%}
+.s-dot.idle{background:#2a2f3a}
+.s-dot.run{position:relative;background:#2a2f3a}
+.s-dot.run::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid rgba(99,102,241,.35);animation:pulse 1.2s infinite}
+.s-dot.ok{background:var(--ok)}
+.s-dot.bad{background:var(--bad)}
+.s-dot.warn{background:var(--warn)}
+.s-name{font-size:14px}
+.s-status{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.anim-dots{display:inline-flex;gap:4px}
+.anim-dots span{width:4px;height:4px;border-radius:50%;background:#8b93a8;opacity:.35;animation:bounce 1.2s infinite}
+.anim-dots span:nth-child(2){animation-delay:.2s}
+.anim-dots span:nth-child(3){animation-delay:.4s}
+@keyframes bounce{0%,80%,100%{transform:translateY(0);opacity:.35}40%{transform:translateY(-4px);opacity:.9}}
+@keyframes pulse{0%{transform:scale(.9);opacity:.6}50%{transform:scale(1.15);opacity:1}100%{transform:scale(.9);opacity:.6}}
+.u-dialog{width:min(560px,96vw);background:var(--card);border:1px solid var(--border);border-radius:18px;box-shadow:0 20px 80px rgba(0,0,0,.5);display:grid}
+.u-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--border)}
+.u-title{font-weight:700}
+.u-close{all:unset;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border:1px solid var(--border);border-radius:12px;background:var(--soft);color:#cbd5e1;cursor:pointer}
+.u-body{padding:18px;display:grid;gap:14px}
+.u-foot{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:16px 18px;border-top:1px solid var(--border)}
+.u-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.u-full{grid-column:1/-1}
+.u-label{font-size:12px;color:var(--muted);margin-bottom:6px}
+.u-input{width:100%;background:#0f1115;border:1px solid var(--border);border-radius:12px;color:var(--text);padding:10px 12px;font-size:14px}
+.u-select{appearance:none}
+.u-switch{display:flex;align-items:center;gap:10px}
+.u-switch input{appearance:none;width:40px;height:22px;border-radius:999px;background:#141720;border:1px solid var(--border);position:relative;outline:none;transition:.2s}
+.u-switch input:checked{background:#1e2230}
+.u-switch input::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#cbd5e1;transition:.2s}
+.u-switch input:checked::after{left:20px}
+.input{width:100%;background:#0f1115;border:1px solid var(--border);border-radius:12px;color:var(--text);padding:10px 12px;font-size:14px}
+.label{font-size:12px;color:var(--muted);margin-bottom:6px}
+.toast{position:fixed;right:18px;bottom:18px;display:none;gap:8px;align-items:center;background:#0f1115;border:1px solid var(--border);border-radius:12px;padding:10px 12px;z-index:60}
+.toast.show{display:flex}
+</style>
+</head>
+<body data-base="{{ request.script_root or '' }}">
+  <div class="wrap">
+    <div class="header">
+      <div class="h-left">
+        <div class="brand">
+          <div class="logo"></div>
+          <div class="title">OpenVPN Dashboard</div>
+        </div>
+      </div>
+      <div class="h-actions">
+        <a class="btn" id="openReport"><span class="material-icons">wifi_tethering</span>Check Ports</a>
+        <a class="btn primary" id="openAdd"><span class="material-icons">person_add</span>Add Client</a>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="metric-h"><span class="material-icons">dns</span>Service Control</div>
+        <div class="btn-group">
+          <a href="#" class="btn" id="btnStart"><span class="material-icons">play_arrow</span>Start</a>
+          <a href="#" class="btn" id="btnRestart"><span class="material-icons">restart_alt</span>Restart</a>
+          <a href="#" class="btn" id="btnStop"><span class="material-icons">stop</span>Stop</a>
+        </div>
+        <div class="metric-sub" id="svcState">loading…</div>
+      </div>
+
+      <div class="card">
+        <div class="metric-h"><span class="material-icons">person_add_alt</span>Total Users</div>
+        <div class="metric-v" id="kpiUsers">0</div>
+        <div class="metric-sub" id="kpiUsersSub"></div>
+      </div>
+      <div class="card">
+        <div class="metric-h"><span class="material-icons">gpp_maybe</span>Connection Problems</div>
+        <div class="metric-v" id="kpiProblems">0</div>
+        <div class="metric-sub" id="kpiProblemsSub"></div>
+      </div>
+      <div class="card">
+        <div class="metric-h"><span class="material-icons">bolt</span>Active Sessions</div>
+        <div class="metric-v" id="kpiActive">0</div>
+        <div class="kpi"><span class="dot"></span><span id="kpiActiveFrac">0%</span> online</div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div class="search">
+        <span class="material-icons">search</span>
+        <input placeholder="Filter clients by name, CN, or IP" id="searchInput">
+      </div>
+      <div class="chip" id="chipStatus"><span class="material-icons">toggle_on</span>Status</div>
+      <div class="chip" id="chipView"><span class="material-icons">tune</span>View</div>
+    </div>
+
+    <div class="table" id="clientsTable">
+      <div class="table-head">
+        <div></div><div>Name</div><div>Common Name</div><div>IP</div><div>Bytes In</div><div>Bytes Out</div><div class="hide-sm">Connected Since</div><div>Status</div><div></div>
+      </div>
+      <div id="rows"></div>
+    </div>
+  </div>
+
+  <div class="modal" id="addModal" aria-hidden="true">
+    <div class="u-dialog" role="dialog" aria-modal="true" aria-labelledby="addTitle">
+      <div class="u-head">
+        <div class="u-title" id="addTitle">Add Client</div>
+        <button class="u-close" id="closeAdd" aria-label="Close"><span class="material-icons">close</span></button>
+      </div>
+      <form id="addForm" novalidate>
+        <div class="u-body">
+          <div class="u-form-grid">
+            <div>
+              <div class="u-label">Client Name</div>
+              <input class="u-input" name="name" required>
+            </div>
+            <div>
+              <div class="u-label">Common Name (CN)</div>
+              <input class="u-input" name="cn" required>
+            </div>
+            <div>
+              <div class="u-label">Email</div>
+              <input class="u-input" name="email" type="email" placeholder="name@example.com">
+            </div>
+            <div>
+              <div class="u-label">Static IP (optional)</div>
+              <input class="u-input" name="ip" placeholder="10.8.0.x">
+            </div>
+            <div>
+              <div class="u-label">Key Type</div>
+              <select class="u-input u-select" name="key_type">
+                <option value="rsa2048">RSA 2048</option>
+                <option value="rsa4096">RSA 4096</option>
+                <option value="ecdsa256">ECDSA P-256</option>
+                <option value="ecdsa384">ECDSA P-384</option>
+              </select>
+            </div>
+            <div>
+              <div class="u-label">Expires</div>
+              <select class="u-input u-select" name="expires">
+                <option value="365">12 months</option>
+                <option value="180">6 months</option>
+                <option value="90">3 months</option>
+                <option value="30">30 days</option>
+              </select>
+            </div>
+            <div class="u-full">
+              <div class="u-label">Notes</div>
+              <input class="u-input" name="notes" placeholder="Optional note">
+            </div>
+            <div class="u-full u-switch">
+              <input type="checkbox" id="pw" name="protect">
+              <label for="pw" class="u-label" style="margin:0">Password-protect key</label>
+            </div>
+          </div>
+          <div id="addErr" class="u-label" style="color:#fecaca"></div>
+        </div>
+        <div class="u-foot">
+          <button type="button" class="btn ghost" id="cancelAdd">Cancel</button>
+          <button type="submit" class="btn primary"><span class="material-icons">person_add</span>Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal" id="reportModal" aria-hidden="true">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="reportTitle">
+      <div class="d-head">
+        <div class="d-title" id="reportTitle">Port Checker Report</div>
+        <button class="d-close" id="closeReport" aria-label="Close"><span class="material-icons">close</span></button>
+      </div>
+      <div class="d-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <div class="label">Host/IP</div>
+            <input class="input" id="r-host" readonly value="detecting">
+          </div>
+          <div>
+            <div class="label">Protocol</div>
+            <input class="input" id="r-proto" readonly value="UDP 1194">
+          </div>
+        </div>
+        <div class="steps" id="steps"></div>
+      </div>
+      <div class="d-foot">
+        <button type="button" class="btn ghost" id="rerunReport"><span class="material-icons">replay</span>Run Again</button>
+        <button type="button" class="btn" id="closeReport2">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"><span class="material-icons">info</span><span id="toastText"></span></div>
+
+<script>
+const nameOk=x=>/^[A-Za-z0-9._-]{1,64}$/.test(String(x||'').trim())
+const ipOk=x=>/^(?:\d{1,3}\.){3}\d{1,3}$/.test(String(x||'').trim())
+try{ localStorage.removeItem('API_TOKEN') }catch(e){}
+
+const el=id=>document.getElementById(id)
+const addErr=el('addErr')
+function setAddErr(t){ if(addErr){ addErr.textContent=t||'' } }
+
+const BASE=document.body.dataset.base||''
+const api=async(p,opt={})=>{
+  const url=p.startsWith('http')?p:(BASE+p)
+  const ac=new AbortController()
+  const t=setTimeout(()=>ac.abort(),15000)
+  try{
+    const res=await fetch(url,{...opt,headers:{'Content-Type':'application/json',...(opt.headers||{})},signal:ac.signal})
+    let data=null
+    try{ data=await res.json() }catch(_){}
+    if(!res.ok){
+      const msg=(data&&((data.hint)||(data.error)||(data.out)))||('HTTP '+res.status)
+      throw new Error(String(msg))
+    }
+    return data
+  }catch(e){
+    console.error('api error',url,e)
+    throw e
+  }finally{
+    clearTimeout(t)
+  }
+}
+const rows=el('rows')
+const kpiUsers=el('kpiUsers')
+const kpiUsersSub=el('kpiUsersSub')
+const kpiProblems=el('kpiProblems')
+const kpiProblemsSub=el('kpiProblemsSub')
+const kpiActive=el('kpiActive')
+const kpiActiveFrac=el('kpiActiveFrac')
+const svcState=el('svcState')
+const searchInput=el('searchInput')
+const toastEl=el('toast');const toastText=el('toastText')
+function toast(t){toastText.textContent=t;toastEl.classList.add('show');setTimeout(()=>toastEl.classList.remove('show'),2200)}
+let cachedStatus=null
+let issued=[],live=[]
+function fmtBytes(n){if(n==null)return '0 B';const u=['B','KB','MB','GB','TB'];let i=0,v=n;while(v>=1024&&i<u.length-1){v/=1024;i++}return v.toFixed(v>=10?0:1)+' '+u[i]}
+function percent(a,b){if(b<=0)return '0%';return Math.round((a/b)*100)+'%'}
+function pill(status){if(status==='active')return '<span class="pill active">Active</span>';if(status==='warn')return '<span class="pill warn">Warn</span>';if(status==='bad')return '<span class="pill bad">Error</span>';return '<span class="pill inactive">Inactive</span>'}
+function renderRows(filter=''){
+  const f=filter.trim().toLowerCase()
+  rows.innerHTML=''
+  const liveByCN=new Map(live.map(c=>[c.cn,c]))
+  const allNames=new Set([...issued.map(i=>i.name),...live.map(l=>l.cn)])
+  Array.from(allNames).sort((a,b)=>a.localeCompare(b)).forEach(name=>{
+    const iss=issued.find(i=>i.name===name)
+    const lv=liveByCN.get(name)
+    const displayName=iss?iss.name:name
+    const cn=name
+    const ip=lv?lv.remote.split(':')[0]:''
+    const bin=lv?lv.bytes_recv:0
+    const bout=lv?lv.bytes_sent:0
+    const since=lv?lv.since:''
+    const status=lv?'active':'inactive'
+    const hay=(displayName+' '+cn+' '+ip).toLowerCase()
+    if(f && !hay.includes(f)) return
+    const row=document.createElement('div')
+    row.className='row'
+    row.innerHTML=`
+      <div><div class="cbox"></div></div>
+      <div class="name"><div class="avatar"></div><a href="#">${displayName}</a></div>
+      <div class="small">${cn}</div>
+      <div class="small">${ip||'-'}</div>
+      <div class="small">${fmtBytes(bin)}</div>
+      <div class="small">${fmtBytes(bout)}</div>
+      <div class="small hide-sm">${since||'-'}</div>
+      <div>${pill(status)}</div>
+      <div class="more">
+        <button class="icon-btn" data-action="menu" data-cn="${cn}"><span class="material-icons">more_horiz</span></button>
+      </div>`
+    rows.appendChild(row)
+  })
+}
+async function refresh(){
+  const j=await api('/api/status')
+  cachedStatus=j
+  issued=j.clients.issued||[]
+  live=j.clients.live||[]
+  const total=issued.length
+  const active=live.length
+  kpiUsers.textContent=total
+  kpiUsersSub.textContent=j.service.active?'Service running':'Service stopped'
+  kpiActive.textContent=active
+  kpiActiveFrac.textContent=percent(active,Math.max(1,total))
+  const problems=Number(!j.network.ping_ok)+Number(!j.network.ufw_udp_open)+Number(!j.network.listening)
+  kpiProblems.textContent=problems
+  kpiProblemsSub.textContent=problems?'Attention required':'All checks passed'
+  svcState.textContent=(j.service.active?'active':'inactive')+' · '+(j.service.enabled?'enabled':'disabled')+' · '+j.service.unit
+  el('r-host').value=j.network.host_ip
+  el('r-proto').value=(j.config.proto||'udp').toUpperCase()+' '+(j.network.port||'1194')
+  renderRows(searchInput.value)
+}
+async function doService(action){
+  await api('/api/service',{method:'POST',body:JSON.stringify({action})})
+  toast(action)
+  await refresh()
+}
+el('btnStart').addEventListener('click',e=>{e.preventDefault();doService('start')})
+el('btnRestart').addEventListener('click',e=>{e.preventDefault();doService('restart')})
+el('btnStop').addEventListener('click',e=>{e.preventDefault();doService('stop')})
+searchInput.addEventListener('input',()=>renderRows(searchInput.value))
+
+const addModal=document.getElementById('addModal')
+const openAdd=document.getElementById('openAdd')
+const closeAdd=document.getElementById('closeAdd')
+const cancelAdd=document.getElementById('cancelAdd')
+const addForm=document.getElementById('addForm')
+function openModal(){addModal.classList.add('show');addModal.setAttribute('aria-hidden','false')}
+function closeModal(){addModal.classList.remove('show');addModal.setAttribute('aria-hidden','true')}
+openAdd.addEventListener('click',e=>{e.preventDefault();openModal()})
+closeAdd.addEventListener('click',closeModal)
+cancelAdd.addEventListener('click',closeModal)
+addModal.addEventListener('click',e=>{if(e.target===addModal)closeModal()})
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeReportModal()}})
+addForm.addEventListener('submit',async e=>{
+  e.preventDefault()
+  setAddErr('')
+  const fd=new FormData(addForm)
+  const payload={
+    name:(fd.get('name')||'').trim(),
+    cn:(fd.get('cn')||fd.get('name')||'').trim(),
+    email:(fd.get('email')||'').trim(),
+    ip:(fd.get('ip')||'').trim(),
+    key_type:(fd.get('key_type')||'rsa2048'),
+    expires:(fd.get('expires')||'365'),
+    notes:(fd.get('notes')||'').trim(),
+    protect:fd.get('protect')==='on'
+  }
+  if(!nameOk(payload.name)){ setAddErr('Invalid name'); return }
+  if(!payload.cn) payload.cn=payload.name
+  if(payload.ip && !ipOk(payload.ip)){ setAddErr('Invalid IP (use e.g. 10.8.0.23)'); return }
+  const btn=addForm.querySelector('button[type="submit"]')
+  const oldHTML=btn.innerHTML
+  btn.disabled=true
+  btn.innerHTML='<span class="material-icons">hourglass_top</span>Creating…'
+  try{
+    const r=await api('/api/users',{method:'POST',body:JSON.stringify(payload)})
+    if(!r||r.ok!==true){ throw new Error('Create failed') }
+    const prof=await api('/api/users/'+encodeURIComponent(payload.cn)+'/ovpn')
+    if(!prof||prof.ok!==true||!prof.profile){ throw new Error((prof&&prof.hint)||'Profile generation failed') }
+    const blob=new Blob([prof.profile],{type:'application/x-openvpn-profile'})
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=payload.cn+'.ovpn';document.body.appendChild(a);a.click();a.remove()
+    closeModal()
+    await refresh()
+    toast('Client created')
+  }catch(err){
+    console.error('create failed',err)
+    setAddErr(err&&err.message?String(err.message):'Error')
+    toast('Create failed')
+  }finally{
+    btn.disabled=false
+    btn.innerHTML=oldHTML
+  }
+})
+
+const reportModal=document.getElementById('reportModal')
+const openReport=document.getElementById('openReport')
+const closeReport=document.getElementById('closeReport')
+const closeReport2=document.getElementById('closeReport2')
+const rerunReport=document.getElementById('rerunReport')
+const stepsEl=document.getElementById('steps')
+const hostEl=document.getElementById('r-host')
+const protoEl=document.getElementById('r-proto')
+function openReportModal(){reportModal.classList.add('show');reportModal.setAttribute('aria-hidden','false');buildSteps();runPortCheck()}
+function closeReportModal(){reportModal.classList.remove('show');reportModal.setAttribute('aria-hidden','true')}
+openReport.addEventListener('click',e=>{e.preventDefault();openReportModal()})
+closeReport.addEventListener('click',closeReportModal)
+closeReport2.addEventListener('click',closeReportModal)
+reportModal.addEventListener('click',e=>{if(e.target===reportModal)closeReportModal()})
+rerunReport.addEventListener('click',()=>{buildSteps();runPortCheck()})
+const stepDefs=[{key:'detect_ip',name:'Resolve server IP'},{key:'udp_listen',name:'Check UDP listener'},{key:'tcp_listen',name:'Check TCP listener'},{key:'firewall',name:'Verify firewall rules'},{key:'external',name:'External reachability'}]
+function buildSteps(){stepsEl.innerHTML='';stepDefs.forEach(s=>{const row=document.createElement('div');row.className='s-row';row.dataset.key=s.key;const dot=document.createElement('div');dot.className='s-dot idle';const name=document.createElement('div');name.className='s-name';name.textContent=s.name;const status=document.createElement('div');status.className='s-status';status.textContent='Pending';row.appendChild(dot);row.appendChild(name);row.appendChild(status);stepsEl.appendChild(row)});hostEl.value='detecting'}
+function setRowState(key,state,text,anim){const row=[...stepsEl.children].find(r=>r.dataset.key===key);if(!row)return;const dot=row.querySelector('.s-dot');dot.className='s-dot '+state;const s=row.querySelector('.s-status');s.innerHTML='';const t=document.createElement('span');t.textContent=text;s.appendChild(t);if(anim){const ad=document.createElement('span');ad.className='anim-dots';ad.innerHTML='<span></span><span></span><span></span>';s.appendChild(ad)}}
+async function runPortCheck(){
+  setRowState('detect_ip','run','Detecting',true)
+  const st=await api('/api/status')
+  hostEl.value=st.network.host_ip
+  protoEl.value=(st.config.proto||'udp').toUpperCase()+' '+st.network.port
+  setRowState('detect_ip','ok','OK',false)
+  setRowState('udp_listen','run','Checking',true)
+  const udp=await api('/api/ports?proto=udp&port='+encodeURIComponent(st.network.port))
+  setRowState('udp_listen',udp.listening?'ok':'bad',udp.listening?'Open':'Closed',false)
+  setRowState('tcp_listen','run','Checking',true)
+  const tcp=await api('/api/ports?proto=tcp&port='+encodeURIComponent(st.network.port))
+  setRowState('tcp_listen',tcp.listening?'ok':'warn',tcp.listening?'Open':'Closed',false)
+  setRowState('firewall','run','Inspecting',true)
+  setRowState('firewall',(udp.ufw_allowed?'ok':'bad'),udp.ufw_allowed?'Allowed':'Blocked',false)
+  setRowState('external','run','Probing',true)
+  const health=await api('/api/health')
+  setRowState('external',health.ping_ok?'ok':'warn',health.ping_ok?'Reachable':'Ping failed',false)
+}
+
+async function allowPort(proto,port,allow){await api('/api/ports',{method:'POST',body:JSON.stringify({proto,port,allow})});toast((allow?'Allowed ':'Removed ')+proto.toUpperCase()+' '+port);await refresh()}
+
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.icon-btn')
+  if(!b)return
+  if(b.dataset.action==='menu'){
+    const cn=b.dataset.cn
+    const menu=document.createElement('div')
+    menu.style.position='fixed';menu.style.right='18px';menu.style.bottom='68px';menu.style.background='#0f1115';menu.style.border='1px solid var(--border)';menu.style.borderRadius='12px';menu.style.padding='6px';menu.style.zIndex='70'
+    const mk=(t,fn)=>{const a=document.createElement('a');a.href='#';a.textContent=t;a.style.display='block';a.style.padding='8px 10px';a.onclick=(ev)=>{ev.preventDefault();fn();menu.remove()};return a}
+    menu.appendChild(mk('Download .ovpn',async()=>{const prof=await api('/api/users/'+encodeURIComponent(cn)+'/ovpn');const blob=new Blob([prof.profile],{type:'application/x-openvpn-profile'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=cn+'.ovpn';document.body.appendChild(a);a.click();a.remove()}))
+    menu.appendChild(mk('Revoke',async()=>{await api('/api/users/'+encodeURIComponent(cn)+'/revoke',{method:'POST'});toast('Revoked '+cn);await refresh()}))
+    document.body.appendChild(menu)
+    setTimeout(()=>{document.addEventListener('click',()=>menu.remove(),{once:true})},0)
+  }
+})
+
+async function init(){ try { await refresh() } catch(e) { toast('Failed to load API') } }
+init()
+setInterval(()=>{refresh().catch(()=>{})},5000)
+</script>
+</body>
+</html>
