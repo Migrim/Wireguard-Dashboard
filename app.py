@@ -8,6 +8,7 @@ WG_IFACE=os.environ.get("WG_IFACE","wg0")
 WG_DIR=os.environ.get("WG_DIR","/etc/wireguard")
 WG_CONF=os.environ.get("WG_CONF",f"/etc/wireguard/{WG_IFACE}.conf")
 WG_PORT=int(os.environ.get("WG_PORT","51820"))
+SERVER_ADDR_ENV=os.environ.get("SERVER_ADDR","10.8.0.1/24")
 HOST_IP=subprocess.check_output(["bash","-lc","hostname -I | awk '{print $1}'"]).decode().strip()
 UNIT=f"wg-quick@{WG_IFACE}"
 PEERS_DB=os.path.join(WG_DIR,"peers.json")
@@ -173,9 +174,9 @@ def _valid_ip(x: Any) -> bool:
         return False
 
 def _server_subnets() -> List[ipaddress.IPv4Network]:
-    conf=_read_conf()
-    addrs=conf.get("Interface",{}).get("Address","")
     nets=[]
+    conf=_read_conf()
+    addrs=conf.get("Interface",{}).get("Address","") or SERVER_ADDR_ENV
     for part in re.split(r"[,\s]+", addrs.strip()):
         part=part.strip()
         if not part:
@@ -212,10 +213,11 @@ def _next_client_ip() -> str:
     for iface in _assigned_ips():
         if iface.ip in net:
             used.add(int(iface.ip))
-    srv_iface=_read_conf().get("Interface",{}).get("Address","")
+    srv_iface=_read_conf().get("Interface",{}).get("Address","") or SERVER_ADDR_ENV
     for part in re.split(r"[,\s]+", srv_iface.strip()):
         part=part.strip()
-        if not part: continue
+        if not part:
+            continue
         try:
             ii=ipaddress.ip_interface(part)
             if ii.ip in net:
@@ -223,6 +225,10 @@ def _next_client_ip() -> str:
         except:
             pass
     for host in net.hosts():
+        if host == net.network_address or host == net.broadcast_address:
+            continue
+        if str(host).endswith(".1"):
+            continue
         if int(host) not in used:
             return f"{host}/32"
     return ""
@@ -276,7 +282,7 @@ def gen_client_conf(name: str) -> Tuple[str,str]:
     srv_pub=_server_pubkey()
     conf=_read_conf()
     lp=conf.get("Interface",{}).get("ListenPort",str(WG_PORT))
-    endpoint=f"{HOST_IP} {lp}" if " " in lp else f"{HOST_IP}:{lp}"
+    endpoint=f"{HOST_IP}:{lp}"
     allowed_client="0.0.0.0/0, ::/0"
     keepalive="25"
     txt=[]
@@ -289,7 +295,7 @@ def gen_client_conf(name: str) -> Tuple[str,str]:
     txt.append("[Peer]")
     txt.append(f"PublicKey = {srv_pub}")
     txt.append(f"AllowedIPs = {allowed_client}")
-    txt.append(f"Endpoint = {HOST_IP}:{lp}")
+    txt.append(f"Endpoint = {endpoint}")
     txt.append(f"PersistentKeepalive = {keepalive}")
     return "\n".join(txt).strip()+"\n", meta.get("public_key","")
 
