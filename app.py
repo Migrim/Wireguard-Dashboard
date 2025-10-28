@@ -26,6 +26,14 @@ def _run(cmd: str) -> Tuple[str,int]:
 
 _last_run = {"cmd":"", "rc":None, "out":""}
 
+# Helper function to sudo cat a file, checking common locations for cat
+def _sudo_cat(path: str) -> Tuple[str, int]:
+    for cat_bin in ("/bin/cat", "/usr/bin/cat"):
+        out, rc = _sudo([cat_bin, path])
+        if rc == 0:
+            return out, 0
+    return "", 1
+
 def _sudo(args: List[str], input_data: bytes = None) -> Tuple[str,int]:
     try:
         cmd = [SUDO_BIN, "-n"] + args
@@ -87,30 +95,39 @@ def logs_tail(n: int=200) -> str:
     return o
 
 def _read_conf() -> Dict[str,Any]:
-    data={"Interface":{}, "Peers":[]}
-    if not os.path.isfile(WG_CONF):
+    data = {"Interface": {}, "Peers": []}
+    content = ""
+    try:
+        with open(WG_CONF, encoding="utf-8", errors="ignore") as f:
+            content = f.read()
+    except FileNotFoundError:
         return data
-    cur=None
-    cur_peer={}
-    for ln in open(WG_CONF,encoding="utf-8",errors="ignore"):
-        s=ln.strip()
+    except PermissionError:
+        out, rc = _sudo_cat(WG_CONF)
+        if rc != 0 or not out:
+            return data
+        content = out
+    cur = None
+    cur_peer = {}
+    for ln in content.splitlines():
+        s = ln.strip()
         if not s or s.startswith("#"):
             continue
-        if s.lower()=="[interface]":
-            cur="iface"
+        if s.lower() == "[interface]":
+            cur = "iface"
             continue
-        if s.lower()=="[peer]":
+        if s.lower() == "[peer]":
             if cur_peer:
                 data["Peers"].append(cur_peer)
-            cur_peer={}
-            cur="peer"
+            cur_peer = {}
+            cur = "peer"
             continue
         if "=" in s:
-            k,v=[x.strip() for x in s.split("=",1)]
-            if cur=="iface":
-                data["Interface"][k]=v
-            elif cur=="peer":
-                cur_peer[k]=v
+            k, v = [x.strip() for x in s.split("=", 1)]
+            if cur == "iface":
+                data["Interface"][k] = v
+            elif cur == "peer":
+                cur_peer[k] = v
     if cur_peer:
         data["Peers"].append(cur_peer)
     return data
@@ -131,7 +148,7 @@ def _write_conf(data: Dict[str,Any]) -> None:
     try:
         with os.fdopen(fd,"w",encoding="utf-8") as f:
             f.write("\n".join(lines).strip()+"\n")
-        _sudo(["/usr/bin/install","-m","600",tmp_path,WG_CONF])
+        _sudo(["/usr/bin/install","-m","640","-o","root","-g","www-data",tmp_path,WG_CONF])
     finally:
         try:
             if os.path.exists(tmp_path):
@@ -173,8 +190,17 @@ def _load_peers_db() -> Dict[str,Any]:
     if not os.path.isfile(PEERS_DB):
         return {}
     try:
-        return json.load(open(PEERS_DB,"r"))
-    except:
+        with open(PEERS_DB, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except PermissionError:
+        out, rc = _sudo_cat(PEERS_DB)
+        if rc == 0 and out:
+            try:
+                return json.loads(out)
+            except Exception:
+                return {}
+        return {}
+    except Exception:
         return {}
 
 def _save_peers_db(db: Dict[str,Any]) -> None:
@@ -183,7 +209,7 @@ def _save_peers_db(db: Dict[str,Any]) -> None:
     try:
         with os.fdopen(fd,"w",encoding="utf-8") as f:
             json.dump(db,f,indent=2)
-        _sudo(["/usr/bin/install","-m","600",tmp_path,PEERS_DB])
+        _sudo(["/usr/bin/install","-m","640","-o","root","-g","www-data",tmp_path,PEERS_DB])
     finally:
         try:
             if os.path.exists(tmp_path):
@@ -549,6 +575,43 @@ def api_diag_peers():
     db = _load_peers_db()
     show, _ = _sudo(["/usr/bin/wg", "show", WG_IFACE, "dump"]) if os.path.exists("/usr/bin/wg") else ("", 0)
     return jsonify({"db_keys": sorted(list(db.keys())), "db": db, "wg_dump": show})
+
+
+@app.route("/api/diag/perms")
+def api_diag_perms():
+    import stat, pwd, grp
+    info = {}
+    try:
+        st = os.stat(WG_CONF)
+        mode_dec = st.st_mode & 0o777
+        mode_oct_str = f"{mode_dec:03o}"
+        try:
+            owner = pwd.getpwuid(st.st_uid).pw_name
+        except Exception:
+            owner = str(st.st_uid)
+        try:
+            group = grp.getgrgid(st.st_gid).gr_name
+        except Exception:
+            group = str(st.st_gid)
+        info["wg_conf"] = {
+            "path": str(WG_CONF),
+            "exists": True,
+            "mode_decimal_str": str(mode_dec),
+            "mode_octal": "0" + mode_oct_str,
+            "uid_str": str(st.st_uid),
+            "gid_str": str(st.st_gid),
+            "owner": owner,
+            "group": group,
+            "size_bytes_str": str(st.st_size)
+        }
+    except Exception as e:
+        info["wg_conf_error"] = str(e)
+    out_cat, rc_cat = _sudo_cat(WG_CONF)
+    info["sudo_cat_rc_str"] = str(rc_cat)
+    info["sudo_cat_ok"] = (rc_cat == 0)
+    info["sudo_cat_len_str"] = str(len(out_cat) if isinstance(out_cat, str) else 0)
+    info["sudo_cat_head"] = out_cat[:120] if isinstance(out_cat, str) else ""
+    return jsonify(info)
 
 
 @app.route("/api/logs")
