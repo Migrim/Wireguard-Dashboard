@@ -12,8 +12,7 @@ WG_PORT=${WG_PORT:-51820}
 SERVER_ADDR=${SERVER_ADDR:-10.8.0.1/24}
 DASH_DIR=${DASH_DIR:-/opt/WireGuard-Dashboard}
 DASH_ENV=${DASH_DIR}/.venv
-DASH_PORT=${DASH_PORT:-8088
-}
+DASH_PORT=${DASH_PORT:-8088}
 APP_MODULE=${APP_MODULE:-app:app}
 REPO_URL=${REPO_URL:-https://github.com/Migrim/Wireguard-Dashboard.git}
 BRANCH=${BRANCH:-main}
@@ -35,6 +34,15 @@ ListenPort = ${WG_PORT}
 PrivateKey = $(cat "${WG_DIR}/server_privatekey")
 EOF
   chmod 600 "${WG_CONF}"
+else
+  umask 077
+  grep -qE '^[[:space:]]*Address[[:space:]]*=' "${WG_CONF}" || \
+    printf '\nAddress = %s\n' "${SERVER_ADDR}" >> "${WG_CONF}"
+  grep -qE '^[[:space:]]*ListenPort[[:space:]]*=' "${WG_CONF}" || \
+    printf 'ListenPort = %s\n' "${WG_PORT}" >> "${WG_CONF}"
+  if ! grep -qE '^[[:space:]]*PrivateKey[[:space:]]*=' "${WG_CONF}"; then
+    printf 'PrivateKey = %s\n' "$(cat "${WG_DIR}/server_privatekey")" >> "${WG_CONF}"
+  fi
 fi
 
 sysctl -w net.ipv4.ip_forward=1 >/dev/null
@@ -45,10 +53,15 @@ ufw allow ${WG_PORT}/udp || true
 ufw allow ${DASH_PORT}/tcp || true
 ufw --force enable
 
-SUBNET=$(echo "${SERVER_ADDR}" | awk -F/ '{print $1"/"$2}')
+WG_NET=$(python3 - <<PY
+import ipaddress,os
+print(ipaddress.ip_interface(os.environ["SERVER_ADDR"]).network)
+PY
+)
+
 if ! grep -q "START WIREGUARD NAT" /etc/ufw/before.rules 2>/dev/null; then
   tmpf=$(mktemp)
-  awk '1; END{print "# START WIREGUARD NAT\n*nat\n:POSTROUTING ACCEPT [0:0]\n-A POSTROUTING -s '"${SUBNET}"' -o '"${NET_IF}"' -j MASQUERADE\nCOMMIT\n# END WIREGUARD NAT"}' /etc/ufw/before.rules > "$tmpf"
+  awk '1; END{print "# START WIREGUARD NAT\n*nat\n:POSTROUTING ACCEPT [0:0]\n-A POSTROUTING -s '"${WG_NET}"' -o '"${NET_IF}"' -j MASQUERADE\nCOMMIT\n# END WIREGUARD NAT"}' /etc/ufw/before.rules > "$tmpf"
   install -m 644 "$tmpf" /etc/ufw/before.rules
   rm -f "$tmpf"
 fi
@@ -88,6 +101,7 @@ WG_IFACE=${WG_IFACE}
 WG_DIR=${WG_DIR}
 WG_CONF=${WG_CONF}
 WG_PORT=${WG_PORT}
+SERVER_ADDR=${SERVER_ADDR}
 FLASK_ENV=production
 EOF
 chmod 640 /etc/wg-dashboard.env
