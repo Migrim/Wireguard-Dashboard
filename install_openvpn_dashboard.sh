@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get update
@@ -13,13 +12,13 @@ WG_PORT=${WG_PORT:-51820}
 SERVER_ADDR=${SERVER_ADDR:-10.8.0.1/24}
 DASH_DIR=${DASH_DIR:-/opt/WireGuard-Dashboard}
 DASH_ENV=${DASH_DIR}/.venv
-DASH_PORT=${DASH_PORT:-8088}
+DASH_PORT=${DASH_PORT:-8088
+}
 APP_MODULE=${APP_MODULE:-app:app}
-REPO_URL=${REPO_URL:-https://github.com/Migrim/OpenVPN-Dashboard.git}
+REPO_URL=${REPO_URL:-https://github.com/Migrim/Wireguard-Dashboard.git}
 BRANCH=${BRANCH:-main}
 
 NET_IF=$(ip route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++){if($i=="dev"){print $(i+1); exit}}}')
-
 install -d -m 700 "${WG_DIR}"
 
 if [ ! -f "${WG_DIR}/server_privatekey" ]; then
@@ -43,6 +42,7 @@ grep -q '^net.ipv4.ip_forward=1$' /etc/sysctl.conf || echo net.ipv4.ip_forward=1
 
 ufw allow OpenSSH || true
 ufw allow ${WG_PORT}/udp || true
+ufw allow ${DASH_PORT}/tcp || true
 ufw --force enable
 
 SUBNET=$(echo "${SERVER_ADDR}" | awk -F/ '{print $1"/"$2}')
