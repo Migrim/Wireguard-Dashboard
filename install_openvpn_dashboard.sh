@@ -4,12 +4,12 @@ set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get update
-apt-get install -y openvpn easy-rsa ufw python3 python3-venv python3-pip git iptables-persistent build-essential
+apt-get install -y openvpn easy-rsa ufw python3 python3-venv python3-pip git iptables-persistent acl build-essential
 
 OVPN_DIR=/etc/openvpn
 EASYRSA_DIR=/etc/openvpn/easy-rsa
 PKI_DIR=/etc/openvpn/pki
-SRV_NAME=server
+SRV_NAME=${SRV_NAME:-server}
 UDP_PORT=${OVPN_PORT:-1194}
 NET_IF=$(ip route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++){if($i=="dev"){print $(i+1); exit}}}')
 
@@ -42,6 +42,7 @@ echo | ./easyrsa build-ca nopass
 EASYRSA_CERT_EXPIRE=3650 ./easyrsa build-server-full "${SRV_NAME}" nopass
 openvpn --genkey secret "${PKI_DIR}/ta.key"
 ./easyrsa gen-crl
+
 install -d -m 755 "${OVPN_DIR}"
 install -m 644 "${PKI_DIR}/ca.crt" "${OVPN_DIR}/"
 install -m 600 "${PKI_DIR}/issued/${SRV_NAME}.crt" "${OVPN_DIR}/"
@@ -49,6 +50,8 @@ install -m 600 "${PKI_DIR}/private/${SRV_NAME}.key" "${OVPN_DIR}/"
 install -m 600 "${PKI_DIR}/ta.key" "${OVPN_DIR}/"
 install -m 600 "${PKI_DIR}/dh.pem" "${OVPN_DIR}/"
 install -m 644 "${PKI_DIR}/crl.pem" "${OVPN_DIR}/crl.pem"
+
+install -d -m 755 /run/openvpn
 
 cat >"/etc/openvpn/${SRV_NAME}.conf" <<EOF
 port ${UDP_PORT}
@@ -67,12 +70,15 @@ push "dhcp-option DNS 1.1.1.1"
 keepalive 10 120
 data-ciphers AES-256-GCM:AES-128-GCM
 cipher AES-256-GCM
+auth SHA256
 user nobody
 group nogroup
 persist-key
 persist-tun
 verb 3
 explicit-exit-notify 1
+status /run/openvpn/${SRV_NAME}.status
+status-version 3
 EOF
 
 sysctl -w net.ipv4.ip_forward=1
@@ -106,9 +112,18 @@ fi
 id -u www-data >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin www-data
 chown -R www-data:www-data "${DASH_DIR}"
 
+setfacl -Rm u:www-data:rx "${PKI_DIR}" || true
+find "${PKI_DIR}" -type d -exec chmod 750 {} \;
+find "${PKI_DIR}" -type f -exec chmod 640 {} \;
+chgrp -R www-data "${PKI_DIR}" || true
+
 cat > /etc/ovpn-dashboard.env <<EOF
 APP_PORT=${DASH_PORT}
 OVPN_PORT=${UDP_PORT}
+EASYRSA_DIR=${EASYRSA_DIR}
+PKI_DIR=${PKI_DIR}
+OVPN_DIR=${OVPN_DIR}
+SRV_NAME=${SRV_NAME}
 FLASK_ENV=production
 EOF
 chmod 640 /etc/ovpn-dashboard.env
