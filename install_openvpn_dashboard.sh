@@ -18,11 +18,13 @@ REPO_URL=${REPO_URL:-https://github.com/Migrim/Wireguard-Dashboard.git}
 BRANCH=${BRANCH:-main}
 
 NET_IF=$(ip route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++){if($i=="dev"){print $(i+1); exit}}}')
-install -d -m 700 "${WG_DIR}"
+install -d -m 750 -g www-data "${WG_DIR}"
 
 if [ ! -f "${WG_DIR}/server_privatekey" ]; then
   umask 077
   wg genkey | tee "${WG_DIR}/server_privatekey" | wg pubkey > "${WG_DIR}/server_publickey"
+  chgrp www-data "${WG_DIR}/server_privatekey" "${WG_DIR}/server_publickey" || true
+  chmod 640 "${WG_DIR}/server_privatekey" "${WG_DIR}/server_publickey" || true
 fi
 
 if [ ! -f "${WG_CONF}" ]; then
@@ -33,17 +35,20 @@ Address = ${SERVER_ADDR}
 ListenPort = ${WG_PORT}
 PrivateKey = $(cat "${WG_DIR}/server_privatekey")
 EOF
-  chmod 600 "${WG_CONF}"
 else
   umask 077
-  grep -qE '^[[:space:]]*Address[[:space:]]*=' "${WG_CONF}" || \
-    printf '\nAddress = %s\n' "${SERVER_ADDR}" >> "${WG_CONF}"
-  grep -qE '^[[:space:]]*ListenPort[[:space:]]*=' "${WG_CONF}" || \
-    printf 'ListenPort = %s\n' "${WG_PORT}" >> "${WG_CONF}"
-  if ! grep -qE '^[[:space:]]*PrivateKey[[:space:]]*=' "${WG_CONF}"; then
-    printf 'PrivateKey = %s\n' "$(cat "${WG_DIR}/server_privatekey")" >> "${WG_CONF}"
-  fi
+  grep -qE '^[[:space:]]*Address[[:space:]]*=' "${WG_CONF}" || printf '\nAddress = %s\n' "${SERVER_ADDR}" >> "${WG_CONF}"
+  grep -qE '^[[:space:]]*ListenPort[[:space:]]*=' "${WG_CONF}" || printf 'ListenPort = %s\n' "${WG_PORT}" >> "${WG_CONF}"
+  grep -qE '^[[:space:]]*PrivateKey[[:space:]]*=' "${WG_CONF}" || printf 'PrivateKey = %s\n' "$(cat "${WG_DIR}/server_privatekey")" >> "${WG_CONF}"
 fi
+chgrp www-data "${WG_CONF}"
+chmod 640 "${WG_CONF}"
+
+if [ ! -f "${WG_DIR}/peers.json" ]; then
+  echo '{}' > "${WG_DIR}/peers.json"
+fi
+chgrp www-data "${WG_DIR}/peers.json"
+chmod 640 "${WG_DIR}/peers.json"
 
 sysctl -w net.ipv4.ip_forward=1 >/dev/null
 grep -q '^net.ipv4.ip_forward=1$' /etc/sysctl.conf || echo net.ipv4.ip_forward=1 >> /etc/sysctl.conf
@@ -73,24 +78,13 @@ systemctl daemon-reload
 systemctl enable "${UNIT}" || true
 systemctl restart "${UNIT}" || true
 
-if [ -d "${DASH_DIR}/.git" ]; then
-  systemctl stop wg-dashboard || true
-  git -C "${DASH_DIR}" fetch --all
-  git -C "${DASH_DIR}" reset --hard "origin/${BRANCH}"
-else
-  rm -rf "${DASH_DIR}"
-  git clone -b "${BRANCH}" "${REPO_URL}" "${DASH_DIR}"
-fi
-
+rm -rf "${DASH_DIR}"
+git clone -b "${BRANCH}" "${REPO_URL}" "${DASH_DIR}"
 git config --global --add safe.directory "${DASH_DIR}"
 
 python3 -m venv "${DASH_ENV}"
 "${DASH_ENV}/bin/pip" install --upgrade pip wheel
-if [ -f "${DASH_DIR}/requirements.txt" ]; then
-  "${DASH_ENV}/bin/pip" install -r "${DASH_DIR}/requirements.txt"
-else
-  "${DASH_ENV}/bin/pip" install flask gunicorn
-fi
+"${DASH_ENV}/bin/pip" install flask gunicorn
 
 id -u www-data >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin www-data
 chown -R www-data:www-data "${DASH_DIR}"
@@ -106,10 +100,11 @@ FLASK_ENV=production
 EOF
 chmod 640 /etc/wg-dashboard.env
 
-cat >/etc/sudoers.d/wg-dashboard <<EOF
-www-data ALL=(ALL) NOPASSWD:/usr/bin/systemctl *,/bin/bash -lc *
+cat >/etc/sudoers.d/wg-dashboard <<'EOF'
+www-data ALL=(root) NOPASSWD: /usr/bin/wg, /usr/bin/wg-quick, /usr/bin/systemctl, /usr/bin/install, /usr/sbin/ufw, /bin/cat, /usr/bin/journalctl
 EOF
 chmod 440 /etc/sudoers.d/wg-dashboard
+visudo -c
 
 cat >/etc/systemd/system/wg-dashboard.service <<EOF
 [Unit]
