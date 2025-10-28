@@ -11,6 +11,7 @@ WG_PORT=int(os.environ.get("WG_PORT","51820"))
 SERVER_ADDR_ENV=os.environ.get("SERVER_ADDR","10.8.0.1/24")
 HOST_IP=subprocess.check_output(["bash","-lc","hostname -I | awk '{print $1}'"]).decode().strip()
 UNIT=f"wg-quick@{WG_IFACE}"
+
 PEERS_DB=os.path.join(WG_DIR,"peers.json")
 SUDO_BIN=os.environ.get("SUDO_BIN","/usr/bin/sudo")
 BASH_BIN=os.environ.get("BASH_BIN","/bin/bash")
@@ -120,10 +121,18 @@ def _write_conf(data: Dict[str,Any]) -> None:
         lines.append("[Peer]")
         for k,v in p.items():
             lines.append(f"{k} = {v}")
-    tmp=WG_CONF+".tmp"
-    with open(tmp,"w",encoding="utf-8") as f:
-        f.write("\n".join(lines).strip()+"\n")
-    _sudorun(f"install -m 600 {shlex.quote(tmp)} {shlex.quote(WG_CONF)} && rm -f {shlex.quote(tmp)}")
+    import tempfile
+    fd,tmp_path = tempfile.mkstemp(prefix="wg0.", suffix=".conf.tmp", dir="/tmp")
+    try:
+        with os.fdopen(fd,"w",encoding="utf-8") as f:
+            f.write("\n".join(lines).strip()+"\n")
+        _sudorun(f"install -m 600 {shlex.quote(tmp_path)} {shlex.quote(WG_CONF)} && rm -f {shlex.quote(tmp_path)}")
+    finally:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except:
+            pass
 
 def _iface_name() -> str:
     return WG_IFACE
@@ -161,10 +170,18 @@ def _load_peers_db() -> Dict[str,Any]:
         return {}
 
 def _save_peers_db(db: Dict[str,Any]) -> None:
-    tmp=PEERS_DB+".tmp"
-    with open(tmp,"w") as f:
-        json.dump(db,f,indent=2)
-    _sudorun(f"install -m 600 {shlex.quote(tmp)} {shlex.quote(PEERS_DB)} && rm -f {shlex.quote(tmp)}")
+    import tempfile
+    fd,tmp_path = tempfile.mkstemp(prefix="peers.", suffix=".json.tmp", dir="/tmp")
+    try:
+        with os.fdopen(fd,"w",encoding="utf-8") as f:
+            json.dump(db,f,indent=2)
+        _sudorun(f"install -m 600 {shlex.quote(tmp_path)} {shlex.quote(PEERS_DB)} && rm -f {shlex.quote(tmp_path)}")
+    finally:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except:
+            pass
 
 def _valid_name(x: Any) -> bool:
     return bool(re.match(r"^[A-Za-z0-9._-]{1,64}$", str(x or "").strip()))
