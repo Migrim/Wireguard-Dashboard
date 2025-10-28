@@ -12,6 +12,8 @@ SERVER_ADDR_ENV=os.environ.get("SERVER_ADDR","10.8.0.1/24")
 HOST_IP=subprocess.check_output(["bash","-lc","hostname -I | awk '{print $1}'"]).decode().strip()
 UNIT=f"wg-quick@{WG_IFACE}"
 PEERS_DB=os.path.join(WG_DIR,"peers.json")
+SUDO_BIN=os.environ.get("SUDO_BIN","/usr/bin/sudo")
+BASH_BIN=os.environ.get("BASH_BIN","/bin/bash")
 
 app=Flask(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -25,7 +27,8 @@ _last_run = {"cmd":"", "rc":None, "out":""}
 
 def _sudorun(cmd: str) -> Tuple[str,int]:
     app.logger.info("run: %s", cmd)
-    o,c=_run("sudo bash -lc {}".format(shlex.quote(cmd)))
+    full = f"{SUDO_BIN} -n {BASH_BIN} -lc {shlex.quote(cmd)}"
+    o,c=_run(full)
     app.logger.info("rc=%s", c)
     global _last_run
     _last_run = {"cmd": cmd, "rc": c, "out": o}
