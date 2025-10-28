@@ -26,16 +26,21 @@ def _run(cmd: str) -> Tuple[str,int]:
 
 _last_run = {"cmd":"", "rc":None, "out":""}
 
-def _sudorun(cmd: str) -> Tuple[str,int]:
-    app.logger.info("run: %s", cmd)
-    full = f"{SUDO_BIN} -n {BASH_BIN} -lc {shlex.quote(cmd)}"
-    o,c=_run(full)
-    app.logger.info("rc=%s", c)
+def _sudo(args: List[str], input_data: bytes = None) -> Tuple[str,int]:
+    try:
+        cmd = [SUDO_BIN, "-n"] + args
+        app.logger.info("run_exec: %s", " ".join(shlex.quote(a) for a in cmd))
+        r = subprocess.run(cmd, input=input_data, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        out = r.stdout.decode().strip()
+    except Exception as e:
+        out = str(e)
+        r = type("obj", (), {"returncode": 1})()
+    rc = r.returncode if hasattr(r, "returncode") else 1
     global _last_run
-    _last_run = {"cmd": cmd, "rc": c, "out": o}
-    if c != 0:
-        app.logger.warning("command failed: rc=%s\nstdout+stderr:\n%s", c, o)
-    return o,c
+    _last_run = {"cmd": " ".join(args), "rc": rc, "out": out}
+    if rc != 0:
+        app.logger.warning("command failed: rc=%s\nstdout+stderr:\n%s", rc, out)
+    return out, rc
 
 @app.before_request
 def _log_request():
@@ -126,7 +131,7 @@ def _write_conf(data: Dict[str,Any]) -> None:
     try:
         with os.fdopen(fd,"w",encoding="utf-8") as f:
             f.write("\n".join(lines).strip()+"\n")
-        _sudorun(f"install -m 600 {shlex.quote(tmp_path)} {shlex.quote(WG_CONF)} && rm -f {shlex.quote(tmp_path)}")
+        _sudo(["/usr/bin/install","-m","600",tmp_path,WG_CONF])
     finally:
         try:
             if os.path.exists(tmp_path):
@@ -149,19 +154,22 @@ def read_bytes() -> Tuple[str,int,int]:
         return iface,0,0
 
 def _server_pubkey() -> str:
-    o,c=_sudorun(f"wg show {WG_IFACE} public-key || true")
+    if os.path.exists("/usr/bin/wg"):
+        o,c=_sudo(["/usr/bin/wg","show",WG_IFACE,"public-key"]) 
+    else:
+        o,c=_run(f"wg show {WG_IFACE} public-key || true")
     if o.strip():
         return o.strip()
     conf=_read_conf()
     priv=conf.get("Interface",{}).get("PrivateKey","").strip()
     if not priv:
         return ""
-    o,c=_sudorun(f"bash -lc 'printf %s {shlex.quote(priv)} | wg pubkey'")
+    o,c=_sudo(["/usr/bin/wg","pubkey"], input_data=(priv+"\n").encode())
     return o.strip()
 
 def _load_peers_db() -> Dict[str,Any]:
     if not os.path.isdir(WG_DIR):
-        _sudorun(f"install -d -m 700 {shlex.quote(WG_DIR)}")
+        _sudo(["/usr/bin/install","-d","-m","700",WG_DIR])
     if not os.path.isfile(PEERS_DB):
         return {}
     try:
@@ -175,7 +183,7 @@ def _save_peers_db(db: Dict[str,Any]) -> None:
     try:
         with os.fdopen(fd,"w",encoding="utf-8") as f:
             json.dump(db,f,indent=2)
-        _sudorun(f"install -m 600 {shlex.quote(tmp_path)} {shlex.quote(PEERS_DB)} && rm -f {shlex.quote(tmp_path)}")
+        _sudo(["/usr/bin/install","-m","600",tmp_path,PEERS_DB])
     finally:
         try:
             if os.path.exists(tmp_path):
@@ -255,7 +263,10 @@ def _next_client_ip() -> str:
 
 def list_clients() -> List[Dict[str,Any]]:
     db=_load_peers_db()
-    show,c=_run(f"wg show {WG_IFACE} dump || true")
+    if os.path.exists("/usr/bin/wg"):
+        show,c=_sudo(["/usr/bin/wg","show",WG_IFACE,"dump"])  
+    else:
+        show,c=_run(f"wg show {WG_IFACE} dump || true")
     peers=[]
     lines=[ln for ln in show.splitlines()[1:] if ln.strip()]
     now=int(time.time())
@@ -294,6 +305,13 @@ def list_clients() -> List[Dict[str,Any]]:
 def gen_client_conf(name: str) -> Tuple[str,str]:
     db=_load_peers_db()
     meta=db.get(name) or {}
+    if not meta:
+        lname = name.lower()
+        for k,v in db.items():
+            if k.lower() == lname:
+                meta = v
+                name = k
+                break
     if not meta:
         raise FileNotFoundError("peer not found")
     client_priv=meta["private_key"]
@@ -346,11 +364,11 @@ def home():
 @app.route("/action/<what>")
 def action(what: str):
     if what=="restart":
-        _sudorun(f"systemctl restart {UNIT}")
+        _sudo(["/usr/bin/systemctl","restart",UNIT])
     elif what=="stop":
-        _sudorun(f"systemctl stop {UNIT}")
+        _sudo(["/usr/bin/systemctl","stop",UNIT])
     elif what=="start":
-        _sudorun(f"systemctl start {UNIT}")
+        _sudo(["/usr/bin/systemctl","start",UNIT])
     return redirect(url_for("home"))
 
 @app.route("/api/status")
@@ -416,13 +434,24 @@ def api_service():
     if action not in {"start","stop","restart","enable","disable","reload"}:
         abort(400)
     if action=="enable":
-        o,c=_sudorun(f"systemctl enable {UNIT}")
+        o,c=_sudo(["/usr/bin/systemctl","enable",UNIT])
     elif action=="disable":
-        o,c=_sudorun(f"systemctl disable {UNIT}")
+        o,c=_sudo(["/usr/bin/systemctl","disable",UNIT])
     elif action=="reload":
-        o,c=_sudorun(f"wg syncconf {WG_IFACE} <(wg-quick strip {WG_IFACE})")
+        so,sc=_sudo(["/usr/bin/wg-quick","strip",WG_IFACE])
+        if sc==0:
+            import tempfile
+            fd,tp=tempfile.mkstemp(prefix="wgstrip.",dir="/tmp")
+            try:
+                with os.fdopen(fd,"w",encoding="utf-8") as f: f.write(so)
+                o,c=_sudo(["/usr/bin/wg","syncconf",WG_IFACE,tp])
+            finally:
+                try: os.remove(tp)
+                except: pass
+        else:
+            o, c = so, sc
     else:
-        o,c=_sudorun(f"systemctl {action} {UNIT}")
+        o,c=_sudo(["/usr/bin/systemctl",action,UNIT])
     return jsonify({"ok":c==0,"out":o,"active":service_active(),"enabled":service_enabled()})
 
 @app.route("/api/users",methods=["GET","POST"])
@@ -441,11 +470,11 @@ def api_users():
     db=_load_peers_db()
     if name in db:
         return jsonify({"ok": False, "error": "already_exists", "hint": "Peer already exists"}), 409
-    o_priv,c=_sudorun("wg genkey")
+    o_priv,c=_sudo(["/usr/bin/wg","genkey"])
     if c!=0 or not o_priv.strip():
         return jsonify({"ok":False,"error":"keygen_failed","out":o_priv}),500
     client_priv=o_priv.strip()
-    o_pub,c=_sudorun(f"bash -lc 'printf %s {shlex.quote(client_priv)} | wg pubkey'")
+    o_pub,c=_sudo(["/usr/bin/wg","pubkey"], input_data=(client_priv+"\n").encode())
     if c!=0 or not o_pub.strip():
         return jsonify({"ok":False,"error":"pubkey_failed","out":o_pub}),500
     client_pub=o_pub.strip()
@@ -453,7 +482,7 @@ def api_users():
     if not addr:
         return jsonify({"ok":False,"error":"addr_failed","hint":"No free IP in server subnet"}),500
     server_lp=_read_conf().get("Interface",{}).get("ListenPort",str(WG_PORT))
-    _sudorun(f"wg set {WG_IFACE} peer {shlex.quote(client_pub)} allowed-ips {shlex.quote(addr)}")
+    _sudo(["/usr/bin/wg","set",WG_IFACE,"peer",client_pub,"allowed-ips",addr])
     conf=_read_conf()
     peers=conf.get("Peers",[])
     peers=[p for p in peers if p.get("PublicKey","")!=client_pub]
@@ -462,7 +491,12 @@ def api_users():
     _write_conf(conf)
     db[name]={"public_key":client_pub,"private_key":client_priv,"address":addr,"created":datetime.datetime.utcnow().strftime("%Y-%m-%d")}
     _save_peers_db(db)
-    return jsonify({"ok":True,"name":name,"cn":cn,"port":int(server_lp)})
+    try:
+        profile_text, _ = gen_client_conf(name)
+    except Exception:
+        profile_text = None
+    return jsonify({"ok": True, "name": name, "cn": cn, "port": int(server_lp), "profile": profile_text})
+
 
 @app.route("/api/users/<name>/revoke",methods=["POST"])
 def api_users_revoke(name: str):
@@ -471,11 +505,11 @@ def api_users_revoke(name: str):
     if not meta:
         abort(404)
     pub=meta.get("public_key","")
-    _sudorun(f"wg set {WG_IFACE} peer {shlex.quote(pub)} remove || true")
+    _sudo(["/usr/bin/wg","set",WG_IFACE,"peer",pub,"remove"])
     _ensure_peer_removed_from_conf(pub)
     del db[name]
     _save_peers_db(db)
-    _sudorun(f"systemctl reload {UNIT} || true")
+    _sudo(["/usr/bin/systemctl","reload",UNIT])
     return jsonify({"ok":True})
 
 @app.route("/api/users/<name>/restore",methods=["POST"])
@@ -486,7 +520,7 @@ def api_users_restore(name: str):
         abort(404)
     pub=meta.get("public_key","")
     addr=meta.get("address","")
-    _sudorun(f"wg set {WG_IFACE} peer {shlex.quote(pub)} allowed-ips {shlex.quote(addr)}")
+    _sudo(["/usr/bin/wg","set",WG_IFACE,"peer",pub,"allowed-ips",addr])
     conf=_read_conf()
     peers=conf.get("Peers",[])
     if not any(p.get("PublicKey","")==pub for p in peers):
@@ -498,11 +532,24 @@ def api_users_restore(name: str):
 @app.route("/api/users/<name>/ovpn")
 def api_users_conf(name: str):
     try:
-        txt,pub=gen_client_conf(name)
-        return jsonify({"ok":True,"name":name,"profile":txt})
+        txt, pub = gen_client_conf(name)
+        return jsonify({"ok": True, "name": name, "profile": txt})
+    except FileNotFoundError:
+        return jsonify({
+            "ok": False,
+            "error": "peer_not_found",
+            "hint": "Create the peer first via POST /api/users with {name}, then retry /api/users/<name>/ovpn."
+        }), 404
     except Exception as e:
-        app.logger.exception("conf build failed name=%s",name)
-        return jsonify({"ok":False,"error":"conf_build_failed","hint":str(e)}),500
+        app.logger.exception("conf build failed name=%s", name)
+        return jsonify({"ok": False, "error": "conf_build_failed", "hint": str(e)}), 500
+
+@app.route("/api/diag/peers")
+def api_diag_peers():
+    db = _load_peers_db()
+    show, _ = _sudo(["/usr/bin/wg", "show", WG_IFACE, "dump"]) if os.path.exists("/usr/bin/wg") else ("", 0)
+    return jsonify({"db_keys": sorted(list(db.keys())), "db": db, "wg_dump": show})
+
 
 @app.route("/api/logs")
 def api_logs():
@@ -537,9 +584,9 @@ def api_ports():
     if proto not in {"udp","tcp"}:
         abort(400)
     if allow:
-        o,c=_sudorun(f"ufw allow {port}/{proto}")
+        o,c=_sudo(["/usr/sbin/ufw","allow",f"{port}/{proto}"])
     else:
-        o,c=_sudorun(f"ufw delete allow {port}/{proto} || true")
+        o,c=_sudo(["/usr/sbin/ufw","delete","allow",f"{port}/{proto}"])
     return jsonify({"ok":True,"out":o,"ufw_allowed":ufw_allowed(port,proto)})
 
 @app.route("/api/config",methods=["GET","POST"])
@@ -557,7 +604,7 @@ def api_config():
         iface["Address"]=str(data["Address"])
     conf["Interface"]=iface
     _write_conf(conf)
-    _sudorun(f"systemctl restart {UNIT}")
+    _sudo(["/usr/bin/systemctl","restart",UNIT])
     return jsonify({"ok":True})
 
 @app.route("/api/health")
