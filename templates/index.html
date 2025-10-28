@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OpenVPN Dashboard</title>
+<title>WireGuard Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 <style>
@@ -33,8 +33,8 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:Roboto,system-u
 .search input{all:unset;flex:1;color:var(--text);font-size:14px}
 .chip{display:inline-flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--border);border-radius:12px;background:var(--card);font-size:13px;color:var(--text)}
 .table{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
-.table-head{display:grid;grid-template-columns:40px 1.2fr 1.6fr 1.2fr 1fr 1fr 1fr 1fr 80px;padding:12px 14px;color:var(--muted);font-size:12px;background:var(--soft);border-bottom:1px solid var(--border)}
-.row{display:grid;grid-template-columns:40px 1.2fr 1.6fr 1.2fr 1fr 1fr 1fr 1fr 80px;align-items:center;padding:14px;border-bottom:1px solid var(--border)}
+.table-head{display:grid;grid-template-columns:40px 1.2fr 1.2fr 1.8fr 1fr 1fr 1fr 90px;padding:12px 14px;color:var(--muted);font-size:12px;background:var(--soft);border-bottom:1px solid var(--border)}
+.row{display:grid;grid-template-columns:40px 1.2fr 1.2fr 1.8fr 1fr 1fr 1fr 90px;align-items:center;padding:14px;border-bottom:1px solid var(--border)}
 .row:hover{background:#0e1014}
 .cbox{width:18px;height:18px;border:1px solid var(--border);border-radius:6px;background:transparent}
 .name{display:flex;align-items:center;gap:10px}
@@ -46,14 +46,12 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:Roboto,system-u
 .pill.inactive{background:rgba(148,163,184,.08);color:#cbd5e1;border:1px solid rgba(148,163,184,.2)}
 .pill.warn{background:rgba(245,158,11,.12);color:#fde68a;border:1px solid rgba(245,158,11,.25)}
 .pill.bad{background:rgba(239,68,68,.12);color:#fecaca;border:1px solid rgba(239,68,68,.25)}
-.role{display:inline-flex;align-items:center;gap:8px;color:#d1d5db;font-size:13px}
-.role .material-icons{font-size:16px;color:#94a3b8}
 .more{display:flex;justify-content:flex-end}
 .icon-btn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border:1px solid var(--border);border-radius:10px;background:var(--card);color:#cbd5e1}
 .kpi{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
 .kpi .dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
-@media (max-width:1100px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.table-head,.row{grid-template-columns:40px 1.4fr 1.6fr 1.2fr .9fr .9fr .9fr 1fr 60px}}
-@media (max-width:770px){.grid{grid-template-columns:1fr}.h-actions{display:none}.table-head,.row{grid-template-columns:40px 1.5fr 1.5fr 1.2fr .9fr .9fr 1fr 60px}.hide-sm{display:none}}
+@media (max-width:1100px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.table-head,.row{grid-template-columns:40px 1.2fr 1.2fr 1.4fr 1fr 1fr .9fr 70px}}
+@media (max-width:770px){.grid{grid-template-columns:1fr}.h-actions{display:none}.table-head,.row{grid-template-columns:40px 1.4fr 1.1fr 1.2fr .9fr .9fr .9fr 60px}}
 .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);z-index:50}
 .modal.show{display:flex}
 .dialog{width:min(640px,96vw);background:var(--card);border:1px solid var(--border);border-radius:18px;box-shadow:0 20px 80px rgba(0,0,0,.5);display:grid}
@@ -91,11 +89,6 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:Roboto,system-u
 .u-label{font-size:12px;color:var(--muted);margin-bottom:6px}
 .u-input{width:100%;background:#0f1115;border:1px solid var(--border);border-radius:12px;color:var(--text);padding:10px 12px;font-size:14px}
 .u-select{appearance:none}
-.u-switch{display:flex;align-items:center;gap:10px}
-.u-switch input{appearance:none;width:40px;height:22px;border-radius:999px;background:#141720;border:1px solid var(--border);position:relative;outline:none;transition:.2s}
-.u-switch input:checked{background:#1e2230}
-.u-switch input::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#cbd5e1;transition:.2s}
-.u-switch input:checked::after{left:20px}
 .input{width:100%;background:#0f1115;border:1px solid var(--border);border-radius:12px;color:var(--text);padding:10px 12px;font-size:14px}
 .label{font-size:12px;color:var(--muted);margin-bottom:6px}
 .toast{position:fixed;right:18px;bottom:18px;display:none;gap:8px;align-items:center;background:#0f1115;border:1px solid var(--border);border-radius:12px;padding:10px 12px;z-index:60}
@@ -108,12 +101,12 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:Roboto,system-u
       <div class="h-left">
         <div class="brand">
           <div class="logo"></div>
-          <div class="title">OpenVPN Dashboard</div>
+          <div class="title">WireGuard Dashboard</div>
         </div>
       </div>
       <div class="h-actions">
         <a class="btn" id="openReport"><span class="material-icons">wifi_tethering</span>Check Ports</a>
-        <a class="btn primary" id="openAdd"><span class="material-icons">person_add</span>Add Client</a>
+        <a class="btn primary" id="openAdd"><span class="material-icons">person_add</span>Add Peer</a>
       </div>
     </div>
 
@@ -129,7 +122,7 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:Roboto,system-u
       </div>
 
       <div class="card">
-        <div class="metric-h"><span class="material-icons">person_add_alt</span>Total Users</div>
+        <div class="metric-h"><span class="material-icons">person_add_alt</span>Total Peers</div>
         <div class="metric-v" id="kpiUsers">0</div>
         <div class="metric-sub" id="kpiUsersSub"></div>
       </div>
@@ -148,7 +141,7 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:Roboto,system-u
     <div class="toolbar">
       <div class="search">
         <span class="material-icons">search</span>
-        <input placeholder="Filter clients by name, CN, or IP" id="searchInput">
+        <input placeholder="Filter peers by name, public key, or IP" id="searchInput">
       </div>
       <div class="chip" id="chipStatus"><span class="material-icons">toggle_on</span>Status</div>
       <div class="chip" id="chipView"><span class="material-icons">tune</span>View</div>
@@ -156,7 +149,7 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:Roboto,system-u
 
     <div class="table" id="clientsTable">
       <div class="table-head">
-        <div></div><div>Name</div><div>Common Name</div><div>IP</div><div>Bytes In</div><div>Bytes Out</div><div class="hide-sm">Connected Since</div><div>Status</div><div></div>
+        <div></div><div>Name</div><div>Address</div><div>Public Key</div><div>Bytes In</div><div>Bytes Out</div><div>Connected Since</div><div></div>
       </div>
       <div id="rows"></div>
     </div>
@@ -165,53 +158,23 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:Roboto,system-u
   <div class="modal" id="addModal" aria-hidden="true">
     <div class="u-dialog" role="dialog" aria-modal="true" aria-labelledby="addTitle">
       <div class="u-head">
-        <div class="u-title" id="addTitle">Add Client</div>
+        <div class="u-title" id="addTitle">Add Peer</div>
         <button class="u-close" id="closeAdd" aria-label="Close"><span class="material-icons">close</span></button>
       </div>
       <form id="addForm" novalidate>
         <div class="u-body">
           <div class="u-form-grid">
             <div>
-              <div class="u-label">Client Name</div>
+              <div class="u-label">Name</div>
               <input class="u-input" name="name" required>
             </div>
             <div>
-              <div class="u-label">Common Name (CN)</div>
-              <input class="u-input" name="cn" required>
-            </div>
-            <div>
-              <div class="u-label">Email</div>
-              <input class="u-input" name="email" type="email" placeholder="name@example.com">
-            </div>
-            <div>
               <div class="u-label">Static IP (optional)</div>
-              <input class="u-input" name="ip" placeholder="10.8.0.x">
-            </div>
-            <div>
-              <div class="u-label">Key Type</div>
-              <select class="u-input u-select" name="key_type">
-                <option value="rsa2048">RSA 2048</option>
-                <option value="rsa4096">RSA 4096</option>
-                <option value="ecdsa256">ECDSA P-256</option>
-                <option value="ecdsa384">ECDSA P-384</option>
-              </select>
-            </div>
-            <div>
-              <div class="u-label">Expires</div>
-              <select class="u-input u-select" name="expires">
-                <option value="365">12 months</option>
-                <option value="180">6 months</option>
-                <option value="90">3 months</option>
-                <option value="30">30 days</option>
-              </select>
+              <input class="u-input" name="ip" placeholder="10.8.0.x or 10.8.0.x/32">
             </div>
             <div class="u-full">
               <div class="u-label">Notes</div>
               <input class="u-input" name="notes" placeholder="Optional note">
-            </div>
-            <div class="u-full u-switch">
-              <input type="checkbox" id="pw" name="protect">
-              <label for="pw" class="u-label" style="margin:0">Password-protect key</label>
             </div>
           </div>
           <div id="addErr" class="u-label" style="color:#fecaca"></div>
@@ -238,7 +201,7 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:Roboto,system-u
           </div>
           <div>
             <div class="label">Protocol</div>
-            <input class="input" id="r-proto" readonly value="UDP 1194">
+            <input class="input" id="r-proto" readonly value="UDP 51820">
           </div>
         </div>
         <div class="steps" id="steps"></div>
@@ -254,7 +217,7 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:Roboto,system-u
 
 <script>
 const nameOk=x=>/^[A-Za-z0-9._-]{1,64}$/.test(String(x||'').trim())
-const ipOk=x=>/^(?:\d{1,3}\.){3}\d{1,3}$/.test(String(x||'').trim())
+const ipOk=x=>/^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/.test(String(x||'').trim())
 try{ localStorage.removeItem('API_TOKEN') }catch(e){}
 
 const el=id=>document.getElementById(id)
@@ -301,33 +264,32 @@ function pill(status){if(status==='active')return '<span class="pill active">Act
 function renderRows(filter=''){
   const f=filter.trim().toLowerCase()
   rows.innerHTML=''
-  const liveByCN=new Map(live.map(c=>[c.cn,c]))
-  const allNames=new Set([...issued.map(i=>i.name),...live.map(l=>l.cn)])
+  const liveByName=new Map(live.map(c=>[c.name,c]))
+  const allNames=new Set([...issued.map(i=>i.name),...live.map(l=>l.name)])
   Array.from(allNames).sort((a,b)=>a.localeCompare(b)).forEach(name=>{
     const iss=issued.find(i=>i.name===name)
-    const lv=liveByCN.get(name)
-    const displayName=iss?iss.name:name
-    const cn=name
-    const ip=lv?lv.remote.split(':')[0]:''
+    const lv=liveByName.get(name)
+    const displayName=iss?iss.name:(lv?lv.name:name)
+    const address=(iss&&iss.ip)||''
+    const pub=(iss&&iss.public_key)||(lv&&lv.public_key)||''
     const bin=lv?lv.bytes_recv:0
     const bout=lv?lv.bytes_sent:0
     const since=lv?lv.since:''
     const status=lv?'active':'inactive'
-    const hay=(displayName+' '+cn+' '+ip).toLowerCase()
+    const hay=(displayName+' '+address+' '+pub).toLowerCase()
     if(f && !hay.includes(f)) return
     const row=document.createElement('div')
     row.className='row'
     row.innerHTML=`
       <div><div class="cbox"></div></div>
       <div class="name"><div class="avatar"></div><a href="#">${displayName}</a></div>
-      <div class="small">${cn}</div>
-      <div class="small">${ip||'-'}</div>
+      <div class="small">${address||'-'}</div>
+      <div class="small" style="word-break:break-all">${pub?pub.slice(0,12)+'…'+pub.slice(-8):'-'}</div>
       <div class="small">${fmtBytes(bin)}</div>
       <div class="small">${fmtBytes(bout)}</div>
-      <div class="small hide-sm">${since||'-'}</div>
-      <div>${pill(status)}</div>
+      <div class="small">${since||'-'}</div>
       <div class="more">
-        <button class="icon-btn" data-action="menu" data-cn="${cn}"><span class="material-icons">more_horiz</span></button>
+        <button class="icon-btn" data-action="menu" data-name="${displayName}"><span class="material-icons">more_horiz</span></button>
       </div>`
     rows.appendChild(row)
   })
@@ -348,7 +310,7 @@ async function refresh(){
   kpiProblemsSub.textContent=problems?'Attention required':'All checks passed'
   svcState.textContent=(j.service.active?'active':'inactive')+' · '+(j.service.enabled?'enabled':'disabled')+' · '+j.service.unit
   el('r-host').value=j.network.host_ip
-  el('r-proto').value=(j.config.proto||'udp').toUpperCase()+' '+(j.network.port||'1194')
+  el('r-proto').value='UDP '+(j.network.port||'51820')
   renderRows(searchInput.value)
 }
 async function doService(action){
@@ -379,17 +341,13 @@ addForm.addEventListener('submit',async e=>{
   const fd=new FormData(addForm)
   const payload={
     name:(fd.get('name')||'').trim(),
-    cn:(fd.get('cn')||fd.get('name')||'').trim(),
-    email:(fd.get('email')||'').trim(),
+    cn:(fd.get('name')||'').trim(),
     ip:(fd.get('ip')||'').trim(),
-    key_type:(fd.get('key_type')||'rsa2048'),
-    expires:(fd.get('expires')||'365'),
-    notes:(fd.get('notes')||'').trim(),
-    protect:fd.get('protect')==='on'
+    notes:(fd.get('notes')||'').trim()
   }
   if(!nameOk(payload.name)){ setAddErr('Invalid name'); return }
   if(!payload.cn) payload.cn=payload.name
-  if(payload.ip && !ipOk(payload.ip)){ setAddErr('Invalid IP (use e.g. 10.8.0.23)'); return }
+  if(payload.ip && !ipOk(payload.ip)){ setAddErr('Invalid IP'); return }
   const btn=addForm.querySelector('button[type="submit"]')
   const oldHTML=btn.innerHTML
   btn.disabled=true
@@ -397,13 +355,13 @@ addForm.addEventListener('submit',async e=>{
   try{
     const r=await api('/api/users',{method:'POST',body:JSON.stringify(payload)})
     if(!r||r.ok!==true){ throw new Error('Create failed') }
-    const prof=await api('/api/users/'+encodeURIComponent(payload.cn)+'/ovpn')
+    const prof=await api('/api/users/'+encodeURIComponent(payload.name)+'/ovpn')
     if(!prof||prof.ok!==true||!prof.profile){ throw new Error((prof&&prof.hint)||'Profile generation failed') }
-    const blob=new Blob([prof.profile],{type:'application/x-openvpn-profile'})
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=payload.cn+'.ovpn';document.body.appendChild(a);a.click();a.remove()
+    const blob=new Blob([prof.profile],{type:'text/plain'})
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=payload.name+'.conf';document.body.appendChild(a);a.click();a.remove()
     closeModal()
     await refresh()
-    toast('Client created')
+    toast('Peer created')
   }catch(err){
     console.error('create failed',err)
     setAddErr(err&&err.message?String(err.message):'Error')
@@ -436,7 +394,7 @@ async function runPortCheck(){
   setRowState('detect_ip','run','Detecting',true)
   const st=await api('/api/status')
   hostEl.value=st.network.host_ip
-  protoEl.value=(st.config.proto||'udp').toUpperCase()+' '+st.network.port
+  protoEl.value='UDP '+st.network.port
   setRowState('detect_ip','ok','OK',false)
   setRowState('udp_listen','run','Checking',true)
   const udp=await api('/api/ports?proto=udp&port='+encodeURIComponent(st.network.port))
@@ -457,12 +415,12 @@ document.addEventListener('click',e=>{
   const b=e.target.closest('.icon-btn')
   if(!b)return
   if(b.dataset.action==='menu'){
-    const cn=b.dataset.cn
+    const name=b.dataset.name
     const menu=document.createElement('div')
     menu.style.position='fixed';menu.style.right='18px';menu.style.bottom='68px';menu.style.background='#0f1115';menu.style.border='1px solid var(--border)';menu.style.borderRadius='12px';menu.style.padding='6px';menu.style.zIndex='70'
     const mk=(t,fn)=>{const a=document.createElement('a');a.href='#';a.textContent=t;a.style.display='block';a.style.padding='8px 10px';a.onclick=(ev)=>{ev.preventDefault();fn();menu.remove()};return a}
-    menu.appendChild(mk('Download .ovpn',async()=>{const prof=await api('/api/users/'+encodeURIComponent(cn)+'/ovpn');const blob=new Blob([prof.profile],{type:'application/x-openvpn-profile'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=cn+'.ovpn';document.body.appendChild(a);a.click();a.remove()}))
-    menu.appendChild(mk('Revoke',async()=>{await api('/api/users/'+encodeURIComponent(cn)+'/revoke',{method:'POST'});toast('Revoked '+cn);await refresh()}))
+    menu.appendChild(mk('Download .conf',async()=>{const prof=await api('/api/users/'+encodeURIComponent(name)+'/ovpn');const blob=new Blob([prof.profile],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name+'.conf';document.body.appendChild(a);a.click();a.remove()}))
+    menu.appendChild(mk('Revoke',async()=>{await api('/api/users/'+encodeURIComponent(name)+'/revoke',{method:'POST'});toast('Revoked '+name);await refresh()}))
     document.body.appendChild(menu)
     setTimeout(()=>{document.addEventListener('click',()=>menu.remove(),{once:true})},0)
   }
