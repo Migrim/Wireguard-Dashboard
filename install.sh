@@ -59,8 +59,8 @@ ufw allow ${DASH_PORT}/tcp || true
 ufw --force enable
 
 WG_NET=$(python3 - <<PY
-import ipaddress,os
-print(ipaddress.ip_interface(os.environ["SERVER_ADDR"]).network)
+import ipaddress
+print(ipaddress.ip_interface("${SERVER_ADDR}").network)
 PY
 )
 
