@@ -236,29 +236,39 @@ try{ localStorage.removeItem('API_TOKEN') }catch(e){}
 const AVATAR_ICONS = [
   '/static/icons/bear.png',
   '/static/icons/boy.png',
-  '/static/icons/deep.png',
+  '/static/icons/deer.png',
   '/static/icons/tucan.png',
-  '/static/icons/wolf.png'
+  '/static/icons/wolf.png',
+  '/static/icons/cat.png',
+  '/static/icons/creeper.png'
 ];
 
 function getAvatarForName(name) {
-  if (!name || !name.trim()) return AVATAR_ICONS[0];
-  const key = name.trim().toLowerCase();
-  let avatars = {};
+  const key = (name || '').trim().toLowerCase();
+  let store = { map: {}, used: [] };
   try {
-    avatars = JSON.parse(localStorage.getItem('WG_AVATARS') || '{}');
-  } catch (e) { avatars = {}; }
-  if (avatars && avatars[key]) return avatars[key];
-  // Compute pseudo-random index from name
-  let sum = 0;
-  for (let i = 0; i < key.length; ++i) sum += key.charCodeAt(i);
-  const idx = sum % AVATAR_ICONS.length;
-  const chosen = AVATAR_ICONS[idx];
-  avatars[key] = chosen;
+    store = JSON.parse(localStorage.getItem('WG_AVATARS') || '{"map":{},"used":[]}');
+  } catch (e) {
+    store = { map: {}, used: [] };
+  }
+  if (key && store.map[key]) {
+    return store.map[key];
+  }
+  const available = AVATAR_ICONS.filter(i => !store.used.includes(i));
+  const pick = available.length > 0 ? available[0] : AVATAR_ICONS[0];
+  if (key) {
+    store.map[key] = pick;
+  }
+  if (!store.used.includes(pick)) {
+    store.used.push(pick);
+  }
+  if (store.used.length > AVATAR_ICONS.length) {
+    store.used = store.used.slice(-AVATAR_ICONS.length);
+  }
   try {
-    localStorage.setItem('WG_AVATARS', JSON.stringify(avatars));
+    localStorage.setItem('WG_AVATARS', JSON.stringify(store));
   } catch (e) {}
-  return chosen;
+  return pick;
 }
 
 const el=id=>document.getElementById(id)
@@ -369,7 +379,7 @@ function renderRows(filter = '', statusFilter = null, sortMode = 'az') {
               ? '<span class="pill active"><span style="width:6px;height:6px;border-radius:999px;background:#22c55e;display:inline-block"></span> connected</span>'
               : '<span class="pill inactive">offline</span>')
       }</div>
-      <div class="name"><img src="${getAvatarForName(item.name)}" class="avatar" style="object-fit:cover;width:28px;height:28px;border-radius:8px;"/><a href="#">${item.name}</a></div>
+      <div class="name"><img src="${getAvatarForName(item.name)}" class="avatar avatar-btn" data-name="${item.name}" style="object-fit:cover;width:28px;height:28px;border-radius:8px;cursor:pointer;"/><a href="#">${item.name}</a></div>
       <div class="small">${item.address || '-'}</div>
       <div class="small" style="word-break:break-all">${item.pub ? item.pub.slice(0,12) + '…' + item.pub.slice(-8) : '-'}</div>
       <div class="small">${fmtBytes(item.bin)}</div>
@@ -609,6 +619,54 @@ document.addEventListener('click', e => {
     menu.appendChild(mk('Sort A–Z', 'sort_by_alpha', () => { CURRENT_SORT_MODE = 'az'; renderRows(searchInput.value, CURRENT_STATUS_FILTER, CURRENT_SORT_MODE); }));
     menu.appendChild(mk('Sort by activity', 'bolt', () => { CURRENT_SORT_MODE = 'active'; renderRows(searchInput.value, CURRENT_STATUS_FILTER, CURRENT_SORT_MODE); }));
   }
+  document.body.appendChild(menu);
+});
+
+// Avatar picker grid menu for avatar-btn clicks
+document.addEventListener('click', e => {
+  const picker = document.getElementById('avatar-picker');
+  if (picker && !picker.contains(e.target) && !e.target.classList.contains('avatar-btn')) {
+    picker.remove();
+  }
+  const btn = e.target.closest('.avatar-btn');
+  if (!btn) return;
+  const name = btn.dataset.name || '';
+  const rect = btn.getBoundingClientRect();
+  const menu = document.createElement('div');
+  menu.id = 'avatar-picker';
+  menu.style.position = 'fixed';
+  menu.style.top = (rect.bottom + 6) + 'px';
+  menu.style.left = Math.min(rect.left, window.innerWidth - 200) + 'px';
+  menu.style.background = '#0f1115';
+  menu.style.border = '1px solid var(--border)';
+  menu.style.borderRadius = '14px';
+  menu.style.padding = '8px';
+  menu.style.display = 'grid';
+  menu.style.gridTemplateColumns = 'repeat(5, 32px)';
+  menu.style.gap = '6px';
+  menu.style.zIndex = '150';
+  AVATAR_ICONS.forEach(src => {
+    const opt = document.createElement('img');
+    opt.src = src;
+    opt.style.width = '30px';
+    opt.style.height = '30px';
+    opt.style.borderRadius = '10px';
+    opt.style.objectFit = 'cover';
+    opt.style.cursor = 'pointer';
+    opt.onclick = () => {
+      let store = { map: {}, used: [] };
+      try { store = JSON.parse(localStorage.getItem('WG_AVATARS') || '{"map":{},"used":[]}'); } catch (e) {}
+      const key = name.trim().toLowerCase();
+      if (key) {
+        store.map[key] = src;
+        if (!store.used.includes(src)) store.used.push(src);
+        try { localStorage.setItem('WG_AVATARS', JSON.stringify(store)); } catch (e) {}
+      }
+      menu.remove();
+      renderRows(searchInput.value, CURRENT_STATUS_FILTER, CURRENT_SORT_MODE);
+    };
+    menu.appendChild(opt);
+  });
   document.body.appendChild(menu);
 });
 
