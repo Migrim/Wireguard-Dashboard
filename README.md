@@ -3,6 +3,8 @@
 A simple, self-hosted web dashboard to manage a WireGuard server on Ubuntu.  
 It reads and writes your `/etc/wireguard/<iface>.conf`, keeps a JSON database for issued peers (`/etc/wireguard/peers.json`), and exposes REST endpoints for creating/removing clients, checking service health, and controlling `wg-quick@<iface>` via `systemd`.
 
+<img width="1913" height="723" alt="Bildschirmfoto 2025-10-30 um 16 34 08" src="https://github.com/user-attachments/assets/4a49ab5b-d18f-4a85-b873-0892a9b76079" />
+
 ## Features
 
 - Web UI (Flask) on port **8088** by default
