@@ -232,6 +232,35 @@ const TRAFFIC_TIMEOUT_MS = 5000;
 const PAGE_LOAD_TS = Date.now();
 try{ localStorage.removeItem('API_TOKEN') }catch(e){}
 
+// Avatar icons for users
+const AVATAR_ICONS = [
+  '/static/icons/bear.png',
+  '/static/icons/boy.png',
+  '/static/icons/deep.png',
+  '/static/icons/tucan.png',
+  '/static/icons/wolf.png'
+];
+
+function getAvatarForName(name) {
+  if (!name || !name.trim()) return AVATAR_ICONS[0];
+  const key = name.trim().toLowerCase();
+  let avatars = {};
+  try {
+    avatars = JSON.parse(localStorage.getItem('WG_AVATARS') || '{}');
+  } catch (e) { avatars = {}; }
+  if (avatars && avatars[key]) return avatars[key];
+  // Compute pseudo-random index from name
+  let sum = 0;
+  for (let i = 0; i < key.length; ++i) sum += key.charCodeAt(i);
+  const idx = sum % AVATAR_ICONS.length;
+  const chosen = AVATAR_ICONS[idx];
+  avatars[key] = chosen;
+  try {
+    localStorage.setItem('WG_AVATARS', JSON.stringify(avatars));
+  } catch (e) {}
+  return chosen;
+}
+
 const el=id=>document.getElementById(id)
 const addErr=el('addErr')
 function setAddErr(t){ if(addErr){ addErr.textContent=t||'' } }
@@ -340,7 +369,7 @@ function renderRows(filter = '', statusFilter = null, sortMode = 'az') {
               ? '<span class="pill active"><span style="width:6px;height:6px;border-radius:999px;background:#22c55e;display:inline-block"></span> connected</span>'
               : '<span class="pill inactive">offline</span>')
       }</div>
-      <div class="name"><div class="avatar"></div><a href="#">${item.name}</a></div>
+      <div class="name"><img src="${getAvatarForName(item.name)}" class="avatar" style="object-fit:cover;width:28px;height:28px;border-radius:8px;"/><a href="#">${item.name}</a></div>
       <div class="small">${item.address || '-'}</div>
       <div class="small" style="word-break:break-all">${item.pub ? item.pub.slice(0,12) + '…' + item.pub.slice(-8) : '-'}</div>
       <div class="small">${fmtBytes(item.bin)}</div>
