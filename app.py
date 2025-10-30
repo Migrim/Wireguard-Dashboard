@@ -287,46 +287,85 @@ def _next_client_ip() -> str:
             return f"{host}/32"
     return ""
 
-def list_clients() -> List[Dict[str,Any]]:
-    db=_load_peers_db()
+def list_clients() -> List[Dict[str, Any]]:
+    db = _load_peers_db()
+
+    # get live state from wg
     if os.path.exists("/usr/bin/wg"):
-        show,c=_sudo(["/usr/bin/wg","show",WG_IFACE,"dump"])  
+        show, c = _sudo(["/usr/bin/wg", "show", WG_IFACE, "dump"])
     else:
-        show,c=_run(f"wg show {WG_IFACE} dump || true")
-    peers=[]
-    lines=[ln for ln in show.splitlines()[1:] if ln.strip()]
-    now=int(time.time())
+        show, c = _run(f"wg show {WG_IFACE} dump || true")
+
+    live = []
+    lines = [ln for ln in show.splitlines()[1:] if ln.strip()]  # skip interface line
+    now = int(time.time())
+
     for ln in lines:
-        p=ln.split("\t")
-        if len(p)<9:
+        p = ln.split("\t")
+        # peer line must have at least 8 fields
+        # 0 pubkey
+        # 1 psk
+        # 2 endpoint
+        # 3 allowed-ips
+        # 4 latest-handshake
+        # 5 transfer-rx
+        # 6 transfer-tx
+        # 7 keepalive
+        if len(p) < 8:
             continue
-        pub=p[1]
-        ep=p[4]
-        lh=int(p[5]) if p[5].isdigit() else 0
-        rx=int(p[6]) if p[6].isdigit() else 0
-        tx=int(p[7]) if p[7].isdigit() else 0
-        allowed=p[8]
-        name=None
-        for k,v in db.items():
-            if v.get("public_key")==pub:
-                name=k
+
+        pub = p[0].strip()
+        endpoint = p[2].strip()
+        allowed = p[3].strip()
+
+        try:
+            lh_raw = int(p[4])  # unix ts
+        except ValueError:
+            lh_raw = 0
+
+        try:
+            rx = int(p[5])
+        except ValueError:
+            rx = 0
+
+        try:
+            tx = int(p[6])
+        except ValueError:
+            tx = 0
+
+        # map to name from db (peers.json)
+        name = None
+        for k, v in db.items():
+            if v.get("public_key") == pub:
+                name = k
                 break
-        peers.append({
-            "name":name or pub[:8],
-            "cn":name or pub[:8],
-            "remote":ep or "",
-            "bytes_recv":rx,
-            "bytes_sent":tx,
-            "since":datetime.datetime.utcfromtimestamp(lh).strftime("%Y-%m-%d %H:%M:%S") if lh>0 and lh<now+10 else "",
-            "allowed_ips":allowed,
-            "public_key":pub
+
+        live.append({
+            "name": name or pub[:8],
+            "cn": name or pub[:8],
+            "remote": endpoint,
+            "bytes_recv": rx,   # client → server
+            "bytes_sent": tx,   # server → client
+            "since": (
+                datetime.datetime.utcfromtimestamp(lh_raw).strftime("%Y-%m-%d %H:%M:%S")
+                if lh_raw > 0 and lh_raw < now + 10 else ""
+            ),
+            "allowed_ips": allowed,
+            "public_key": pub,
         })
-    issued=[]
-    for name,meta in db.items():
-        status="active"
-        created=meta.get("created","")
-        issued.append({"name":name,"status":status,"created":created,"public_key":meta.get("public_key",""),"ip":meta.get("address","")})
-    return issued,peers
+
+    # issued peers from our DB
+    issued = []
+    for name, meta in db.items():
+        issued.append({
+            "name": name,
+            "status": "active",
+            "created": meta.get("created", ""),
+            "public_key": meta.get("public_key", ""),
+            "ip": meta.get("address", "")
+        })
+
+    return issued, live
 
 def gen_client_conf(name: str) -> Tuple[str,str]:
     db=_load_peers_db()
@@ -484,7 +523,7 @@ def api_service():
 def api_users():
     if request.method=="GET":
         issued,live=list_clients()
-        return jsonify({"issued":issued})
+        return jsonify({"issued":issued,"live":live})
     data=request.get_json(force=True,silent=True) or {}
     name=str(data.get("name","")).strip()
     cn=str(data.get("cn",name)).strip()
@@ -522,7 +561,6 @@ def api_users():
     except Exception:
         profile_text = None
     return jsonify({"ok": True, "name": name, "cn": cn, "port": int(server_lp), "profile": profile_text})
-
 
 @app.route("/api/users/<name>/revoke",methods=["POST"])
 def api_users_revoke(name: str):
