@@ -1,4 +1,4 @@
-import os, subprocess, datetime, re, time, shlex, json, ipaddress
+import os, subprocess, datetime, re, time, shlex, json, ipaddress, urllib.request
 from typing import Tuple, Dict, Any, List
 import logging
 from flask import Flask, render_template, request, send_file, redirect, url_for, jsonify, abort
@@ -9,8 +9,21 @@ WG_DIR=os.environ.get("WG_DIR","/etc/wireguard")
 WG_CONF=os.environ.get("WG_CONF",f"/etc/wireguard/{WG_IFACE}.conf")
 WG_PORT=int(os.environ.get("WG_PORT","51820"))
 SERVER_ADDR_ENV=os.environ.get("SERVER_ADDR","10.8.0.1/24")
+CLIENT_DNS=os.environ.get("CLIENT_DNS","1.1.1.1, 1.0.0.1")
 HOST_IP=subprocess.check_output(["bash","-lc","hostname -I | awk '{print $1}'"]).decode().strip()
 UNIT=f"wg-quick@{WG_IFACE}"
+
+def _detect_public_ip() -> str:
+    if os.environ.get("SERVER_PUBLIC_IP"):
+        return os.environ["SERVER_PUBLIC_IP"].strip()
+    for url in ("https://api.ipify.org","https://ifconfig.me/ip","https://icanhazip.com"):
+        try:
+            return urllib.request.urlopen(url, timeout=4).read().decode().strip()
+        except Exception:
+            continue
+    return HOST_IP
+
+PUBLIC_IP = _detect_public_ip()
 
 PEERS_DB=os.path.join(WG_DIR,"peers.json")
 SUDO_BIN=os.environ.get("SUDO_BIN","/usr/bin/sudo")
@@ -76,11 +89,9 @@ def ufw_allowed(port: int, proto: str="udp") -> bool:
     return bool(o)
 
 def local_listening(port: int, proto: str="udp") -> bool:
-    if proto=="udp":
-        o,c=_run("ss -lunp | grep -E ':{0} \\b.*\\b' || true".format(port))
-    else:
-        o,c=_run("ss -ltnp | grep -E ':{0} \\b.*\\b' || true".format(port))
-    return bool(o)
+    flag = "u" if proto == "udp" else "t"
+    o,_=_run(f"ss -l{flag}np 2>/dev/null | grep ':{port}' || true")
+    return bool(o.strip())
 
 def ping_ok() -> bool:
     o,c=_run("ping -c1 -W1 1.1.1.1 >/dev/null 2>&1")
@@ -381,19 +392,18 @@ def gen_client_conf(name: str) -> Tuple[str,str]:
         raise FileNotFoundError("peer not found")
     client_priv=meta["private_key"]
     client_addr=meta["address"]
-    dns=_read_conf().get("Interface",{}).get("DNS","").strip()
-    srv_pub=_server_pubkey()
     conf=_read_conf()
+    dns=conf.get("Interface",{}).get("DNS","").strip() or CLIENT_DNS
+    srv_pub=_server_pubkey()
     lp=conf.get("Interface",{}).get("ListenPort",str(WG_PORT))
-    endpoint=f"{HOST_IP}:{lp}"
+    endpoint=f"{PUBLIC_IP}:{lp}"
     allowed_client="0.0.0.0/0, ::/0"
     keepalive="25"
     txt=[]
     txt.append("[Interface]")
     txt.append(f"PrivateKey = {client_priv}")
     txt.append(f"Address = {client_addr}")
-    if dns:
-        txt.append(f"DNS = {dns}")
+    txt.append(f"DNS = {dns}")
     txt.append("")
     txt.append("[Peer]")
     txt.append(f"PublicKey = {srv_pub}")
@@ -561,6 +571,21 @@ def api_users():
     except Exception:
         profile_text = None
     return jsonify({"ok": True, "name": name, "cn": cn, "port": int(server_lp), "profile": profile_text})
+
+@app.route("/api/users/<name>/rename",methods=["POST"])
+def api_users_rename(name: str):
+    data=request.get_json(force=True,silent=True) or {}
+    new_name=str(data.get("name","")).strip()
+    if not _valid_name(new_name):
+        return jsonify({"ok":False,"error":"invalid_name","hint":"Allowed: A-Z a-z 0-9 . _ - (max 64)"}),400
+    db=_load_peers_db()
+    if name not in db:
+        abort(404)
+    if new_name!=name and new_name in db:
+        return jsonify({"ok":False,"error":"already_exists","hint":"A peer with that name already exists"}),409
+    db[new_name]=db.pop(name)
+    _save_peers_db(db)
+    return jsonify({"ok":True,"name":new_name})
 
 @app.route("/api/users/<name>/revoke",methods=["POST"])
 def api_users_revoke(name: str):

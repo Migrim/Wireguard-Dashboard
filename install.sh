@@ -17,8 +17,9 @@ APP_MODULE=${APP_MODULE:-app:app}
 REPO_URL=${REPO_URL:-https://github.com/Migrim/Wireguard-Dashboard.git}
 BRANCH=${BRANCH:-main}
 
-# figure out outgoing iface
+# figure out outgoing iface + public IP
 NET_IF=$(ip route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++){if($i=="dev"){print $(i+1); exit}}}')
+PUBLIC_IP=$(curl -s --max-time 5 https://api.ipify.org || curl -s --max-time 5 https://ifconfig.me/ip || hostname -I | awk '{print $1}')
 
 # make wg dir readable for www-data group
 install -d -m 750 -g www-data "${WG_DIR}"
@@ -39,6 +40,8 @@ if [ ! -f "${WG_CONF}" ]; then
 Address = ${SERVER_ADDR}
 ListenPort = ${WG_PORT}
 PrivateKey = $(cat "${WG_DIR}/server_privatekey")
+PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o ${NET_IF} -j MASQUERADE
+PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o ${NET_IF} -j MASQUERADE
 CFG
 else
   umask 077
@@ -112,6 +115,7 @@ WG_DIR=${WG_DIR}
 WG_CONF=${WG_CONF}
 WG_PORT=${WG_PORT}
 SERVER_ADDR=${SERVER_ADDR}
+SERVER_PUBLIC_IP=${PUBLIC_IP}
 FLASK_ENV=production
 ENV
 chmod 640 /etc/wg-dashboard.env
