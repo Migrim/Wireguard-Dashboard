@@ -323,7 +323,7 @@ body {
 .sn[data-type="info"]    .sn-bar { background: var(--accent); }
 @keyframes snIn  { from { opacity: 0; transform: translateX(18px) scale(.96); } to { opacity: 1; transform: none; } }
 @keyframes snBar { from { width: 100%; } to { width: 0%; } }
-.spark-cell { display: flex; align-items: center; padding: 0 10px; }
+.spark-cell { padding: 0 8px; }
 .spark { display: block; width: 100%; height: 26px; }
 
 /* Responsive */
@@ -645,7 +645,7 @@ function updateSpark(name, bin, bout) {
   }
   const h = sparkHistory.get(name)
   const dt = (ts - h.lastTs) / 1000
-  if (dt < 0.8) return
+  if (dt < 0.4) return
   const up   = Math.max(0, (bin  - h.lastBin)  / dt)
   const down = Math.max(0, (bout - h.lastBout) / dt)
   h.samples.push({ up, down })
@@ -1096,7 +1096,7 @@ async function init(){
   }
 }
 init()
-setInterval(()=>{refresh().catch(()=>{})},3000)
+setInterval(()=>{refresh().catch(()=>{})},500)
 </script>
 </body>
 </html>
