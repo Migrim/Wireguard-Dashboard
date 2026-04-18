@@ -357,6 +357,7 @@ def list_clients() -> List[Dict[str, Any]]:
             "remote": endpoint,
             "bytes_recv": rx,   # client → server
             "bytes_sent": tx,   # server → client
+            "last_handshake": lh_raw if lh_raw > 0 and lh_raw < now + 10 else 0,
             "since": (
                 datetime.datetime.utcfromtimestamp(lh_raw).strftime("%Y-%m-%d %H:%M:%S")
                 if lh_raw > 0 and lh_raw < now + 10 else ""
