@@ -122,7 +122,7 @@ chmod 640 /etc/wg-dashboard.env
 
 # 11) sudoers
 cat >/etc/sudoers.d/wg-dashboard <<'SUD'
-www-data ALL=(root) NOPASSWD: /usr/bin/wg, /usr/bin/wg-quick, /usr/bin/systemctl, /usr/bin/install, /usr/sbin/ufw, /bin/cat, /usr/bin/journalctl
+www-data ALL=(root) NOPASSWD: /usr/bin/wg, /usr/bin/wg-quick, /usr/bin/systemctl, /usr/bin/install, /usr/sbin/ufw, /bin/cat, /usr/bin/journalctl, /usr/bin/sysctl, /usr/sbin/iptables
 SUD
 chmod 440 /etc/sudoers.d/wg-dashboard
 visudo -c

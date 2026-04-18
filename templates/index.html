@@ -246,6 +246,12 @@ body {
 .verdict-label { flex: 1; }
 .verdict-sub { font-size: 11px; font-weight: 400; color: inherit; opacity: .7; }
 .check-meta { font-size: 11px; color: var(--muted); text-align: center; }
+.journal-box {
+  background: var(--soft); border: 1px solid var(--border); border-radius: 9px;
+  padding: 10px 12px; font-size: 11px; font-family: monospace; color: var(--muted);
+  max-height: 120px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+  line-height: 1.5;
+}
 
 /* Port check steps */
 .steps { display: grid; gap: 8px; }
@@ -442,11 +448,15 @@ body {
           <div class="verdict-label">Checking…<div class="verdict-sub">Running diagnostics</div></div>
         </div>
         <div class="steps" id="steps"></div>
+        <div class="journal-box" id="journalBox" style="display:none"></div>
         <div class="check-meta" id="checkMeta"></div>
       </div>
-      <div class="d-foot">
-        <button type="button" class="btn ghost" id="rerunReport"><span class="material-icons">replay</span>Run Again</button>
-        <button type="button" class="btn" id="closeReport2">Close</button>
+      <div class="d-foot" style="justify-content:space-between">
+        <button type="button" class="btn primary" id="fixBtn" style="display:none"><span class="material-icons">build</span>Fix Issues</button>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="btn ghost" id="rerunReport"><span class="material-icons">replay</span>Run Again</button>
+          <button type="button" class="btn" id="closeReport2">Close</button>
+        </div>
       </div>
     </div>
   </div>
@@ -736,9 +746,11 @@ const openReport=document.getElementById('openReport')
 const closeReport=document.getElementById('closeReport')
 const closeReport2=document.getElementById('closeReport2')
 const rerunReport=document.getElementById('rerunReport')
+const fixBtn=document.getElementById('fixBtn')
 const stepsEl=document.getElementById('steps')
 const verdictEl=document.getElementById('verdict')
 const checkMetaEl=document.getElementById('checkMeta')
+const journalBoxEl=document.getElementById('journalBox')
 function openReportModal(){reportModal.classList.add('show');reportModal.setAttribute('aria-hidden','false');buildSteps();runPortCheck()}
 function closeReportModal(){reportModal.classList.remove('show');reportModal.setAttribute('aria-hidden','true')}
 openReport.addEventListener('click',e=>{e.preventDefault();openReportModal()})
@@ -748,17 +760,22 @@ reportModal.addEventListener('click',e=>{if(e.target===reportModal)closeReportMo
 rerunReport.addEventListener('click',()=>{buildSteps();runPortCheck()})
 
 const stepDefs=[
-  {key:'service',   name:'WireGuard service',    desc:'wg-quick / systemd unit must be active'},
-  {key:'udp',       name:'UDP port listening',    desc:'Server must bind its WireGuard UDP port'},
-  {key:'firewall',  name:'Firewall rule (UFW)',   desc:'Inbound UDP must be allowed through UFW'},
-  {key:'peers',     name:'Peers configured',      desc:'At least one peer must be provisioned'},
-  {key:'external',  name:'External reachability', desc:'Server must be reachable from the internet'},
+  {key:'service',  name:'WireGuard service',   desc:'wg-quick systemd unit must be active'},
+  {key:'ipfwd',    name:'IP forwarding',        desc:'net.ipv4.ip_forward must equal 1'},
+  {key:'nat',      name:'NAT masquerade',       desc:'PostUp/iptables rules must be present'},
+  {key:'udp',      name:'UDP port bound',       desc:'Server must be listening on the WireGuard port'},
+  {key:'firewall', name:'Firewall (UFW)',        desc:'Inbound UDP must be allowed'},
+  {key:'peers',    name:'Peers configured',     desc:'At least one peer must exist'},
+  {key:'external', name:'External reachability',desc:'Internet connectivity from the server'},
 ]
 
 function buildSteps(){
   verdictEl.className='verdict running'
   verdictEl.innerHTML='<div class="v-dot"></div><div class="verdict-label">Checking…<div class="verdict-sub">Running diagnostics</div></div>'
   checkMetaEl.textContent=''
+  journalBoxEl.style.display='none'
+  journalBoxEl.textContent=''
+  fixBtn.style.display='none'
   stepsEl.innerHTML=''
   stepDefs.forEach(s=>{
     const row=document.createElement('div')
@@ -791,18 +808,23 @@ function setVerdict(ok, title, sub){
 async function runPortCheck(){
   try{
     setRowState('service','run','Checking',true)
-    const st=await api('/api/status')
-    const port=st.network.port||'51820'
-    const ip=st.network.host_ip||'unknown'
+    const [st, diag] = await Promise.all([api('/api/status'), api('/api/diag/vpn')])
+    const port=st.network.port||51820
     const svcOk=!!st.service.active
-    setRowState('service',svcOk?'ok':'bad',svcOk?'Active':'Stopped',false)
+    setRowState('service',svcOk?'ok':'bad',svcOk?'Active':'Stopped — check logs below',false)
+
+    setRowState('ipfwd','run','Checking',true)
+    setRowState('ipfwd',diag.ip_forward?'ok':'bad',diag.ip_forward?'Enabled':'Disabled — traffic cannot be routed',false)
+
+    setRowState('nat','run','Checking',true)
+    setRowState('nat',diag.has_postup?'ok':'bad',diag.has_postup?'PostUp rules present':'Missing — internet won\'t work through VPN',false)
 
     setRowState('udp','run','Checking',true)
     const udp=await api('/api/ports?proto=udp&port='+encodeURIComponent(port))
-    setRowState('udp',udp.listening?'ok':'bad',udp.listening?'Bound on '+port:'Not listening on '+port,false)
+    setRowState('udp',udp.listening?'ok':'bad',udp.listening?'Bound on '+port:'Not listening — service may be stopped',false)
 
     setRowState('firewall','run','Inspecting',true)
-    setRowState('firewall',udp.ufw_allowed?'ok':'bad',udp.ufw_allowed?'UDP '+port+' allowed':'UDP '+port+' blocked',false)
+    setRowState('firewall',udp.ufw_allowed?'ok':'warn',udp.ufw_allowed?'UDP '+port+' allowed':'UDP '+port+' not in UFW rules',false)
 
     setRowState('peers','run','Counting',true)
     const peerCount=(st.clients&&st.clients.issued)?st.clients.issued.length:0
@@ -810,22 +832,46 @@ async function runPortCheck(){
 
     setRowState('external','run','Probing',true)
     const health=await api('/api/health')
-    setRowState('external',health.ping_ok?'ok':'warn',health.ping_ok?'Reachable':'Ping failed — may still work',false)
+    setRowState('external',health.ping_ok?'ok':'warn',health.ping_ok?'Reachable':'No ping — check routing',false)
 
-    const critical=svcOk&&udp.listening&&udp.ufw_allowed
-    const allGood=critical&&health.ping_ok&&peerCount>0
+    const critical=svcOk&&diag.ip_forward&&diag.has_postup&&udp.listening
+    const allGood=critical&&udp.ufw_allowed&&health.ping_ok&&peerCount>0
+    const canFix=!svcOk||!diag.ip_forward||!diag.has_postup||!udp.ufw_allowed
+
     if(allGood){
       setVerdict('ok','VPN is ready','All checks passed — peers can connect')
     } else if(critical){
-      setVerdict('ok','Service is running','Minor issues detected, core VPN is up')
+      setVerdict('ok','Core VPN is up','Minor issues — peers should be able to connect')
     } else {
-      setVerdict('issues','VPN not ready','Fix the failed checks below')
+      setVerdict('issues','VPN not ready','Click Fix Issues to auto-correct detected problems')
+      if(canFix) fixBtn.style.display='inline-flex'
     }
-    checkMetaEl.textContent='IP: '+ip+' · UDP '+port
+
+    checkMetaEl.textContent='Endpoint: '+diag.public_ip+':'+port+(diag.public_ip!==diag.host_ip?' (LAN: '+diag.host_ip+')':'')
+
+    if(!svcOk&&diag.journal&&diag.journal.length){
+      journalBoxEl.textContent=diag.journal.join('\n')
+      journalBoxEl.style.display='block'
+    }
   }catch(err){
     setVerdict('issues','Check failed',String(err&&err.message||'API error'))
   }
 }
+
+fixBtn.addEventListener('click',async()=>{
+  fixBtn.classList.add('spin')
+  try{
+    const r=await api('/api/fix',{method:'POST'})
+    if(r.actions&&r.actions.length) toast('Applied fixes',{type:'success',sub:r.actions.join(' · ')})
+    if(r.errors&&r.errors.length) toast('Some fixes failed',{type:'error',sub:r.errors.join(' · ')})
+    buildSteps()
+    runPortCheck()
+  }catch(err){
+    toast('Fix failed',{type:'error',sub:err&&err.message})
+  }finally{
+    fixBtn.classList.remove('spin')
+  }
+})
 
 async function allowPort(proto,port,allow){await api('/api/ports',{method:'POST',body:JSON.stringify({proto,port,allow})});toast((allow?'Port allowed':'Port removed'),{type:allow?'success':'warn',sub:proto.toUpperCase()+' '+port});await refresh()}
 

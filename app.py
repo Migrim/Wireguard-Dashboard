@@ -753,6 +753,75 @@ def api_diag_last():
     global _last_run
     return jsonify(_last_run)
 
+@app.route("/api/diag/vpn")
+def api_diag_vpn():
+    conf=_read_conf()
+    iface_cfg=conf.get("Interface",{})
+    lp=iface_cfg.get("ListenPort",str(WG_PORT))
+    ip_fwd,_=_run("cat /proc/sys/net/ipv4/ip_forward 2>/dev/null || echo 0")
+    wg_show,_=_sudo(["/usr/bin/wg","show"]) if os.path.exists("/usr/bin/wg") else ("","")
+    journal,_=_run(f"journalctl -u {UNIT} -n 15 --no-pager 2>/dev/null || true")
+    return jsonify({
+        "public_ip": PUBLIC_IP,
+        "host_ip": HOST_IP,
+        "ip_forward": ip_fwd.strip()=="1",
+        "has_postup": "PostUp" in iface_cfg,
+        "service_active": service_active(),
+        "port": int(lp),
+        "listening": local_listening(int(lp),"udp"),
+        "ufw_allowed": ufw_allowed(int(lp),"udp"),
+        "wg_show": wg_show,
+        "journal": [l for l in journal.strip().splitlines() if l.strip()][-12:],
+    })
+
+@app.route("/api/fix",methods=["POST"])
+def api_fix():
+    actions=[]
+    errors=[]
+    # 1. ip_forward
+    fwd,_=_run("cat /proc/sys/net/ipv4/ip_forward 2>/dev/null || echo 0")
+    if fwd.strip()!="1":
+        _,c=_sudo(["/usr/bin/sysctl","-w","net.ipv4.ip_forward=1"])
+        if c==0:
+            actions.append("Enabled ip_forward")
+        else:
+            errors.append("Could not enable ip_forward")
+    # 2. PostUp / PostDown
+    conf=_read_conf()
+    iface_cfg=conf.get("Interface",{})
+    if "PostUp" not in iface_cfg:
+        net_if,_=_run("ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++){if($i==\"dev\"){print $(i+1); exit}}}'")
+        net_if=net_if.strip()
+        if net_if:
+            iface_cfg["PostUp"]=f"iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o {net_if} -j MASQUERADE"
+            iface_cfg["PostDown"]=f"iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o {net_if} -j MASQUERADE"
+            conf["Interface"]=iface_cfg
+            _write_conf(conf)
+            actions.append(f"Added NAT PostUp/PostDown (via {net_if})")
+        else:
+            errors.append("Could not detect outgoing network interface")
+    # 3. UFW allow port
+    lp=int(iface_cfg.get("ListenPort",WG_PORT))
+    if not ufw_allowed(lp,"udp"):
+        _,c=_sudo(["/usr/sbin/ufw","allow",f"{lp}/udp"])
+        if c==0:
+            actions.append(f"Opened UDP {lp} in UFW")
+    # 4. Start / restart service
+    svc_was=service_active()
+    if svc_was and actions:
+        o,c=_sudo(["/usr/bin/systemctl","restart",UNIT])
+        if c==0:
+            actions.append("Restarted wg-quick to apply changes")
+        else:
+            errors.append(f"Restart failed: {o[:300]}")
+    elif not svc_was:
+        o,c=_sudo(["/usr/bin/systemctl","start",UNIT])
+        if c==0:
+            actions.append("Started wg-quick service")
+        else:
+            errors.append(f"Start failed — check logs: {o[:300]}")
+    return jsonify({"ok":len(errors)==0,"actions":actions,"errors":errors,"service_active":service_active()})
+
 @app.route("/download/<name>.conf")
 def download_conf(name: str):
     txt,_=gen_client_conf(name)
