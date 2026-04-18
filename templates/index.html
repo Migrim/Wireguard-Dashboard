@@ -323,8 +323,10 @@ body {
 .sn[data-type="info"]    .sn-bar { background: var(--accent); }
 @keyframes snIn  { from { opacity: 0; transform: translateX(18px) scale(.96); } to { opacity: 1; transform: none; } }
 @keyframes snBar { from { width: 100%; } to { width: 0%; } }
-.spark-cell { padding: 0 20px; }
-.spark { display: block; width: 100%; height: 26px; }
+.spark-cell { padding: 0 8px; }
+.spark { display: block; width: 100%; height: 26px; overflow: visible; }
+.sp-ph { animation: spDash 1.4s linear infinite; }
+@keyframes spDash { to { stroke-dashoffset: -12; } }
 
 /* Responsive */
 @media (max-width: 1100px) {
@@ -560,12 +562,54 @@ let CURRENT_SORT_MODE = 'az';
 function fmtBytes(n){if(n==null)return '0 B';const u=['B','KB','MB','GB','TB'];let i=0,v=n;while(v>=1024&&i<u.length-1){v/=1024;i++}return v.toFixed(v>=10?0:1)+' '+u[i]}
 function percent(a,b){if(b<=0)return '0%';return Math.round((a/b)*100)+'%'}
 function pill(status){if(status==='active')return '<span class="pill active">Active</span>';if(status==='warn')return '<span class="pill warn">Warn</span>';if(status==='bad')return '<span class="pill bad">Error</span>';return '<span class="pill inactive">Inactive</span>'}
+function makePeerRow(item) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.dataset.peer = item.name;
+  row.innerHTML = `
+    <div class="cell-st">${item.isOnline
+      ? '<span class="pill active"><span style="width:6px;height:6px;border-radius:999px;background:#22c55e;display:inline-block"></span> connected</span>'
+      : '<span class="pill inactive">offline</span>'
+    }</div>
+    <div class="name"><a href="#">${item.name}</a></div>
+    <div class="small cell-addr">${item.address || '-'}</div>
+    <div class="spark-cell">
+      <svg class="spark" data-peer="${item.name}" viewBox="0 0 100 26" preserveAspectRatio="none">
+        <line class="sp-ph" x1="6" y1="13" x2="94" y2="13"
+          stroke="var(--border)" stroke-width="1" stroke-dasharray="3 9" stroke-dashoffset="0"/>
+        <path class="sp-ld" fill="none" stroke="#22c55e" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <path class="sp-lu" fill="none" stroke="#d4783a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="small cell-bin">${fmtBytes(item.bin)}</div>
+    <div class="small cell-bout">${fmtBytes(item.bout)}</div>
+    <div class="small cell-since">${item.since || '-'}</div>
+    <div class="more">
+      <button class="icon-btn" data-action="menu" data-name="${item.name}" data-for-id="peer-${item.name}">
+        <span class="material-icons">more_horiz</span>
+      </button>
+    </div>
+  `;
+  return row;
+}
+function updatePeerRow(row, item) {
+  const st = row.querySelector('.cell-st');
+  const wasOnline = !!st.querySelector('.pill.active');
+  if (wasOnline !== item.isOnline) {
+    st.innerHTML = item.isOnline
+      ? '<span class="pill active"><span style="width:6px;height:6px;border-radius:999px;background:#22c55e;display:inline-block"></span> connected</span>'
+      : '<span class="pill inactive">offline</span>';
+  }
+  row.querySelector('.cell-addr').textContent  = item.address || '-';
+  row.querySelector('.cell-bin').textContent   = fmtBytes(item.bin);
+  row.querySelector('.cell-bout').textContent  = fmtBytes(item.bout);
+  row.querySelector('.cell-since').textContent = item.since || '-';
+}
 function renderRows(filter = '', statusFilter = null, sortMode = 'az') {
   if (document.querySelector('.rename-input')) return
   CURRENT_STATUS_FILTER = statusFilter;
   CURRENT_SORT_MODE = sortMode;
   const f = filter.trim().toLowerCase();
-  rows.innerHTML = '';
   const now = Date.now();
   const liveByName = new Map(live.map(c => [c.name, c]));
   const allNames = new Set([...issued.map(i => i.name), ...live.map(l => l.name)]);
@@ -581,40 +625,32 @@ function renderRows(filter = '', statusFilter = null, sortMode = 'az') {
     const isOnline = hs > 0 && (now / 1000 - hs) < HS_TIMEOUT;
     return { name: displayName, address, bin, bout, since, isOnline };
   });
-  if (f) {
-    list = list.filter(x => (x.name + ' ' + x.address).toLowerCase().includes(f));
-  }
-  if (statusFilter === 'online') {
-    list = list.filter(x => x.isOnline);
-  } else if (statusFilter === 'offline') {
-    list = list.filter(x => !x.isOnline);
-  }
+  if (f) list = list.filter(x => (x.name + ' ' + x.address).toLowerCase().includes(f));
+  if (statusFilter === 'online')  list = list.filter(x => x.isOnline);
+  else if (statusFilter === 'offline') list = list.filter(x => !x.isOnline);
   if (sortMode === 'active') {
-    list.sort((a, b) => (b.isOnline === a.isOnline) ? a.name.localeCompare(b.name) : (b.isOnline ? 1 : -1));
+    list.sort((a, b) => (b.isOnline - a.isOnline) || a.name.localeCompare(b.name));
   } else {
     list.sort((a, b) => a.name.localeCompare(b.name));
   }
-  list.forEach(item => {
-    const row = document.createElement('div');
-    row.className = 'row';
-    row.innerHTML = `
-      <div>${item.isOnline
-        ? '<span class="pill active"><span style="width:6px;height:6px;border-radius:999px;background:#22c55e;display:inline-block"></span> connected</span>'
-        : '<span class="pill inactive">offline</span>'
-      }</div>
-      <div class="name"><a href="#">${item.name}</a></div>
-      <div class="small">${item.address || '-'}</div>
-      <div class="spark-cell"><canvas class="spark" data-peer="${item.name}"></canvas></div>
-      <div class="small">${fmtBytes(item.bin)}</div>
-      <div class="small">${fmtBytes(item.bout)}</div>
-      <div class="small">${item.since || '-'}</div>
-      <div class="more">
-        <button class="icon-btn" data-action="menu" data-name="${item.name}" data-for-id="peer-${item.name}">
-          <span class="material-icons">more_horiz</span>
-        </button>
-      </div>
-    `;
-    rows.appendChild(row);
+  // Remove rows not in current list
+  const keep = new Set(list.map(x => x.name));
+  Array.from(rows.querySelectorAll('.row[data-peer]')).forEach(r => {
+    if (!keep.has(r.dataset.peer)) r.remove();
+  });
+  // Insert or update rows in sorted order
+  list.forEach((item, idx) => {
+    let row = rows.querySelector(`.row[data-peer]`);
+    // find exact match among existing
+    let existing = null;
+    rows.querySelectorAll('.row[data-peer]').forEach(r => { if (r.dataset.peer === item.name) existing = r; });
+    if (!existing) {
+      existing = makePeerRow(item);
+    } else {
+      updatePeerRow(existing, item);
+    }
+    const atIdx = rows.children[idx];
+    if (atIdx !== existing) rows.insertBefore(existing, atIdx || null);
   });
 }
 
@@ -655,56 +691,40 @@ function updateSpark(name, bin, bout) {
 }
 
 const SPARK_PAD = 6
-function drawSpark(canvas) {
-  const name = canvas.dataset.peer
+function mkSparkPath(samples, getValue, peak, pad, W, H) {
+  if (samples.length < 2) return ''
+  const drawW = W - pad * 2
+  const pts = samples.map((pt, i) => ({
+    x: pad + (i / (samples.length - 1)) * drawW,
+    y: (H - 2) - (getValue(pt) / peak) * (H - 5)
+  }))
+  let d = `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`
+  for (let i = 1; i < pts.length; i++) {
+    const cx = ((pts[i - 1].x + pts[i].x) / 2).toFixed(1)
+    d += ` C${cx},${pts[i-1].y.toFixed(1)} ${cx},${pts[i].y.toFixed(1)} ${pts[i].x.toFixed(1)},${pts[i].y.toFixed(1)}`
+  }
+  return d
+}
+function drawSpark(svg) {
+  const name = svg.dataset.peer
   const h = sparkHistory.get(name)
-  const dpr = window.devicePixelRatio || 1
-  const rect = canvas.getBoundingClientRect()
-  if (!rect.width) return
-  canvas.width  = rect.width  * dpr
-  canvas.height = rect.height * dpr
-  const ctx = canvas.getContext('2d')
-  ctx.scale(dpr, dpr)
-  const W = rect.width, H = rect.height
-  const borderColor = getComputedStyle(document.documentElement).getPropertyValue('--border').trim() || '#2e2318'
+  const ph = svg.querySelector('.sp-ph')
+  const ld = svg.querySelector('.sp-ld')
+  const lu = svg.querySelector('.sp-lu')
   if (!h || h.samples.length < 2) {
-    // animated scrolling dashed placeholder
-    const offset = -(Date.now() / 80) % 12
-    ctx.setLineDash([3, 9])
-    ctx.lineDashOffset = offset
-    ctx.strokeStyle = borderColor
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.moveTo(SPARK_PAD, H / 2)
-    ctx.lineTo(W - SPARK_PAD, H / 2)
-    ctx.stroke()
-    ctx.setLineDash([])
+    if (ph) ph.style.display = ''
+    if (ld) ld.setAttribute('d', '')
+    if (lu) lu.setAttribute('d', '')
     return
   }
-  const s = h.samples
-  const peak = Math.max(1, ...s.map(x => Math.max(x.up, x.down)))
-  const drawW = W - SPARK_PAD * 2
-  const line = (getValue, color) => {
-    ctx.beginPath()
-    ctx.strokeStyle = color
-    ctx.lineWidth = 1.5
-    ctx.lineJoin = 'round'
-    ctx.lineCap = 'round'
-    s.forEach((pt, i) => {
-      const x = SPARK_PAD + (i / (s.length - 1)) * drawW
-      const y = H - 2 - (getValue(pt) / peak) * (H - 5)
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
-    })
-    ctx.stroke()
-  }
-  line(pt => pt.down, '#22c55e')
-  line(pt => pt.up,   '#d4783a')
+  if (ph) ph.style.display = 'none'
+  const peak = Math.max(1, ...h.samples.map(x => Math.max(x.up, x.down)))
+  if (ld) ld.setAttribute('d', mkSparkPath(h.samples, pt => pt.down, peak, SPARK_PAD, 100, 26))
+  if (lu) lu.setAttribute('d', mkSparkPath(h.samples, pt => pt.up,   peak, SPARK_PAD, 100, 26))
 }
-
 function drawAllSparks() {
-  document.querySelectorAll('.spark').forEach(drawSpark)
+  document.querySelectorAll('svg.spark').forEach(drawSpark)
 }
-// continuous loop so placeholder animates and graphs stay live between polls
 ;(function sparkLoop() {
   drawAllSparks()
   setTimeout(() => requestAnimationFrame(sparkLoop), 50)
