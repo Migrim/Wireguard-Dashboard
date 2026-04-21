@@ -25,7 +25,7 @@ It reads and writes your `/etc/wireguard/<iface>.conf`, keeps a JSON database fo
 
 ```bash
 # 1) clone your repo
-git clone https://github.com/yourname/Wireguard-Dashboard.git /opt/WireGuard-Dashboard
+git clone https://github.com/Migrim/Wireguard-Dashboard.git /opt/WireGuard-Dashboard
 cd /opt/WireGuard-Dashboard
 
 # 2) create venv
