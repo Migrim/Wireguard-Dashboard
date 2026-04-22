@@ -102,8 +102,9 @@ def timedate_ntp() -> str:
     return o.strip()
 
 def logs_tail(n: int=200, verbose: bool=False) -> str:
-    fmt = "--output=short-precise" if verbose else "--output=short"
-    o,c=_run(f"journalctl -u {UNIT} -n {int(n)} --no-pager {fmt} || true")
+    fmt = "short-precise" if verbose else "short"
+    args = ["/usr/bin/journalctl", "-u", UNIT, "-n", str(int(n)), "--no-pager", f"--output={fmt}"]
+    o, _ = _sudo(args)
     return o
 
 def _read_conf() -> Dict[str,Any]:
@@ -776,7 +777,7 @@ def api_diag_vpn():
     lp=iface_cfg.get("ListenPort",str(WG_PORT))
     ip_fwd,_=_run("cat /proc/sys/net/ipv4/ip_forward 2>/dev/null || echo 0")
     wg_show,_=_sudo(["/usr/bin/wg","show"]) if os.path.exists("/usr/bin/wg") else ("","")
-    journal,_=_run(f"journalctl -u {UNIT} -n 15 --no-pager 2>/dev/null || true")
+    journal,_=_sudo(["/usr/bin/journalctl","-u",UNIT,"-n","15","--no-pager"])
     return jsonify({
         "public_ip": PUBLIC_IP,
         "host_ip": HOST_IP,

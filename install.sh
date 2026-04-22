@@ -105,6 +105,9 @@ python3 -m venv "${DASH_ENV}"
 
 # 9) www-data
 id -u www-data >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin www-data
+# Grant journal read access so /api/logs works without sudo falling back on permission errors
+usermod -aG systemd-journal www-data 2>/dev/null || true
+usermod -aG adm www-data 2>/dev/null || true
 chown -R www-data:www-data "${DASH_DIR}"
 
 # 10) env for service
