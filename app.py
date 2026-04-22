@@ -101,8 +101,9 @@ def timedate_ntp() -> str:
     o,c=_run("timedatectl 2>/dev/null | awk -F': ' '/NTP service:|System clock synchronized:/{print $2}' | xargs | sed 's/ /, /g'")
     return o.strip()
 
-def logs_tail(n: int=200) -> str:
-    o,c=_run(f"journalctl -u {UNIT} -n {int(n)} --no-pager || true")
+def logs_tail(n: int=200, verbose: bool=False) -> str:
+    fmt = "--output=short-precise" if verbose else "--output=short"
+    o,c=_run(f"journalctl -u {UNIT} -n {int(n)} --no-pager {fmt} || true")
     return o
 
 def _read_conf() -> Dict[str,Any]:
@@ -681,7 +682,21 @@ def api_diag_perms():
 @app.route("/api/logs")
 def api_logs():
     n=int(request.args.get("n","200"))
-    return jsonify({"lines":logs_tail(n).splitlines()})
+    verbose=request.args.get("verbose","0")=="1"
+    lines=logs_tail(n, verbose).splitlines()
+    return jsonify({"lines":lines,"verbose":verbose,"count":len(lines)})
+
+@app.route("/api/logs/retention",methods=["POST"])
+def api_logs_retention():
+    data=request.get_json(force=True,silent=True) or {}
+    retention=str(data.get("retention","7d")).strip()
+    if retention not in {"1d","7d","30d","forever"}:
+        abort(400)
+    if retention=="forever":
+        return jsonify({"ok":True,"retention":retention,"out":"No vacuum needed"})
+    vacuum_map={"1d":"1d","7d":"7d","30d":"30d"}
+    o,c=_sudo(["/usr/bin/journalctl",f"--vacuum-time={vacuum_map[retention]}"])
+    return jsonify({"ok":c==0,"retention":retention,"out":o})
 
 @app.route("/api/traffic")
 def api_traffic():

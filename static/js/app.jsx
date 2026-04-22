@@ -360,7 +360,7 @@ function App({ tweaks, setTweaks }) {
 
       {tweaks._tweaksOpen && <TweaksPanel tweaks={tweaks} setTweaks={setTweaks} />}
       {portCheckOpen && <PortCheckDrawer peers={peers} onClose={() => setPortCheckOpen(false)} />}
-      {logsDrawerOpen && <LogsDrawer logs={logs} alerts={alerts} onClose={() => setLogsDrawerOpen(false)} />}
+      {logsDrawerOpen && <LogsDrawer alerts={alerts} onClose={() => setLogsDrawerOpen(false)} />}
       {addOpen && (
         <AddPeerModal
           onClose={() => setAddOpen(false)}

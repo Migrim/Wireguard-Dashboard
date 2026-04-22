@@ -374,36 +374,106 @@ function DataBudgetDrawer({ total, budget, setBudget, alerts, setAlerts, resetTi
 }
 
 // ============================================================
-// LogsDrawer — full log history, filters, settings, warnings
+// LogsDrawer — full log history, own polling, verbose, retention, download
 // ============================================================
-function LogsDrawer({ logs, alerts, onClose }) {
+function LogsDrawer({ alerts, onClose }) {
   const [levelFilter, setLevelFilter] = _useState('all');
   const [search, setSearch] = _useState('');
   const [autoScroll, setAutoScroll] = _useState(true);
   const [verbose, setVerbose] = _useState(false);
   const [retention, setRetention] = _useState('7d');
+  const [retentionSaving, setRetentionSaving] = _useState(false);
+  const [retentionMsg, setRetentionMsg] = _useState('');
+  const [localLogs, setLocalLogs] = _useState([]);
+  const [loading, setLoading] = _useState(true);
   const streamRef = _useRef(null);
+  const wasAtBottom = _useRef(true);
 
+  // Keyboard close
   _useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  // Own fast polling — restarts when verbose changes
   _useEffect(() => {
-    if (autoScroll && streamRef.current) streamRef.current.scrollTop = streamRef.current.scrollHeight;
-  }, [logs.length, autoScroll]);
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const n = verbose ? 1000 : 300;
+        const j = await window.WG.apiCall(`/api/logs?n=${n}&verbose=${verbose ? 1 : 0}`);
+        if (cancelled) return;
+        if (j.lines && j.lines.length) {
+          setLocalLogs(window.WG.parseLogLines(j.lines));
+          setLoading(false);
+        }
+      } catch (_) {}
+    };
+    poll();
+    const id = setInterval(poll, 3000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [verbose]);
 
-  const filtered = logs.filter(l => {
+  // Auto-scroll — only if user was already at the bottom
+  _useEffect(() => {
+    const el = streamRef.current;
+    if (!el) return;
+    if (autoScroll && wasAtBottom.current) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [localLogs.length, autoScroll]);
+
+  const onScroll = () => {
+    const el = streamRef.current;
+    if (!el) return;
+    wasAtBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  };
+
+  const saveRetention = async (val) => {
+    setRetention(val);
+    if (val === 'forever') { setRetentionMsg('Retention set to forever'); return; }
+    setRetentionSaving(true);
+    setRetentionMsg('');
+    try {
+      const r = await window.WG.apiCall('/api/logs/retention', {
+        method: 'POST',
+        body: JSON.stringify({ retention: val }),
+      });
+      setRetentionMsg(r.ok ? `Vacuumed journal (kept last ${val})` : 'Vacuum failed — check server logs');
+    } catch (e) {
+      setRetentionMsg('Error: ' + (e.message || 'API unreachable'));
+    } finally {
+      setRetentionSaving(false);
+      setTimeout(() => setRetentionMsg(''), 4000);
+    }
+  };
+
+  const downloadLogs = () => {
+    const rows = localLogs.map(l => {
+      const ts = new Date(l.t).toISOString();
+      return `${ts} [${l.level.toUpperCase().padEnd(5)}] ${l.msg}`;
+    }).join('\n');
+    const blob = new Blob([rows], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `wg0-logs-${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const filtered = localLogs.filter(l => {
     if (levelFilter !== 'all' && l.level !== levelFilter) return false;
     if (search && !l.msg.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
   const counts = {
-    info: logs.filter(l => l.level === 'info').length,
-    warn: logs.filter(l => l.level === 'warn').length,
-    error: logs.filter(l => l.level === 'error').length,
+    info:  localLogs.filter(l => l.level === 'info').length,
+    warn:  localLogs.filter(l => l.level === 'warn').length,
+    error: localLogs.filter(l => l.level === 'error').length,
   };
 
   return (
@@ -418,7 +488,8 @@ function LogsDrawer({ logs, alerts, onClose }) {
             <div>
               <h2 className="drawer-title">Logs</h2>
               <div className="drawer-sub">
-                <span className="pulse-dot" /> streaming wg0 · {filtered.length} of {logs.length} lines
+                <span className="pulse-dot" /> wg0 · {loading ? 'loading…' : `${filtered.length} of ${localLogs.length} lines`}
+                {verbose && <span style={{ marginLeft: 6, color: 'var(--accent)', fontFamily: 'var(--mono)', fontSize: 10 }}>VERBOSE</span>}
               </div>
             </div>
           </div>
@@ -452,7 +523,7 @@ function LogsDrawer({ logs, alerts, onClose }) {
               <div className="log-stat"><div className="log-stat-val" style={{ color: 'var(--accent-2)' }}>{counts.info}</div><div className="log-stat-lbl">info</div></div>
               <div className="log-stat"><div className="log-stat-val" style={{ color: 'var(--warn)' }}>{counts.warn}</div><div className="log-stat-lbl">warn</div></div>
               <div className="log-stat"><div className="log-stat-val" style={{ color: 'var(--danger)' }}>{counts.error}</div><div className="log-stat-lbl">error</div></div>
-              <div className="log-stat"><div className="log-stat-val">{logs.length}</div><div className="log-stat-lbl">total</div></div>
+              <div className="log-stat"><div className="log-stat-val">{localLogs.length}</div><div className="log-stat-lbl">total</div></div>
             </div>
           </section>
 
@@ -471,8 +542,10 @@ function LogsDrawer({ logs, alerts, onClose }) {
           </section>
 
           <section className="drawer-section">
-            <div className="logs-stream logs-stream-tall" ref={streamRef}>
-              {filtered.length === 0 ? (
+            <div className="logs-stream logs-stream-tall" ref={streamRef} onScroll={onScroll}>
+              {loading ? (
+                <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 11 }}>Loading…</div>
+              ) : filtered.length === 0 ? (
                 <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 11 }}>No matching logs</div>
               ) : filtered.map((l, i) => (
                 <div key={i} className={`log-line log-${l.level}`}>
@@ -493,7 +566,7 @@ function LogsDrawer({ logs, alerts, onClose }) {
                   <div className="setting-desc">Follow new log lines as they arrive</div>
                 </div>
                 <div className="setting-control">
-                  <button className={`toggle ${autoScroll ? 'on' : ''}`} onClick={() => setAutoScroll(!autoScroll)}>
+                  <button className={`toggle ${autoScroll ? 'on' : ''}`} onClick={() => setAutoScroll(v => !v)}>
                     <span className="toggle-knob" />
                   </button>
                 </div>
@@ -501,10 +574,10 @@ function LogsDrawer({ logs, alerts, onClose }) {
               <div className="setting-row">
                 <div>
                   <div className="setting-title">Verbose logging</div>
-                  <div className="setting-desc">Include keepalives and per-packet events</div>
+                  <div className="setting-desc">Fetch 1000 lines with microsecond timestamps (journalctl short-precise)</div>
                 </div>
                 <div className="setting-control">
-                  <button className={`toggle ${verbose ? 'on' : ''}`} onClick={() => setVerbose(!verbose)}>
+                  <button className={`toggle ${verbose ? 'on' : ''}`} onClick={() => setVerbose(v => !v)}>
                     <span className="toggle-knob" />
                   </button>
                 </div>
@@ -512,10 +585,13 @@ function LogsDrawer({ logs, alerts, onClose }) {
               <div className="setting-row">
                 <div>
                   <div className="setting-title">Retention</div>
-                  <div className="setting-desc">How long to keep log history on disk</div>
+                  <div className="setting-desc">
+                    Vacuum journal on disk — removes entries older than selected period
+                    {retentionMsg && <span style={{ display: 'block', marginTop: 3, color: retentionMsg.startsWith('Error') ? 'var(--danger)' : 'var(--accent-2)', fontFamily: 'var(--mono)', fontSize: 10 }}>{retentionMsg}</span>}
+                  </div>
                 </div>
                 <div className="setting-control">
-                  <select className="select-input" value={retention} onChange={e => setRetention(e.target.value)}>
+                  <select className="select-input" value={retention} disabled={retentionSaving} onChange={e => saveRetention(e.target.value)}>
                     <option value="1d">1 day</option>
                     <option value="7d">7 days</option>
                     <option value="30d">30 days</option>
@@ -528,9 +604,9 @@ function LogsDrawer({ logs, alerts, onClose }) {
 
           <section className="drawer-section">
             <div className="action-row">
-              <button className="btn">
+              <button className="btn btn-primary" onClick={downloadLogs} disabled={localLogs.length === 0}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
-                Download logs
+                Download logs ({localLogs.length} lines)
               </button>
             </div>
           </section>
