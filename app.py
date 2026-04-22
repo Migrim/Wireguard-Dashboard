@@ -29,6 +29,9 @@ PEERS_DB=os.path.join(WG_DIR,"peers.json")
 TRAFFIC_HISTORY=os.environ.get("TRAFFIC_HISTORY", os.path.join(WG_DIR, "traffic_history.json"))
 TRAFFIC_RETENTION_SECONDS=24*60*60
 TRAFFIC_FLUSH_SECONDS=10
+PEER_SPARK_HISTORY=os.environ.get("PEER_SPARK_HISTORY", os.path.join(WG_DIR, "peer_spark_history.json"))
+PEER_SPARK_RETENTION_SECONDS=60
+PEER_SPARK_FLUSH_SECONDS=10
 GEO_CACHE_SECONDS=6*60*60
 SUDO_BIN=os.environ.get("SUDO_BIN","/usr/bin/sudo")
 BASH_BIN=os.environ.get("BASH_BIN","/bin/bash")
@@ -294,6 +297,115 @@ def _downsample_traffic(samples: List[Dict[str, Any]], max_points: int) -> List[
             "tx": bucket[-1].get("tx", 0),
         })
     return out
+
+def _load_peer_spark_history() -> Dict[str, List[Dict[str, Any]]]:
+    content = ""
+    try:
+        with open(PEER_SPARK_HISTORY, "r", encoding="utf-8") as f:
+            content = f.read()
+    except FileNotFoundError:
+        return {}
+    except PermissionError:
+        out, rc = _sudo_cat(PEER_SPARK_HISTORY)
+        if rc != 0:
+            return {}
+        content = out
+    except Exception:
+        return {}
+    try:
+        raw = json.loads(content)
+    except Exception:
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    cutoff = time.time() - PEER_SPARK_RETENTION_SECONDS
+    history = {}
+    for name, samples in raw.items():
+        if not isinstance(samples, list):
+            continue
+        clean = []
+        for sample in samples:
+            if not isinstance(sample, dict):
+                continue
+            try:
+                ts = float(sample.get("ts", 0))
+                total = max(0.0, float(sample.get("total", 0)))
+            except Exception:
+                continue
+            if ts >= cutoff:
+                clean.append({"ts": ts, "total": total})
+        if clean:
+            history[str(name)] = clean
+    return history
+
+def _save_peer_spark_history(history: Dict[str, List[Dict[str, Any]]]) -> None:
+    import tempfile
+    fd,tmp_path = tempfile.mkstemp(prefix="peer-sparks.", suffix=".json.tmp", dir="/tmp")
+    try:
+        with os.fdopen(fd,"w",encoding="utf-8") as f:
+            json.dump(history, f, separators=(",", ":"))
+        try:
+            os.makedirs(os.path.dirname(PEER_SPARK_HISTORY), exist_ok=True)
+            os.replace(tmp_path, PEER_SPARK_HISTORY)
+            return
+        except Exception:
+            pass
+        _sudo(["/usr/bin/install","-m","640","-o","root","-g","www-data",tmp_path,PEER_SPARK_HISTORY])
+    finally:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except:
+            pass
+
+def _peer_spark_history() -> Dict[str, List[Dict[str, Any]]]:
+    if "_peer_spark_history" not in app.config:
+        app.config["_peer_spark_history"] = _load_peer_spark_history()
+        app.config["_peer_spark_last_flush"] = 0.0
+    return app.config["_peer_spark_history"]
+
+def _prune_peer_spark_history(history: Dict[str, List[Dict[str, Any]]], now: float = None) -> Dict[str, List[Dict[str, Any]]]:
+    cutoff = (now if now is not None else time.time()) - PEER_SPARK_RETENTION_SECONDS
+    out = {}
+    for name, samples in history.items():
+        kept = [s for s in samples if s.get("ts", 0) >= cutoff]
+        if kept:
+            out[name] = kept
+    return out
+
+def _record_peer_spark_samples(live: List[Dict[str, Any]]) -> Dict[str, List[float]]:
+    now = time.time()
+    history = _prune_peer_spark_history(_peer_spark_history(), now)
+    prev = app.config.get("_peer_spark_prev", {})
+    next_prev = {}
+    for p in live:
+        name = str(p.get("name") or p.get("cn") or "").strip()
+        if not name:
+            continue
+        rx = int(p.get("bytes_recv", 0) or 0)
+        tx = int(p.get("bytes_sent", 0) or 0)
+        next_prev[name] = {"rx": rx, "tx": tx}
+        old = prev.get(name)
+        if not old:
+            continue
+        total = max(0, rx - int(old.get("rx", 0))) + max(0, tx - int(old.get("tx", 0)))
+        history.setdefault(name, []).append({"ts": now, "total": total})
+    app.config["_peer_spark_prev"] = next_prev
+    history = _prune_peer_spark_history(history, now)
+    app.config["_peer_spark_history"] = history
+    last_flush = float(app.config.get("_peer_spark_last_flush", 0) or 0)
+    if now - last_flush >= PEER_SPARK_FLUSH_SECONDS:
+        _save_peer_spark_history(history)
+        app.config["_peer_spark_last_flush"] = now
+    return _peer_spark_payload(history)
+
+def _peer_spark_payload(history: Dict[str, List[Dict[str, Any]]] = None) -> Dict[str, List[float]]:
+    history = _prune_peer_spark_history(history if history is not None else _peer_spark_history())
+    app.config["_peer_spark_history"] = history
+    return {
+        name: [float(s.get("total", 0) or 0) for s in samples[-20:]]
+        for name, samples in history.items()
+    }
 
 def _endpoint_ip(endpoint: str) -> str:
     endpoint = str(endpoint or "").strip()
@@ -661,6 +773,10 @@ def api_status():
     except:
         issued,live=[],[]
     try:
+        spark_history=_record_peer_spark_samples(live)
+    except Exception:
+        spark_history={}
+    try:
         ntp=timedate_ntp()
     except:
         ntp="unknown"
@@ -668,7 +784,7 @@ def api_status():
     payload={
         "service":{"active":False,"enabled":False,"unit":UNIT},
         "network":{"host_ip":HOST_IP,"port":int(lp),"ufw_udp_open":False,"listening":False,"ping_ok":False,"iface":iface,"rx":rx,"tx":tx},
-        "clients":{"count":len(issued),"issued":issued,"live":live,"status_updated":None},
+        "clients":{"count":len(issued),"issued":issued,"live":live,"status_updated":None,"spark_history":spark_history},
         "config":{
             "path":WG_CONF,
             "port":lp,

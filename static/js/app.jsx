@@ -70,6 +70,7 @@ function App({ tweaks, setTweaks }) {
           });
         });
         ensurePeerState(mapped);
+        const serverSparks = j.clients.spark_history || {};
 
         // Pre-compute per-peer deltas before touching state
         const prev = prevBytesRef.current;
@@ -92,7 +93,8 @@ function App({ tweaks, setTweaks }) {
         setSparks(s => {
           const out = { ...s };
           mapped.forEach(p => {
-            const buf = out[p.id] || new Array(28).fill(0);
+            const seeded = (serverSparks[p.id] || []).slice(-20);
+            const buf = out[p.id] || (seeded.length ? seeded : new Array(20).fill(0));
             out[p.id] = [...buf.slice(1), deltas[p.id].total];
           });
           return out;
@@ -524,11 +526,13 @@ function KPIDataToday({ total, budget = 50, onClick }) {
 
 function KPIActiveSessions({ connectedCount, totalCount, sparks }) {
   const combined = uM(() => {
-    const len = 28;
+    const len = 20;
     const out = new Array(len).fill(0);
     Object.values(sparks).forEach(arr => {
-      if (!arr || arr.length < len) return;
-      arr.forEach((v, i) => { out[i] = (out[i] || 0) + v; });
+      if (!arr || !arr.length) return;
+      const tail = arr.slice(-len);
+      const offset = len - tail.length;
+      tail.forEach((v, i) => { out[offset + i] = (out[offset + i] || 0) + v; });
     });
     return out;
   }, [sparks]);
