@@ -26,6 +26,7 @@ def _detect_public_ip() -> str:
 PUBLIC_IP = _detect_public_ip()
 
 PEERS_DB=os.path.join(WG_DIR,"peers.json")
+DATA_BUDGET_DB=os.environ.get("DATA_BUDGET_DB", os.path.join(WG_DIR, "data_budget.json"))
 TRAFFIC_HISTORY=os.environ.get("TRAFFIC_HISTORY", os.path.join(WG_DIR, "traffic_history.json"))
 TRAFFIC_RETENTION_SECONDS=24*60*60
 TRAFFIC_FLUSH_SECONDS=10
@@ -593,6 +594,134 @@ def _save_peers_db(db: Dict[str,Any]) -> None:
         except:
             pass
 
+def _load_data_budget_db() -> Dict[str, Any]:
+    default = {
+        "settings": {"budget_gb": 50, "alerts": True, "reset_time": "00:00"},
+        "period_start": 0,
+        "baselines": {},
+        "alert_state": {},
+    }
+    content = ""
+    try:
+        with open(DATA_BUDGET_DB, "r", encoding="utf-8") as f:
+            content = f.read()
+    except FileNotFoundError:
+        return default
+    except PermissionError:
+        out, rc = _sudo_cat(DATA_BUDGET_DB)
+        if rc != 0:
+            return default
+        content = out
+    except Exception:
+        return default
+    try:
+        db = json.loads(content)
+    except Exception:
+        return default
+    if not isinstance(db, dict):
+        return default
+    settings = db.get("settings") if isinstance(db.get("settings"), dict) else {}
+    default["settings"].update({
+        "budget_gb": max(1, int(settings.get("budget_gb", default["settings"]["budget_gb"]) or 50)),
+        "alerts": bool(settings.get("alerts", default["settings"]["alerts"])),
+        "reset_time": str(settings.get("reset_time", default["settings"]["reset_time"])),
+    })
+    default["period_start"] = int(db.get("period_start", 0) or 0)
+    default["baselines"] = db.get("baselines") if isinstance(db.get("baselines"), dict) else {}
+    default["alert_state"] = db.get("alert_state") if isinstance(db.get("alert_state"), dict) else {}
+    return default
+
+def _save_data_budget_db(db: Dict[str, Any]) -> None:
+    import tempfile
+    fd,tmp_path = tempfile.mkstemp(prefix="data-budget.", suffix=".json.tmp", dir="/tmp")
+    try:
+        with os.fdopen(fd,"w",encoding="utf-8") as f:
+            json.dump(db, f, indent=2)
+        try:
+            os.makedirs(os.path.dirname(DATA_BUDGET_DB), exist_ok=True)
+            os.replace(tmp_path, DATA_BUDGET_DB)
+            return
+        except Exception:
+            pass
+        _sudo(["/usr/bin/install","-m","640","-o","root","-g","www-data",tmp_path,DATA_BUDGET_DB])
+    finally:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except:
+            pass
+
+def _valid_reset_time(value: Any) -> bool:
+    return bool(re.match(r"^\d{2}:\d{2}$", str(value or ""))) and 0 <= int(str(value)[:2]) <= 23 and 0 <= int(str(value)[3:]) <= 59
+
+def _budget_period_start(reset_time: str, now: float = None) -> int:
+    now_dt = datetime.datetime.fromtimestamp(now or time.time())
+    hour, minute = [int(x) for x in reset_time.split(":", 1)]
+    start = now_dt.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if now_dt < start:
+        start -= datetime.timedelta(days=1)
+    return int(start.timestamp())
+
+def _peer_current_totals(issued: List[Dict[str, Any]], live: List[Dict[str, Any]]) -> Dict[str, int]:
+    out = {p.get("name", ""): 0 for p in issued if p.get("name")}
+    for p in live:
+        name = p.get("name") or p.get("cn")
+        if not name:
+            continue
+        out[str(name)] = int(p.get("bytes_recv", 0) or 0) + int(p.get("bytes_sent", 0) or 0)
+    return out
+
+def _data_budget_state(issued: List[Dict[str, Any]], live: List[Dict[str, Any]], persist: bool = True) -> Dict[str, Any]:
+    db = _load_data_budget_db()
+    settings = db["settings"]
+    if not _valid_reset_time(settings.get("reset_time")):
+        settings["reset_time"] = "00:00"
+    period_start = _budget_period_start(settings["reset_time"])
+    totals = _peer_current_totals(issued, live)
+    changed = False
+    if int(db.get("period_start", 0) or 0) != period_start:
+        app.logger.info("data_budget_reset period_start=%s reset_time=%s peers=%s", period_start, settings["reset_time"], len(totals))
+        db["period_start"] = period_start
+        db["baselines"] = {name: total for name, total in totals.items()}
+        db["alert_state"] = {}
+        changed = True
+    baselines = db.setdefault("baselines", {})
+    rows = []
+    total_used = 0
+    for name, current in totals.items():
+        base = baselines.get(name)
+        if base is None or current < int(base or 0):
+            baselines[name] = current
+            base = current
+            changed = True
+        used = max(0, current - int(base or 0))
+        total_used += used
+        rows.append({"name": name, "bytes": used, "current_total": current, "baseline": int(base or 0)})
+    rows.sort(key=lambda x: x["bytes"], reverse=True)
+    budget_bytes = int(settings["budget_gb"]) * 1024 * 1024 * 1024
+    pct = (total_used / budget_bytes * 100) if budget_bytes else 0
+    if settings.get("alerts", True):
+        state = db.setdefault("alert_state", {})
+        level = "90" if pct >= 90 else "70" if pct >= 70 else ""
+        if level and state.get("last_level") != level:
+            app.logger.warning("data_budget_alert threshold=%s pct=%.1f used=%s budget_gb=%s", level, pct, total_used, settings["budget_gb"])
+            state["last_level"] = level
+            changed = True
+        elif not level and state.get("last_level"):
+            state.pop("last_level", None)
+            changed = True
+    if changed and persist:
+        _save_data_budget_db(db)
+    return {
+        "settings": settings,
+        "period_start": period_start,
+        "period_start_iso": datetime.datetime.fromtimestamp(period_start).isoformat(),
+        "total": total_used,
+        "budget_bytes": budget_bytes,
+        "pct": pct,
+        "peers": rows,
+    }
+
 def _valid_name(x: Any) -> bool:
     return bool(re.match(r"^[A-Za-z0-9._-]{1,64}$", str(x or "").strip()))
 
@@ -833,6 +962,11 @@ def api_status():
         spark_history={}
         peer_throughput_history={}
     try:
+        data_budget=_data_budget_state(issued, live)
+    except Exception:
+        app.logger.exception("data_budget_status_failed")
+        data_budget={"settings":{"budget_gb":50,"alerts":True,"reset_time":"00:00"},"total":0,"budget_bytes":50*1024*1024*1024,"pct":0,"peers":[]}
+    try:
         ntp=timedate_ntp()
     except:
         ntp="unknown"
@@ -841,6 +975,7 @@ def api_status():
         "service":{"active":False,"enabled":False,"unit":UNIT},
         "network":{"host_ip":HOST_IP,"port":int(lp),"ufw_udp_open":False,"listening":False,"ping_ok":False,"iface":iface,"rx":rx,"tx":tx},
         "clients":{"count":len(issued),"issued":issued,"live":live,"status_updated":None,"spark_history":spark_history,"peer_throughput_history":peer_throughput_history},
+        "data_budget":data_budget,
         "config":{
             "path":WG_CONF,
             "port":lp,
@@ -1106,6 +1241,49 @@ def api_logs_retention():
     vacuum_map={"1d":"1d","7d":"7d","30d":"30d"}
     o,c=_sudo(["/usr/bin/journalctl",f"--vacuum-time={vacuum_map[retention]}"])
     return jsonify({"ok":c==0,"retention":retention,"out":o})
+
+@app.route("/api/data-budget", methods=["GET", "POST"])
+def api_data_budget():
+    issued, live = list_clients()
+    db = _load_data_budget_db()
+    if request.method == "POST":
+        data = request.get_json(force=True, silent=True) or {}
+        settings = db.setdefault("settings", {})
+        old = dict(settings)
+        if "budget_gb" in data:
+            try:
+                settings["budget_gb"] = max(1, min(100000, int(data.get("budget_gb") or 1)))
+            except (TypeError, ValueError):
+                return jsonify({"ok": False, "error": "invalid_budget_gb"}), 400
+        if "alerts" in data:
+            settings["alerts"] = bool(data.get("alerts"))
+        if "reset_time" in data:
+            rt = str(data.get("reset_time", "")).strip()
+            if not _valid_reset_time(rt):
+                return jsonify({"ok": False, "error": "invalid_reset_time"}), 400
+            settings["reset_time"] = rt
+        db["settings"] = settings
+        if old.get("reset_time") != settings.get("reset_time"):
+            db["period_start"] = 0
+        _save_data_budget_db(db)
+        app.logger.info("data_budget_settings_update old=%s new=%s", old, settings)
+    state = _data_budget_state(issued, live)
+    return jsonify({"ok": True, **state})
+
+@app.route("/api/data-budget/export", methods=["POST"])
+def api_data_budget_export():
+    issued, live = list_clients()
+    state = _data_budget_state(issued, live)
+    app.logger.info("data_budget_export period_start=%s total=%s peers=%s", state.get("period_start"), state.get("total"), len(state.get("peers", [])))
+    rows = ["peer,used_bytes,current_total_bytes,baseline_bytes"]
+    for p in state.get("peers", []):
+        rows.append("{},{},{},{}".format(
+            str(p.get("name", "")).replace(",", " "),
+            int(p.get("bytes", 0) or 0),
+            int(p.get("current_total", 0) or 0),
+            int(p.get("baseline", 0) or 0),
+        ))
+    return jsonify({"ok": True, "filename": f"data-budget-{datetime.datetime.now().strftime('%Y-%m-%d')}.csv", "csv": "\n".join(rows) + "\n"})
 
 @app.route("/api/traffic")
 def api_traffic():

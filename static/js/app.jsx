@@ -13,6 +13,7 @@ function App({ tweaks, setTweaks }) {
   const [dataBudget, setDataBudget] = uS(50);
   const [budgetAlerts, setBudgetAlerts] = uS(true);
   const [resetTime, setResetTime] = uS('00:00');
+  const [budgetUsage, setBudgetUsage] = uS({ total: 0, peers: [], pct: 0, period_start_iso: '' });
   const [filter, setFilter] = uS('');
   const [statusFilter, setStatusFilter] = uS('all');
   const [logs, setLogs] = uS(() => window.WG.makeInitialLogs());
@@ -68,6 +69,12 @@ function App({ tweaks, setTweaks }) {
         setServiceActive(!!j.service.active);
         setServiceEnabled(!!j.service.enabled);
         if (j.service.unit) setUnit(j.service.unit);
+        if (j.data_budget) {
+          setBudgetUsage(j.data_budget);
+          setDataBudget(j.data_budget.settings?.budget_gb || 50);
+          setBudgetAlerts(j.data_budget.settings?.alerts !== false);
+          setResetTime(j.data_budget.settings?.reset_time || '00:00');
+        }
         const mapped = window.WG.mapApiPeers(j.clients.issued, j.clients.live);
         setPeers(prev => {
           const prevMap = new Map(prev.map(p => [p.id, p]));
@@ -237,6 +244,15 @@ function App({ tweaks, setTweaks }) {
     } catch (_) {}
   };
 
+  const updateBudgetSettings = async (patch) => {
+    const r = await window.WG.apiCall('/api/data-budget', { method: 'POST', body: JSON.stringify(patch) });
+    setBudgetUsage(r);
+    setDataBudget(r.settings?.budget_gb || 50);
+    setBudgetAlerts(r.settings?.alerts !== false);
+    setResetTime(r.settings?.reset_time || '00:00');
+    return r;
+  };
+
   const chartTraffic = uM(() => {
     const rangeMs = window.WG.TRAFFIC_RANGES[trafficRange] || window.WG.TRAFFIC_RANGES['1m'];
     const cutoff = Date.now() - rangeMs;
@@ -261,7 +277,7 @@ function App({ tweaks, setTweaks }) {
   const latestTraffic = trafficHistory[trafficHistory.length - 1] || { rx: 0, tx: 0 };
   const currentRx = latestTraffic.rx || 0;
   const currentTx = latestTraffic.tx || 0;
-  const totalToday = peers.reduce((s, p) => s + p.bytesIn + p.bytesOut, 0);
+  const totalToday = budgetUsage.total || 0;
   const offlineLong = peers.filter(p => p.status === 'offline' && p.lastHs && (Date.now() - p.lastHs) > 24 * 3600_000);
   const neverConnected = peers.filter(p => p.status === 'offline' && !p.lastHs);
 
@@ -440,6 +456,8 @@ function App({ tweaks, setTweaks }) {
           resetTime={resetTime}
           setResetTime={setResetTime}
           peers={peers}
+          budgetUsage={budgetUsage}
+          updateBudgetSettings={updateBudgetSettings}
           onClose={() => setDataDrawerOpen(false)}
         />
       )}

@@ -265,7 +265,10 @@ function LogsPanel({ logs, alerts, onExpand }) {
 // ============================================================
 // DataBudgetDrawer
 // ============================================================
-function DataBudgetDrawer({ total, budget, setBudget, alerts, setAlerts, resetTime, setResetTime, peers, onClose }) {
+function DataBudgetDrawer({ total, budget, setBudget, alerts, setAlerts, resetTime, setResetTime, peers, budgetUsage, updateBudgetSettings, onClose }) {
+  const [saving, setSaving] = _useState(false);
+  const [msg, setMsg] = _useState('');
+
   _useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -276,10 +279,49 @@ function DataBudgetDrawer({ total, budget, setBudget, alerts, setAlerts, resetTi
   const pct = Math.min(100, (total / cap) * 100);
   const remaining = Math.max(0, cap - total);
 
-  const peerBreakdown = [...peers]
-    .map(p => ({ ...p, total: p.bytesIn + p.bytesOut }))
-    .sort((a, b) => b.total - a.total);
+  const peerByName = new Map(peers.map(p => [p.name, p]));
+  const peerBreakdown = (budgetUsage?.peers || []).map(row => {
+    const p = peerByName.get(row.name) || {};
+    return { ...p, id: row.name, name: row.name, total: row.bytes || 0 };
+  });
   const maxPeerTotal = Math.max(...peerBreakdown.map(p => p.total), 1);
+
+  const saveSettings = async (patch) => {
+    setSaving(true);
+    setMsg('');
+    try {
+      const r = await updateBudgetSettings(patch);
+      setMsg('Saved');
+      setTimeout(() => setMsg(''), 2000);
+      return r;
+    } catch (e) {
+      setMsg('Error: ' + (e.message || 'save failed'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const exportCsv = async () => {
+    setSaving(true);
+    setMsg('');
+    try {
+      const r = await window.WG.apiCall('/api/data-budget/export', { method: 'POST', body: JSON.stringify({}) });
+      const blob = new Blob([r.csv || ''], { type: 'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = r.filename || 'data-budget.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(a.href);
+      setMsg('Exported CSV');
+      setTimeout(() => setMsg(''), 2000);
+    } catch (e) {
+      setMsg('Error: ' + (e.message || 'export failed'));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <>
@@ -292,7 +334,7 @@ function DataBudgetDrawer({ total, budget, setBudget, alerts, setAlerts, resetTi
             </div>
             <div>
               <h2 className="drawer-title">Data budget</h2>
-              <div className="drawer-sub">Cumulative usage · resets at {resetTime} local</div>
+              <div className="drawer-sub">Actual usage since {budgetUsage?.period_start_iso ? new Date(budgetUsage.period_start_iso).toLocaleString() : 'current reset'} · resets at {resetTime} local</div>
             </div>
           </div>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
@@ -359,10 +401,11 @@ function DataBudgetDrawer({ total, budget, setBudget, alerts, setAlerts, resetTi
                 </div>
                 <div className="setting-control">
                   <div className="stepper">
-                    <button onClick={() => setBudget(Math.max(1, budget - 5))}>−</button>
+                    <button disabled={saving} onClick={() => saveSettings({ budget_gb: Math.max(1, budget - 5) })}>−</button>
                     <span className="mono">{budget} GB</span>
-                    <button onClick={() => setBudget(budget + 5)}>+</button>
+                    <button disabled={saving} onClick={() => saveSettings({ budget_gb: budget + 5 })}>+</button>
                   </div>
+                  {msg && <span style={{ display: 'block', marginTop: 3, color: msg.startsWith('Error') ? 'var(--danger)' : 'var(--accent-2)', fontFamily: 'var(--mono)', fontSize: 10 }}>{msg}</span>}
                 </div>
               </div>
               <div className="setting-row">
@@ -371,7 +414,7 @@ function DataBudgetDrawer({ total, budget, setBudget, alerts, setAlerts, resetTi
                   <div className="setting-desc">When the daily counter rolls over</div>
                 </div>
                 <div className="setting-control">
-                  <select className="select-input" value={resetTime} onChange={e => setResetTime(e.target.value)}>
+                  <select className="select-input" value={resetTime} disabled={saving} onChange={e => saveSettings({ reset_time: e.target.value })}>
                     <option value="00:00">00:00</option>
                     <option value="04:00">04:00</option>
                     <option value="06:00">06:00</option>
@@ -385,7 +428,7 @@ function DataBudgetDrawer({ total, budget, setBudget, alerts, setAlerts, resetTi
                   <div className="setting-desc">Show warnings when approaching budget limit</div>
                 </div>
                 <div className="setting-control">
-                  <button className={`toggle ${alerts ? 'on' : ''}`} onClick={() => setAlerts(!alerts)} aria-pressed={alerts}>
+                  <button className={`toggle ${alerts ? 'on' : ''}`} disabled={saving} onClick={() => saveSettings({ alerts: !alerts })} aria-pressed={alerts}>
                     <span className="toggle-knob" />
                   </button>
                 </div>
@@ -395,9 +438,9 @@ function DataBudgetDrawer({ total, budget, setBudget, alerts, setAlerts, resetTi
 
           <section className="drawer-section">
             <div className="action-row">
-              <button className="btn">
+              <button className="btn" onClick={exportCsv} disabled={saving}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
-                Export CSV
+                {saving ? 'Working…' : 'Export CSV'}
               </button>
             </div>
           </section>
