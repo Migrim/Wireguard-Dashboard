@@ -9,7 +9,7 @@ function PeerDrawer({ peer, onClose, sparklines, throughputBuffers, onRevoke }) 
   const [copied, setCopied] = _useState('');
   const [downloading, setDownloading] = _useState(false);
   const [revoking, setRevoking] = _useState(false);
-  const [diag, setDiag] = _useState({ loading: true, pingMs: null, location: null, endpointIp: '', pingIp: '' });
+  const [diag, setDiag] = _useState({ loading: true, pingMs: null, pingStatus: '', location: null, endpointIp: '', pingIp: '' });
 
   _useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -27,15 +27,16 @@ function PeerDrawer({ peer, onClose, sparklines, throughputBuffers, onRevoke }) 
         setDiag({
           loading: false,
           pingMs: r.ping_ms,
+          pingStatus: r.ping_status || '',
           location: r.location || null,
           endpointIp: r.endpoint_ip || '',
           pingIp: r.ping_ip || '',
         });
       } catch (_) {
-        if (!cancelled) setDiag(d => ({ ...d, loading: false, pingMs: null }));
+        if (!cancelled) setDiag(d => ({ ...d, loading: false, pingMs: null, pingStatus: 'error' }));
       }
     };
-    setDiag({ loading: true, pingMs: null, location: null, endpointIp: '', pingIp: '' });
+    setDiag({ loading: true, pingMs: null, pingStatus: '', location: null, endpointIp: '', pingIp: '' });
     fetchDiag();
     const id = setInterval(fetchDiag, 5000);
     return () => { cancelled = true; clearInterval(id); };
@@ -45,7 +46,7 @@ function PeerDrawer({ peer, onClose, sparklines, throughputBuffers, onRevoke }) 
 
   const spark = sparklines[peer.id] || [];
   const thr = throughputBuffers[peer.id] || { rx: [], tx: [] };
-  const pingLabel = diag.loading ? '…' : (diag.pingMs != null ? `${diag.pingMs} ms` : '—');
+  const pingLabel = diag.loading ? 'checking' : (diag.pingMs != null ? `${diag.pingMs} ms` : (diag.pingStatus || 'timeout'));
   const locationLabel = (diag.location && diag.location.label) || peer.country || '—';
 
   const copy = (val, key) => {
@@ -152,7 +153,7 @@ function PeerDrawer({ peer, onClose, sparklines, throughputBuffers, onRevoke }) 
                 <div className="stat-val">{pingLabel}</div>
               </div>
               <div className="stat-cell">
-                <div className="stat-label">LAST HANDSHAKE</div>
+                <div className="stat-label">HANDSHAKE</div>
                 <div className="stat-val">{window.WG.formatRelTime(peer.lastHs)}</div>
               </div>
             </div>

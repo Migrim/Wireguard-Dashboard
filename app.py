@@ -325,28 +325,27 @@ def _ip_from_allowed_ips(allowed_ips: str) -> str:
             continue
     return ""
 
-def _ping_ip(ip: str) -> Any:
+def _ping_ip(ip: str) -> Dict[str, Any]:
     try:
         ipaddress.ip_address(ip)
     except Exception:
-        return None
-    ping_bin = next((p for p in ("/bin/ping", "/usr/bin/ping", "ping") if os.path.exists(p) or p == "ping"), "ping")
+        return {"status": "invalid", "ms": None, "out": ""}
+    ping_bin = next((p for p in ("/bin/ping", "/usr/bin/ping") if os.path.exists(p)), "ping")
+    args = [ping_bin, "-c", "1", "-W", "1", ip]
+    out = ""
+    rc = 1
     try:
-        r = subprocess.run(
-            [ping_bin, "-c", "1", "-W", "1", ip],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            timeout=2,
-        )
-    except Exception:
-        return None
-    if r.returncode != 0:
-        return None
-    m = re.search(r"time[=<]([\d.]+)\s*ms", r.stdout)
+        r = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=2)
+        out = r.stdout or ""
+        rc = r.returncode
+    except Exception as e:
+        out = str(e)
+    if rc != 0 and ping_bin != "ping":
+        out, rc = _sudo(args)
+    m = re.search(r"time[=<]([\d.]+)\s*ms", out)
     if not m:
-        return None
-    return round(float(m.group(1)), 1)
+        return {"status": "timeout" if rc != 0 else "unknown", "ms": None, "out": out[-300:]}
+    return {"status": "ok", "ms": round(float(m.group(1)), 1), "out": out[-300:]}
 
 def _lookup_location(ip: str) -> Dict[str, Any]:
     try:
@@ -843,12 +842,16 @@ def api_users_diag(name: str):
         db = _load_peers_db()
         if name not in db:
             abort(404)
+        ping_ip = _ip_from_allowed_ips((db.get(name) or {}).get("address", ""))
+        ping = _ping_ip(ping_ip) if ping_ip else {"status": "no_target", "ms": None, "out": ""}
         return jsonify({
             "ok": True,
             "name": name,
             "endpoint": "—",
             "endpoint_ip": "",
-            "ping_ms": None,
+            "ping_ip": ping_ip,
+            "ping_ms": ping["ms"],
+            "ping_status": ping["status"],
             "location": {"label": "—"},
         })
     endpoint = peer.get("remote", "")
@@ -856,7 +859,7 @@ def api_users_diag(name: str):
     ping_ip = _ip_from_allowed_ips(peer.get("allowed_ips", ""))
     if not ping_ip and issued_peer:
         ping_ip = _ip_from_allowed_ips(issued_peer.get("ip", ""))
-    ping_ms = _ping_ip(ping_ip) if ping_ip else None
+    ping = _ping_ip(ping_ip) if ping_ip else {"status": "no_target", "ms": None, "out": ""}
     location = _lookup_location(endpoint_ip) if endpoint_ip else {"label": "—"}
     return jsonify({
         "ok": True,
@@ -864,7 +867,8 @@ def api_users_diag(name: str):
         "endpoint": endpoint or "—",
         "endpoint_ip": endpoint_ip,
         "ping_ip": ping_ip,
-        "ping_ms": ping_ms,
+        "ping_ms": ping["ms"],
+        "ping_status": ping["status"],
         "location": location,
     })
 
