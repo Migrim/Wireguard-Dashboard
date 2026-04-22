@@ -24,25 +24,17 @@ function App({ tweaks, setTweaks }) {
   const [thrIn, setThrIn] = uS(() => new Array(120).fill(0));
   const [thrOut, setThrOut] = uS(() => new Array(120).fill(0));
 
-  // Per-peer sparklines
+  // Per-peer sparklines (values = byte delta per poll cycle)
   const [sparks, setSparks] = uS({});
 
   // Per-peer drawer throughput buffer
   const [peerThr, setPeerThr] = uS({});
 
-  // Initialize sparklines / peer buffers when a new peer is seen
+  // Previous cumulative bytes per peer — used to compute sparkline deltas
+  const prevBytesRef = uR({});
+
+  // Initialize per-peer drawer buffers for newly seen peers
   const ensurePeerState = (mapped) => {
-    setSparks(prev => {
-      const next = { ...prev };
-      mapped.forEach((p, i) => {
-        if (!next[p.id]) {
-          next[p.id] = p.status === 'connected'
-            ? window.WG.initSparkline(i * 7 + 3, 28)
-            : window.WG.initSparkline(i * 7 + 3, 28).map(v => v * 0.05);
-        }
-      });
-      return next;
-    });
     setPeerThr(prev => {
       const next = { ...prev };
       mapped.forEach((p, i) => {
@@ -56,7 +48,7 @@ function App({ tweaks, setTweaks }) {
     });
   };
 
-  // Poll /api/status every 5s
+  // Poll /api/status every 3s — also drives sparklines from real byte deltas
   uE(() => {
     let cancelled = false;
     const fetchStatus = async () => {
@@ -75,10 +67,31 @@ function App({ tweaks, setTweaks }) {
           });
         });
         ensurePeerState(mapped);
+
+        // Compute byte deltas and push into sparklines
+        const prev = prevBytesRef.current;
+        const next = {};
+        mapped.forEach(p => { next[p.id] = p.bytesIn + p.bytesOut; });
+        setSparks(s => {
+          const out = { ...s };
+          mapped.forEach(p => {
+            const buf = out[p.id] || new Array(28).fill(0);
+            const arr = buf.slice(1);
+            if (p.status === 'connected') {
+              const prevTotal = prev[p.id];
+              arr.push(prevTotal !== undefined ? Math.max(0, next[p.id] - prevTotal) : 0);
+            } else {
+              arr.push(0);
+            }
+            out[p.id] = arr;
+          });
+          return out;
+        });
+        prevBytesRef.current = next;
       } catch (_) {}
     };
     fetchStatus();
-    const id = setInterval(fetchStatus, 5000);
+    const id = setInterval(fetchStatus, 3000);
     return () => { cancelled = true; clearInterval(id); };
   }, []);
 
@@ -117,30 +130,11 @@ function App({ tweaks, setTweaks }) {
     return () => { cancelled = true; clearInterval(id); };
   }, []);
 
-  // Animation loop — sparklines + per-peer charts
+  // Animation loop — peer drawer throughput charts only (sparklines use real data now)
   uE(() => {
     if (peers.length === 0) return;
     const id = setInterval(() => {
       const rand = Math.random;
-      setSparks(prev => {
-        const out = { ...prev };
-        peers.forEach(p => {
-          const cur = prev[p.id];
-          if (!cur) return;
-          const next = cur.slice(1);
-          const last = cur[cur.length - 1];
-          if (p.status === 'connected') {
-            let v = last + (rand() - 0.5) * 0.4;
-            v = Math.max(0.1, Math.min(1, v));
-            if (rand() < 0.08) v = 0.3 + rand() * 0.7;
-            next.push(v);
-          } else {
-            next.push(0.02 + rand() * 0.03);
-          }
-          out[p.id] = next;
-        });
-        return out;
-      });
       setPeerThr(prev => {
         const out = { ...prev };
         peers.forEach(p => {
@@ -519,12 +513,21 @@ function KPIActiveSessions({ connectedCount, totalCount, sparks }) {
 // ============================================================
 // Peer row
 // ============================================================
+function OfflinePlaceholder({ width = 110, height = 30 }) {
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} style={{ width, height, display: 'block', opacity: 0.3 }}>
+      <line x1={6} y1={height / 2} x2={width - 6} y2={height / 2}
+        stroke="var(--muted)" strokeWidth="1.5" strokeDasharray="4 4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function PeerRow({ peer, spark, onClick }) {
   const statusColor = peer.status === 'connected' ? 'var(--success)' : 'var(--muted)';
-  const sparkColor = peer.status === 'connected' ? 'var(--accent)' : 'var(--muted)';
+  const isOnline = peer.status === 'connected';
 
   return (
-    <div className={`peers-row data-row ${peer.status === 'offline' ? 'row-offline' : ''}`} onClick={onClick}>
+    <div className={`peers-row data-row ${!isOnline ? 'row-offline' : ''}`} onClick={onClick}>
       <div>
         <span className={`status-pill status-${peer.status}`}>
           <span className="status-dot" style={{ background: statusColor }} />
@@ -542,7 +545,10 @@ function PeerRow({ peer, spark, onClick }) {
       </div>
       <div className="mono">{peer.addr}</div>
       <div>
-        <Sparkline data={spark} width={110} height={30} color={sparkColor} active={peer.status === 'connected'} />
+        {isOnline
+          ? <Sparkline data={spark} width={110} height={30} color="var(--accent)" active={true} />
+          : <OfflinePlaceholder width={110} height={30} />
+        }
       </div>
       <div className="mono num">{window.WG.formatBytes(peer.bytesIn)}</div>
       <div className="mono num">{window.WG.formatBytes(peer.bytesOut)}</div>

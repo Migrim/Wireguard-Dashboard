@@ -1,7 +1,7 @@
 // Shared helpers + API client for WG-Quick dashboard
 
 const BASE = document.body.dataset.base || '';
-const HS_TIMEOUT = 180; // seconds without handshake = offline
+const HS_TIMEOUT = 130; // seconds without handshake = offline (all client confs have PersistentKeepalive=25)
 
 async function apiCall(path, opt = {}) {
   const url = path.startsWith('http') ? path : BASE + path;
