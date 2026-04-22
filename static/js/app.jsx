@@ -27,6 +27,7 @@ function App({ tweaks, setTweaks }) {
 
   // Per-peer sparklines (values = byte delta per poll cycle)
   const [sparks, setSparks] = uS({});
+  const [avgPingHistory, setAvgPingHistory] = uS(() => new Array(20).fill(0));
 
   // Per-peer drawer throughput buffer
   const [peerThr, setPeerThr] = uS({});
@@ -37,6 +38,12 @@ function App({ tweaks, setTweaks }) {
   uE(() => {
     localStorage.setItem(LOG_VERBOSE_KEY, logsVerbose ? '1' : '0');
   }, [logsVerbose]);
+
+  const connectedPeerNames = uM(
+    () => peers.filter(p => p.status === 'connected').map(p => p.name).sort(),
+    [peers]
+  );
+  const connectedPeerKey = connectedPeerNames.join('|');
 
   // Initialize per-peer drawer buffers for newly seen peers (40 pts × 3s = 2-min window)
   const ensurePeerState = (mapped) => {
@@ -118,6 +125,30 @@ function App({ tweaks, setTweaks }) {
     const id = setInterval(fetchStatus, 3000);
     return () => { cancelled = true; clearInterval(id); };
   }, []);
+
+  uE(() => {
+    let cancelled = false;
+    const pollAveragePing = async () => {
+      if (!connectedPeerNames.length) {
+        setAvgPingHistory(prev => [...prev.slice(1), 0]);
+        return;
+      }
+      try {
+        const results = await Promise.all(
+          connectedPeerNames.map(name => window.WG.apiCall('/api/users/' + encodeURIComponent(name) + '/diag').catch(() => null))
+        );
+        if (cancelled) return;
+        const values = results
+          .map(r => Number(r && r.ping_ms))
+          .filter(v => Number.isFinite(v) && v >= 0);
+        const avg = values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
+        setAvgPingHistory(prev => [...prev.slice(1), avg]);
+      } catch (_) {}
+    };
+    pollAveragePing();
+    const id = setInterval(pollAveragePing, 5000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [connectedPeerKey]);
 
   uE(() => {
     let cancelled = false;
@@ -294,7 +325,7 @@ function App({ tweaks, setTweaks }) {
         />
         <KPIThroughput currentRx={currentRx} currentTx={currentTx} dataIn={chartTraffic.rx} dataOut={chartTraffic.tx} />
         <KPIDataToday total={totalToday} budget={dataBudget} onClick={() => setDataDrawerOpen(true)} />
-        <KPIActiveSessions connectedCount={connectedCount} totalCount={peers.length} sparks={sparks} />
+        <KPIActiveSessions connectedCount={connectedCount} totalCount={peers.length} avgPingHistory={avgPingHistory} />
       </section>
 
       <section className="main-grid">
@@ -524,18 +555,8 @@ function KPIDataToday({ total, budget = 50, onClick }) {
   );
 }
 
-function KPIActiveSessions({ connectedCount, totalCount, sparks }) {
-  const combined = uM(() => {
-    const len = 20;
-    const out = new Array(len).fill(0);
-    Object.values(sparks).forEach(arr => {
-      if (!arr || !arr.length) return;
-      const tail = arr.slice(-len);
-      const offset = len - tail.length;
-      tail.forEach((v, i) => { out[offset + i] = (out[offset + i] || 0) + v; });
-    });
-    return out;
-  }, [sparks]);
+function KPIActiveSessions({ connectedCount, totalCount, avgPingHistory }) {
+  const avgPing = avgPingHistory.length ? avgPingHistory[avgPingHistory.length - 1] : 0;
 
   return (
     <div className="kpi-tile">
@@ -548,11 +569,12 @@ function KPIActiveSessions({ connectedCount, totalCount, sparks }) {
           <span className="kpi-unit">/ {totalCount}</span>
         </div>
         <div className="kpi-mini" style={{ maxWidth: 210, marginLeft: -12 }}>
-          <Sparkline data={combined} width={200} height={48} color="var(--accent-2)" />
+          <Sparkline data={avgPingHistory} width={200} height={48} color="var(--accent-2)" />
         </div>
       </div>
       <div className="kpi-foot">
         <span className="mono">{totalCount > 0 ? Math.round((connectedCount / totalCount) * 100) : 0}% online</span>
+        <span className="mono">avg ping {avgPing > 0 ? `${avgPing.toFixed(1)} ms` : '—'}</span>
       </div>
     </div>
   );
