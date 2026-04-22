@@ -54,7 +54,7 @@ function mapApiPeers(issued, live) {
 
 const _MONTHS = { Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11 };
 
-function parseLogLines(lines) {
+function parseLogLines(lines, verbose = false) {
   const now = Date.now();
   const year = new Date().getFullYear();
   return (lines || []).map((line, i) => {
@@ -64,14 +64,15 @@ function parseLogLines(lines) {
     // Parse real timestamp from journalctl short / short-precise format:
     // "Apr 22 14:35:22[.123456] hostname unit[pid]: message"
     let t = now - (lines.length - i) * 1000;
-    const tsMatch = line.match(/^([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{2}):(\d{2}):(\d{2})/);
+    const tsMatch = line.match(/^([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?/);
     if (tsMatch) {
-      const d = new Date(year, _MONTHS[tsMatch[1]] ?? 0, +tsMatch[2], +tsMatch[3], +tsMatch[4], +tsMatch[5]);
+      const ms = tsMatch[6] ? Math.floor(Number('0.' + tsMatch[6]) * 1000) : 0;
+      const d = new Date(year, _MONTHS[tsMatch[1]] ?? 0, +tsMatch[2], +tsMatch[3], +tsMatch[4], +tsMatch[5], ms);
       if (!isNaN(d.getTime())) t = d.getTime();
     }
     // Strip the journalctl prefix (handles short and short-precise formats)
     const msg = line.replace(/^[A-Z][a-z]{2}\s+\d{1,2}\s+[\d:.]+\s+\S+\s+\S+:\s*/, '').trim() || line;
-    return { t, level, msg };
+    return { t, level, msg: verbose ? line : msg };
   });
 }
 

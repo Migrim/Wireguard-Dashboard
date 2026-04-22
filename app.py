@@ -599,6 +599,8 @@ def _load_data_budget_db() -> Dict[str, Any]:
         "settings": {"budget_gb": 50, "alerts": True, "reset_time": "00:00"},
         "period_start": 0,
         "baselines": {},
+        "carryover": {},
+        "last_totals": {},
         "alert_state": {},
     }
     content = ""
@@ -628,6 +630,8 @@ def _load_data_budget_db() -> Dict[str, Any]:
     })
     default["period_start"] = int(db.get("period_start", 0) or 0)
     default["baselines"] = db.get("baselines") if isinstance(db.get("baselines"), dict) else {}
+    default["carryover"] = db.get("carryover") if isinstance(db.get("carryover"), dict) else {}
+    default["last_totals"] = db.get("last_totals") if isinstance(db.get("last_totals"), dict) else {}
     default["alert_state"] = db.get("alert_state") if isinstance(db.get("alert_state"), dict) else {}
     return default
 
@@ -683,18 +687,29 @@ def _data_budget_state(issued: List[Dict[str, Any]], live: List[Dict[str, Any]],
         app.logger.info("data_budget_reset period_start=%s reset_time=%s peers=%s", period_start, settings["reset_time"], len(totals))
         db["period_start"] = period_start
         db["baselines"] = {name: total for name, total in totals.items()}
+        db["carryover"] = {}
+        db["last_totals"] = dict(totals)
         db["alert_state"] = {}
         changed = True
     baselines = db.setdefault("baselines", {})
+    carryover = db.setdefault("carryover", {})
+    last_totals = db.setdefault("last_totals", {})
     rows = []
     total_used = 0
     for name, current in totals.items():
         base = baselines.get(name)
         if base is None or current < int(base or 0):
+            previous_current = int(last_totals.get(name, base or current) or 0)
+            previous_used = max(0, previous_current - int(base or 0))
+            carryover[name] = int(carryover.get(name, 0) or 0) + previous_used
+            app.logger.info("data_budget_counter_reset peer=%s carryover=%s previous_current=%s current=%s", name, carryover[name], previous_current, current)
             baselines[name] = current
             base = current
             changed = True
-        used = max(0, current - int(base or 0))
+        used = int(carryover.get(name, 0) or 0) + max(0, current - int(base or 0))
+        if int(last_totals.get(name, -1) or -1) != current:
+            last_totals[name] = current
+            changed = True
         total_used += used
         rows.append({"name": name, "bytes": used, "current_total": current, "baseline": int(base or 0)})
     rows.sort(key=lambda x: x["bytes"], reverse=True)
