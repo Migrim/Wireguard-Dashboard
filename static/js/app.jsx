@@ -89,9 +89,9 @@ function App({ tweaks, setTweaks }) {
           if (p.status === 'connected' && pr !== undefined) {
             const rxDelta = Math.max(0, p.bytesIn  - pr.rx);
             const txDelta = Math.max(0, p.bytesOut - pr.tx);
-            deltas[p.id] = { rxBps: rxDelta / 3, txBps: txDelta / 3, total: rxDelta + txDelta };
+            deltas[p.id] = { rxBps: rxDelta / 3, txBps: txDelta / 3, total: rxDelta + txDelta, hasPrev: true };
           } else {
-            deltas[p.id] = { rxBps: 0, txBps: 0, total: 0 };
+            deltas[p.id] = { rxBps: 0, txBps: 0, total: 0, hasPrev: false };
           }
         });
         prevBytesRef.current = next;
@@ -101,8 +101,9 @@ function App({ tweaks, setTweaks }) {
           const out = { ...s };
           mapped.forEach(p => {
             const seeded = (serverSparks[p.id] || []).slice(-20);
-            const buf = out[p.id] || (seeded.length ? seeded : new Array(20).fill(0));
-            out[p.id] = [...buf.slice(1), deltas[p.id].total];
+            const seedBuf = seeded.length ? [...new Array(Math.max(0, 20 - seeded.length)).fill(0), ...seeded] : new Array(20).fill(0);
+            const buf = out[p.id] || seedBuf;
+            out[p.id] = deltas[p.id].hasPrev ? [...buf.slice(1), deltas[p.id].total] : buf;
           });
           return out;
         });

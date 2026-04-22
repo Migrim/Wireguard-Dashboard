@@ -400,12 +400,26 @@ def _record_peer_spark_samples(live: List[Dict[str, Any]]) -> Dict[str, List[flo
     return _peer_spark_payload(history)
 
 def _peer_spark_payload(history: Dict[str, List[Dict[str, Any]]] = None) -> Dict[str, List[float]]:
-    history = _prune_peer_spark_history(history if history is not None else _peer_spark_history())
+    now = time.time()
+    history = _prune_peer_spark_history(history if history is not None else _peer_spark_history(), now)
     app.config["_peer_spark_history"] = history
-    return {
-        name: [float(s.get("total", 0) or 0) for s in samples[-20:]]
-        for name, samples in history.items()
-    }
+    bucket_count = 20
+    bucket_seconds = PEER_SPARK_RETENTION_SECONDS / bucket_count
+    start = now - PEER_SPARK_RETENTION_SECONDS
+    out = {}
+    for name, samples in history.items():
+        buckets = [0.0] * bucket_count
+        for sample in samples:
+            try:
+                ts = float(sample.get("ts", 0))
+                total = float(sample.get("total", 0) or 0)
+            except Exception:
+                continue
+            idx = int((ts - start) / bucket_seconds)
+            if 0 <= idx < bucket_count:
+                buckets[idx] += max(0.0, total)
+        out[name] = buckets
+    return out
 
 def _endpoint_ip(endpoint: str) -> str:
     endpoint = str(endpoint or "").strip()
