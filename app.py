@@ -312,14 +312,28 @@ def _endpoint_ip(endpoint: str) -> str:
     except Exception:
         return ""
 
+def _ip_from_allowed_ips(allowed_ips: str) -> str:
+    for piece in re.split(r"[,\s]+", str(allowed_ips or "").strip()):
+        if not piece:
+            continue
+        try:
+            iface = ipaddress.ip_interface(piece)
+            if iface.network.prefixlen == 0:
+                continue
+            return str(iface.ip)
+        except Exception:
+            continue
+    return ""
+
 def _ping_ip(ip: str) -> Any:
     try:
         ipaddress.ip_address(ip)
     except Exception:
         return None
+    ping_bin = next((p for p in ("/bin/ping", "/usr/bin/ping", "ping") if os.path.exists(p) or p == "ping"), "ping")
     try:
         r = subprocess.run(
-            ["/bin/ping", "-c", "1", "-W", "1", ip],
+            [ping_bin, "-c", "1", "-W", "1", ip],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -824,6 +838,7 @@ def api_users_conf(name: str):
 def api_users_diag(name: str):
     issued, live = list_clients()
     peer = next((p for p in live if p.get("name") == name or p.get("cn") == name), None)
+    issued_peer = next((p for p in issued if p.get("name") == name), None)
     if not peer:
         db = _load_peers_db()
         if name not in db:
@@ -838,13 +853,17 @@ def api_users_diag(name: str):
         })
     endpoint = peer.get("remote", "")
     endpoint_ip = _endpoint_ip(endpoint)
-    ping_ms = _ping_ip(endpoint_ip) if endpoint_ip else None
+    ping_ip = _ip_from_allowed_ips(peer.get("allowed_ips", ""))
+    if not ping_ip and issued_peer:
+        ping_ip = _ip_from_allowed_ips(issued_peer.get("ip", ""))
+    ping_ms = _ping_ip(ping_ip) if ping_ip else None
     location = _lookup_location(endpoint_ip) if endpoint_ip else {"label": "—"}
     return jsonify({
         "ok": True,
         "name": name,
         "endpoint": endpoint or "—",
         "endpoint_ip": endpoint_ip,
+        "ping_ip": ping_ip,
         "ping_ms": ping_ms,
         "location": location,
     })

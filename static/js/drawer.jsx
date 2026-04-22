@@ -9,7 +9,7 @@ function PeerDrawer({ peer, onClose, sparklines, throughputBuffers, onRevoke }) 
   const [copied, setCopied] = _useState('');
   const [downloading, setDownloading] = _useState(false);
   const [revoking, setRevoking] = _useState(false);
-  const [diag, setDiag] = _useState({ loading: true, pingMs: null, location: null, endpointIp: '' });
+  const [diag, setDiag] = _useState({ loading: true, pingMs: null, location: null, endpointIp: '', pingIp: '' });
 
   _useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -29,12 +29,13 @@ function PeerDrawer({ peer, onClose, sparklines, throughputBuffers, onRevoke }) 
           pingMs: r.ping_ms,
           location: r.location || null,
           endpointIp: r.endpoint_ip || '',
+          pingIp: r.ping_ip || '',
         });
       } catch (_) {
         if (!cancelled) setDiag(d => ({ ...d, loading: false, pingMs: null }));
       }
     };
-    setDiag({ loading: true, pingMs: null, location: null, endpointIp: '' });
+    setDiag({ loading: true, pingMs: null, location: null, endpointIp: '', pingIp: '' });
     fetchDiag();
     const id = setInterval(fetchDiag, 5000);
     return () => { cancelled = true; clearInterval(id); };
@@ -151,10 +152,6 @@ function PeerDrawer({ peer, onClose, sparklines, throughputBuffers, onRevoke }) 
                 <div className="stat-val">{pingLabel}</div>
               </div>
               <div className="stat-cell">
-                <div className="stat-label">LOCATION</div>
-                <div className="stat-val stat-val-small">{locationLabel}</div>
-              </div>
-              <div className="stat-cell">
                 <div className="stat-label">LAST HANDSHAKE</div>
                 <div className="stat-val">{window.WG.formatRelTime(peer.lastHs)}</div>
               </div>
@@ -170,6 +167,10 @@ function PeerDrawer({ peer, onClose, sparklines, throughputBuffers, onRevoke }) 
               <dd className="mono">{peer.endpoint}</dd>
               <dt>Endpoint IP</dt>
               <dd className="mono">{diag.endpointIp || '—'}</dd>
+              <dt>Location</dt>
+              <dd>{locationLabel}</dd>
+              <dt>Ping target</dt>
+              <dd className="mono">{diag.pingIp || peer.allowedIps || peer.addr || '—'}</dd>
               <dt>Allowed IPs</dt>
               <dd className="mono">{peer.allowedIps || peer.addr}</dd>
               {peer.pubKey && (
