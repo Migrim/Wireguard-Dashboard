@@ -29,6 +29,7 @@ PEERS_DB=os.path.join(WG_DIR,"peers.json")
 TRAFFIC_HISTORY=os.environ.get("TRAFFIC_HISTORY", os.path.join(WG_DIR, "traffic_history.json"))
 TRAFFIC_RETENTION_SECONDS=24*60*60
 TRAFFIC_FLUSH_SECONDS=10
+GEO_CACHE_SECONDS=6*60*60
 SUDO_BIN=os.environ.get("SUDO_BIN","/usr/bin/sudo")
 BASH_BIN=os.environ.get("BASH_BIN","/bin/bash")
 
@@ -41,6 +42,7 @@ def _run(cmd: str) -> Tuple[str,int]:
     return r.stdout.strip(), r.returncode
 
 _last_run = {"cmd":"", "rc":None, "out":""}
+_geo_cache: Dict[str, Dict[str, Any]] = {}
 
 # Helper function to sudo cat a file, checking common locations for cat
 def _sudo_cat(path: str) -> Tuple[str, int]:
@@ -292,6 +294,78 @@ def _downsample_traffic(samples: List[Dict[str, Any]], max_points: int) -> List[
             "tx": bucket[-1].get("tx", 0),
         })
     return out
+
+def _endpoint_ip(endpoint: str) -> str:
+    endpoint = str(endpoint or "").strip()
+    if not endpoint or endpoint == "(none)" or endpoint == "—":
+        return ""
+    host = endpoint
+    if endpoint.startswith("["):
+        end = endpoint.find("]")
+        if end > 0:
+            host = endpoint[1:end]
+    elif endpoint.count(":") == 1:
+        host = endpoint.rsplit(":", 1)[0]
+    try:
+        ipaddress.ip_address(host)
+        return host
+    except Exception:
+        return ""
+
+def _ping_ip(ip: str) -> Any:
+    try:
+        ipaddress.ip_address(ip)
+    except Exception:
+        return None
+    try:
+        r = subprocess.run(
+            ["/bin/ping", "-c", "1", "-W", "1", ip],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=2,
+        )
+    except Exception:
+        return None
+    if r.returncode != 0:
+        return None
+    m = re.search(r"time[=<]([\d.]+)\s*ms", r.stdout)
+    if not m:
+        return None
+    return round(float(m.group(1)), 1)
+
+def _lookup_location(ip: str) -> Dict[str, Any]:
+    try:
+        addr = ipaddress.ip_address(ip)
+    except Exception:
+        return {"label": "—"}
+    if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_multicast or addr.is_reserved:
+        return {"ip": ip, "label": "Private network"}
+    cached = _geo_cache.get(ip)
+    now = time.time()
+    if cached and now - cached.get("ts", 0) < GEO_CACHE_SECONDS:
+        return cached.get("data", {"ip": ip, "label": "—"})
+    data = {"ip": ip, "label": "—"}
+    try:
+        url = f"https://ipwho.is/{ip}"
+        with urllib.request.urlopen(url, timeout=3) as res:
+            raw = json.loads(res.read().decode())
+        if raw.get("success"):
+            city = str(raw.get("city") or "").strip()
+            region = str(raw.get("region") or "").strip()
+            country = str(raw.get("country") or "").strip()
+            parts = [p for p in (city, region, country) if p]
+            data = {
+                "ip": ip,
+                "city": city,
+                "region": region,
+                "country": country,
+                "label": ", ".join(parts) if parts else country or ip,
+            }
+    except Exception:
+        pass
+    _geo_cache[ip] = {"ts": now, "data": data}
+    return data
 
 def _server_pubkey() -> str:
     if os.path.exists("/usr/bin/wg"):
@@ -745,6 +819,35 @@ def api_users_conf(name: str):
     except Exception as e:
         app.logger.exception("conf build failed name=%s", name)
         return jsonify({"ok": False, "error": "conf_build_failed", "hint": str(e)}), 500
+
+@app.route("/api/users/<name>/diag")
+def api_users_diag(name: str):
+    issued, live = list_clients()
+    peer = next((p for p in live if p.get("name") == name or p.get("cn") == name), None)
+    if not peer:
+        db = _load_peers_db()
+        if name not in db:
+            abort(404)
+        return jsonify({
+            "ok": True,
+            "name": name,
+            "endpoint": "—",
+            "endpoint_ip": "",
+            "ping_ms": None,
+            "location": {"label": "—"},
+        })
+    endpoint = peer.get("remote", "")
+    endpoint_ip = _endpoint_ip(endpoint)
+    ping_ms = _ping_ip(endpoint_ip) if endpoint_ip else None
+    location = _lookup_location(endpoint_ip) if endpoint_ip else {"label": "—"}
+    return jsonify({
+        "ok": True,
+        "name": name,
+        "endpoint": endpoint or "—",
+        "endpoint_ip": endpoint_ip,
+        "ping_ms": ping_ms,
+        "location": location,
+    })
 
 @app.route("/api/diag/peers")
 def api_diag_peers():

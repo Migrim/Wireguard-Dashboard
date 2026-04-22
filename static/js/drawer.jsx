@@ -9,6 +9,7 @@ function PeerDrawer({ peer, onClose, sparklines, throughputBuffers, onRevoke }) 
   const [copied, setCopied] = _useState('');
   const [downloading, setDownloading] = _useState(false);
   const [revoking, setRevoking] = _useState(false);
+  const [diag, setDiag] = _useState({ loading: true, pingMs: null, location: null, endpointIp: '' });
 
   _useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -16,10 +17,35 @@ function PeerDrawer({ peer, onClose, sparklines, throughputBuffers, onRevoke }) 
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  _useEffect(() => {
+    if (!peer) return;
+    let cancelled = false;
+    const fetchDiag = async () => {
+      try {
+        const r = await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/diag');
+        if (cancelled) return;
+        setDiag({
+          loading: false,
+          pingMs: r.ping_ms,
+          location: r.location || null,
+          endpointIp: r.endpoint_ip || '',
+        });
+      } catch (_) {
+        if (!cancelled) setDiag(d => ({ ...d, loading: false, pingMs: null }));
+      }
+    };
+    setDiag({ loading: true, pingMs: null, location: null, endpointIp: '' });
+    fetchDiag();
+    const id = setInterval(fetchDiag, 5000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [peer && peer.name]);
+
   if (!peer) return null;
 
   const spark = sparklines[peer.id] || [];
   const thr = throughputBuffers[peer.id] || { rx: [], tx: [] };
+  const pingLabel = diag.loading ? '…' : (diag.pingMs != null ? `${diag.pingMs} ms` : '—');
+  const locationLabel = (diag.location && diag.location.label) || peer.country || '—';
 
   const copy = (val, key) => {
     navigator.clipboard?.writeText(val);
@@ -122,7 +148,11 @@ function PeerDrawer({ peer, onClose, sparklines, throughputBuffers, onRevoke }) 
               </div>
               <div className="stat-cell">
                 <div className="stat-label">PING</div>
-                <div className="stat-val">{peer.pingMs != null ? `${peer.pingMs} ms` : '—'}</div>
+                <div className="stat-val">{pingLabel}</div>
+              </div>
+              <div className="stat-cell">
+                <div className="stat-label">LOCATION</div>
+                <div className="stat-val stat-val-small">{locationLabel}</div>
               </div>
               <div className="stat-cell">
                 <div className="stat-label">LAST HANDSHAKE</div>
@@ -138,6 +168,8 @@ function PeerDrawer({ peer, onClose, sparklines, throughputBuffers, onRevoke }) 
             <dl className="kv">
               <dt>Endpoint</dt>
               <dd className="mono">{peer.endpoint}</dd>
+              <dt>Endpoint IP</dt>
+              <dd className="mono">{diag.endpointIp || '—'}</dd>
               <dt>Allowed IPs</dt>
               <dd className="mono">{peer.allowedIps || peer.addr}</dd>
               {peer.pubKey && (
