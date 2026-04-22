@@ -307,13 +307,17 @@ function DataBudgetDrawer({ total, budget, setBudget, alerts, setAlerts, resetTi
     try {
       const r = await window.WG.apiCall('/api/data-budget/export', { method: 'POST', body: JSON.stringify({}) });
       const blob = new Blob([r.csv || ''], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
+      a.href = url;
       a.download = r.filename || 'data-budget.csv';
+      a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
-      a.remove();
-      URL.revokeObjectURL(a.href);
+      setTimeout(() => {
+        a.remove();
+        URL.revokeObjectURL(url);
+      }, 0);
       setMsg('Exported CSV');
       setTimeout(() => setMsg(''), 2000);
     } catch (e) {
@@ -438,7 +442,7 @@ function DataBudgetDrawer({ total, budget, setBudget, alerts, setAlerts, resetTi
 
           <section className="drawer-section">
             <div className="action-row">
-              <button className="btn" onClick={exportCsv} disabled={saving}>
+              <button className="btn btn-primary" onClick={exportCsv} disabled={saving}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
                 {saving ? 'Working…' : 'Export CSV'}
               </button>
