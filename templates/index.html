@@ -560,6 +560,7 @@ body {
   gap: 8px;
   padding: 1px 0;
   animation: logFadeIn 0.4s ease;
+  min-width: 0;
 }
 @keyframes logFadeIn {
   from { opacity: 0; transform: translateX(-4px); }
@@ -579,7 +580,13 @@ body {
 .log-info .log-level { background: color-mix(in oklab, var(--accent-2) 12%, transparent); color: var(--accent-2); }
 .log-warn .log-level { background: var(--warn-soft); color: var(--warn); }
 .log-error .log-level { background: var(--danger-soft); color: var(--danger); }
-.log-msg { color: var(--ink-2); }
+.log-msg {
+  color: var(--ink-2);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .log-error .log-msg { color: var(--ink); }
 
 /* PEERS TABLE */

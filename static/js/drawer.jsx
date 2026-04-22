@@ -410,11 +410,10 @@ function DataBudgetDrawer({ total, budget, setBudget, alerts, setAlerts, resetTi
 // ============================================================
 // LogsDrawer — full log history, own polling, verbose, retention, download
 // ============================================================
-function LogsDrawer({ alerts, onClose }) {
+function LogsDrawer({ alerts, onClose, verbose, setVerbose }) {
   const [levelFilter, setLevelFilter] = _useState('all');
   const [search, setSearch] = _useState('');
   const [autoScroll, setAutoScroll] = _useState(true);
-  const [verbose, setVerbose] = _useState(false);
   const [retention, setRetention] = _useState('7d');
   const [retentionSaving, setRetentionSaving] = _useState(false);
   const [retentionMsg, setRetentionMsg] = _useState('');

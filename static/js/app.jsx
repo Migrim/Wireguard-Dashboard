@@ -1,6 +1,7 @@
 // Main WG-Quick dashboard — real API integration
 
 const { useState: uS, useEffect: uE, useRef: uR, useMemo: uM, useCallback: uC } = React;
+const LOG_VERBOSE_KEY = 'WG_LOG_VERBOSE';
 
 function App({ tweaks, setTweaks }) {
   const [peers, setPeers] = uS([]);
@@ -15,6 +16,7 @@ function App({ tweaks, setTweaks }) {
   const [filter, setFilter] = uS('');
   const [statusFilter, setStatusFilter] = uS('all');
   const [logs, setLogs] = uS(() => window.WG.makeInitialLogs());
+  const [logsVerbose, setLogsVerbose] = uS(() => localStorage.getItem(LOG_VERBOSE_KEY) === '1');
   const [serviceActive, setServiceActive] = uS(false);
   const [serviceEnabled, setServiceEnabled] = uS(false);
   const [unit, setUnit] = uS('wg-quick@wg0');
@@ -31,6 +33,10 @@ function App({ tweaks, setTweaks }) {
 
   // Previous cumulative bytes per peer — used to compute sparkline deltas
   const prevBytesRef = uR({});
+
+  uE(() => {
+    localStorage.setItem(LOG_VERBOSE_KEY, logsVerbose ? '1' : '0');
+  }, [logsVerbose]);
 
   // Initialize per-peer drawer buffers for newly seen peers (40 pts × 3s = 2-min window)
   const ensurePeerState = (mapped) => {
@@ -392,7 +398,7 @@ function App({ tweaks, setTweaks }) {
 
       {tweaks._tweaksOpen && <TweaksPanel tweaks={tweaks} setTweaks={setTweaks} />}
       {portCheckOpen && <PortCheckDrawer peers={peers} onClose={() => setPortCheckOpen(false)} />}
-      {logsDrawerOpen && <LogsDrawer alerts={alerts} onClose={() => setLogsDrawerOpen(false)} />}
+      {logsDrawerOpen && <LogsDrawer alerts={alerts} onClose={() => setLogsDrawerOpen(false)} verbose={logsVerbose} setVerbose={setLogsVerbose} />}
       {addOpen && (
         <AddPeerModal
           onClose={() => setAddOpen(false)}
