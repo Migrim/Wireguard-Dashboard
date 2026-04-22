@@ -120,7 +120,13 @@ function App({ tweaks, setTweaks }) {
               rx: seededRx.length ? [...new Array(Math.max(0, 40 - seededRx.length)).fill(0), ...seededRx] : new Array(40).fill(0),
               tx: seededTx.length ? [...new Array(Math.max(0, 40 - seededTx.length)).fill(0), ...seededTx] : new Array(40).fill(0),
             };
-            const buf = out[p.id] || seedBuf;
+            const existing = out[p.id];
+            const existingHasData = existing && (
+              (existing.rx || []).some(v => v > 0) ||
+              (existing.tx || []).some(v => v > 0)
+            );
+            const seedHasData = seedBuf.rx.some(v => v > 0) || seedBuf.tx.some(v => v > 0);
+            const buf = existingHasData || !seedHasData ? (existing || seedBuf) : seedBuf;
             out[p.id] = deltas[p.id].hasPrev ? {
               rx: [...buf.rx.slice(1), deltas[p.id].rxBps],
               tx: [...buf.tx.slice(1), deltas[p.id].txBps],
