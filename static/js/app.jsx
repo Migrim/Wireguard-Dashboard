@@ -20,9 +20,8 @@ function App({ tweaks, setTweaks }) {
   const [unit, setUnit] = uS('wg-quick@wg0');
   const [startedAt] = uS(() => Date.now() - 60_000);
 
-  // Throughput buffers — primed with zeros, filled by real API
-  const [thrIn, setThrIn] = uS(() => new Array(120).fill(0));
-  const [thrOut, setThrOut] = uS(() => new Array(120).fill(0));
+  const [trafficRange, setTrafficRange] = uS('1m');
+  const [trafficHistory, setTrafficHistory] = uS([]);
 
   // Per-peer sparklines (values = byte delta per poll cycle)
   const [sparks, setSparks] = uS({});
@@ -112,23 +111,49 @@ function App({ tweaks, setTweaks }) {
     return () => { cancelled = true; clearInterval(id); };
   }, []);
 
-  // Poll /api/traffic every 1s for the hero chart
+  uE(() => {
+    let cancelled = false;
+    const fetchTrafficHistory = async () => {
+      try {
+        const h = await window.WG.apiCall(`/api/traffic/history?range=${trafficRange}&max_points=1800`);
+        if (cancelled) return;
+        setTrafficHistory((h.samples || []).map(s => ({
+          ts: Number(s.ts) * 1000,
+          rx: Math.max(0, Number(s.rx_bps) || 0),
+          tx: Math.max(0, Number(s.tx_bps) || 0),
+        })));
+      } catch (_) {}
+    };
+    fetchTrafficHistory();
+    return () => { cancelled = true; };
+  }, [trafficRange]);
+
+  // Poll /api/traffic every 1s; the server keeps the rolling 24h history.
   uE(() => {
     let cancelled = false;
     const fetchTraffic = async () => {
       try {
         const t = await window.WG.apiCall('/api/traffic');
         if (cancelled) return;
-        const rx = Math.max(0, t.rx_bps || 0);
-        const tx = Math.max(0, t.tx_bps || 0);
-        setThrIn(prev => { const n = prev.slice(1); n.push(rx); return n; });
-        setThrOut(prev => { const n = prev.slice(1); n.push(tx); return n; });
+        const sample = {
+          ts: Number(t.ts) * 1000,
+          rx: Math.max(0, Number(t.rx_bps) || 0),
+          tx: Math.max(0, Number(t.tx_bps) || 0),
+        };
+        setTrafficHistory(prev => {
+          const rangeMs = window.WG.TRAFFIC_RANGES[trafficRange] || window.WG.TRAFFIC_RANGES['1m'];
+          const cutoff = Date.now() - rangeMs;
+          const next = prev.length && sample.ts <= prev[prev.length - 1].ts
+            ? [...prev.slice(0, -1), sample]
+            : [...prev, sample];
+          return next.filter(s => s.ts >= cutoff);
+        });
       } catch (_) {}
     };
     fetchTraffic();
     const id = setInterval(fetchTraffic, 1000);
     return () => { cancelled = true; clearInterval(id); };
-  }, []);
+  }, [trafficRange]);
 
   // Poll /api/logs every 8s
   uE(() => {
@@ -158,9 +183,30 @@ function App({ tweaks, setTweaks }) {
     } catch (_) {}
   };
 
+  const chartTraffic = uM(() => {
+    const rangeMs = window.WG.TRAFFIC_RANGES[trafficRange] || window.WG.TRAFFIC_RANGES['1m'];
+    const cutoff = Date.now() - rangeMs;
+    const samples = trafficHistory.filter(s => s.ts >= cutoff);
+    const maxPoints = 900;
+    const bucketSize = Math.max(1, Math.ceil(samples.length / maxPoints));
+    const compact = [];
+    for (let i = 0; i < samples.length; i += bucketSize) {
+      const bucket = samples.slice(i, i + bucketSize);
+      const rx = bucket.reduce((sum, s) => sum + s.rx, 0) / bucket.length;
+      const tx = bucket.reduce((sum, s) => sum + s.tx, 0) / bucket.length;
+      compact.push({ rx, tx });
+    }
+    while (compact.length < 2) compact.unshift({ rx: 0, tx: 0 });
+    return {
+      rx: compact.map(s => s.rx),
+      tx: compact.map(s => s.tx),
+    };
+  }, [trafficHistory, trafficRange]);
+
   const connectedCount = peers.filter(p => p.status === 'connected').length;
-  const currentRx = thrIn[thrIn.length - 1] || 0;
-  const currentTx = thrOut[thrOut.length - 1] || 0;
+  const latestTraffic = trafficHistory[trafficHistory.length - 1] || { rx: 0, tx: 0 };
+  const currentRx = latestTraffic.rx || 0;
+  const currentTx = latestTraffic.tx || 0;
   const totalToday = peers.reduce((s, p) => s + p.bytesIn + p.bytesOut, 0);
   const offlineLong = peers.filter(p => p.status === 'offline' && p.lastHs && (Date.now() - p.lastHs) > 24 * 3600_000);
   const neverConnected = peers.filter(p => p.status === 'offline' && !p.lastHs);
@@ -238,7 +284,7 @@ function App({ tweaks, setTweaks }) {
           totalCount={peers.length}
           doService={doService}
         />
-        <KPIThroughput currentRx={currentRx} currentTx={currentTx} dataIn={thrIn} dataOut={thrOut} />
+        <KPIThroughput currentRx={currentRx} currentTx={currentTx} dataIn={chartTraffic.rx} dataOut={chartTraffic.tx} />
         <KPIDataToday total={totalToday} budget={dataBudget} onClick={() => setDataDrawerOpen(true)} />
         <KPIActiveSessions connectedCount={connectedCount} totalCount={peers.length} sparks={sparks} />
       </section>
@@ -268,12 +314,12 @@ function App({ tweaks, setTweaks }) {
             <div className="hero-head-right">
               <div className="range-pills">
                 {['1m', '5m', '1h', '24h'].map(r => (
-                  <button key={r} className={`range-pill ${r === '1m' ? 'active' : ''}`}>{r}</button>
+                  <button key={r} className={`range-pill ${trafficRange === r ? 'active' : ''}`} onClick={() => setTrafficRange(r)}>{r}</button>
                 ))}
               </div>
             </div>
           </div>
-          <ThroughputChart dataIn={thrIn} dataOut={thrOut} width={900} height={240} />
+          <ThroughputChart dataIn={chartTraffic.rx} dataOut={chartTraffic.tx} width={900} height={240} range={trafficRange} />
         </div>
 
         <LogsPanel logs={logs} alerts={alerts} onExpand={() => setLogsDrawerOpen(true)} />

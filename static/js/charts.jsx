@@ -5,25 +5,25 @@ const { useState, useEffect, useRef, useMemo } = React;
 // ============================================================
 // ThroughputChart — hero live chart, area + line, scrolls left
 // ============================================================
-function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 'var(--accent)', accent2 = 'var(--accent-2)' }) {
-  const n = dataIn.length;
+function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 'var(--accent)', accent2 = 'var(--accent-2)', range = '2m' }) {
+  const n = Math.max(dataIn.length, dataOut.length);
   const pad = { l: 52, r: 16, t: 18, b: 28 };
   const w = width - pad.l - pad.r;
   const h = height - pad.t - pad.b;
 
   const maxVal = useMemo(() => {
     let m = 0;
-    for (let i = 0; i < n; i++) m = Math.max(m, dataIn[i], dataOut[i]);
+    for (let i = 0; i < n; i++) m = Math.max(m, dataIn[i] || 0, dataOut[i] || 0);
     return Math.max(m * 1.15, 100_000);
-  }, [dataIn, dataOut]);
+  }, [dataIn, dataOut, n]);
 
-  const xAt = (i) => pad.l + (i / (n - 1)) * w;
+  const xAt = (i) => pad.l + (n <= 1 ? w : (i / (n - 1)) * w);
   const yAt = (v) => pad.t + h - (v / maxVal) * h;
 
   const pathFor = (data) => {
     let d = '';
     for (let i = 0; i < n; i++) {
-      d += (i === 0 ? 'M' : 'L') + xAt(i).toFixed(1) + ',' + yAt(data[i]).toFixed(1) + ' ';
+      d += (i === 0 ? 'M' : 'L') + xAt(i).toFixed(1) + ',' + yAt(data[i] || 0).toFixed(1) + ' ';
     }
     return d;
   };
@@ -34,8 +34,16 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
     return { v, y: yAt(v), label: window.WG.formatRate(v) };
   });
 
-  const lastIn = dataIn[n - 1];
-  const lastOut = dataOut[n - 1];
+  const lastIn = dataIn[n - 1] || 0;
+  const lastOut = dataOut[n - 1] || 0;
+  const rangeLabels = {
+    '1m': ['-1m', '-30s', 'now'],
+    '5m': ['-5m', '-2.5m', 'now'],
+    '1h': ['-1h', '-30m', 'now'],
+    '24h': ['-24h', '-12h', 'now'],
+    '2m': ['-2m', '-1m', 'now'],
+  };
+  const labels = rangeLabels[range] || rangeLabels['2m'];
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ width: '100%', height, display: 'block' }}>
@@ -78,9 +86,9 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
       <circle cx={xAt(n - 1)} cy={yAt(lastIn)} r="2.5" fill={accent} />
       <circle cx={xAt(n - 1)} cy={yAt(lastOut)} r="2" fill={accent2} />
 
-      <text x={pad.l} y={height - 8} fontSize="10" fill="var(--muted)" fontFamily="var(--mono)">-2m</text>
-      <text x={pad.l + w / 2} y={height - 8} fontSize="10" fill="var(--muted)" fontFamily="var(--mono)" textAnchor="middle">-1m</text>
-      <text x={pad.l + w} y={height - 8} fontSize="10" fill="var(--muted)" fontFamily="var(--mono)" textAnchor="end">now</text>
+      <text x={pad.l} y={height - 8} fontSize="10" fill="var(--muted)" fontFamily="var(--mono)">{labels[0]}</text>
+      <text x={pad.l + w / 2} y={height - 8} fontSize="10" fill="var(--muted)" fontFamily="var(--mono)" textAnchor="middle">{labels[1]}</text>
+      <text x={pad.l + w} y={height - 8} fontSize="10" fill="var(--muted)" fontFamily="var(--mono)" textAnchor="end">{labels[2]}</text>
     </svg>
   );
 }

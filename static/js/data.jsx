@@ -2,6 +2,7 @@
 
 const BASE = document.body.dataset.base || '';
 const HS_TIMEOUT = 130; // seconds without handshake = offline (all client confs have PersistentKeepalive=25)
+const TRAFFIC_RANGES = { '1m': 60_000, '5m': 5 * 60_000, '1h': 60 * 60_000, '24h': 24 * 60 * 60_000 };
 
 async function apiCall(path, opt = {}) {
   const url = path.startsWith('http') ? path : BASE + path;
@@ -154,6 +155,7 @@ function makeInitialLogs() {
 
 window.WG = {
   apiCall, mapApiPeers, parseLogLines, HS_TIMEOUT,
+  TRAFFIC_RANGES,
   initThroughput, initSparkline, seededNoise,
   formatBytes, formatRate, formatRelTime, formatAbsTime,
   LOG_TEMPLATES, makeInitialLogs,

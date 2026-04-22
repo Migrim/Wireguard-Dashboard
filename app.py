@@ -26,6 +26,9 @@ def _detect_public_ip() -> str:
 PUBLIC_IP = _detect_public_ip()
 
 PEERS_DB=os.path.join(WG_DIR,"peers.json")
+TRAFFIC_HISTORY=os.environ.get("TRAFFIC_HISTORY", os.path.join(WG_DIR, "traffic_history.json"))
+TRAFFIC_RETENTION_SECONDS=24*60*60
+TRAFFIC_FLUSH_SECONDS=10
 SUDO_BIN=os.environ.get("SUDO_BIN","/usr/bin/sudo")
 BASH_BIN=os.environ.get("BASH_BIN","/bin/bash")
 
@@ -182,6 +185,113 @@ def read_bytes() -> Tuple[str,int,int]:
         return iface,r,t
     except:
         return iface,0,0
+
+def _valid_traffic_sample(x: Any) -> bool:
+    return (
+        isinstance(x, dict)
+        and isinstance(x.get("ts"), (int, float))
+        and isinstance(x.get("rx_bps"), (int, float))
+        and isinstance(x.get("tx_bps"), (int, float))
+    )
+
+def _load_traffic_history() -> List[Dict[str, Any]]:
+    content = ""
+    try:
+        with open(TRAFFIC_HISTORY, "r", encoding="utf-8") as f:
+            content = f.read()
+    except FileNotFoundError:
+        return []
+    except PermissionError:
+        out, rc = _sudo_cat(TRAFFIC_HISTORY)
+        if rc != 0:
+            return []
+        content = out
+    except Exception:
+        return []
+    try:
+        raw = json.loads(content)
+    except Exception:
+        return []
+    if not isinstance(raw, list):
+        return []
+    cutoff = time.time() - TRAFFIC_RETENTION_SECONDS
+    history = []
+    for sample in raw:
+        if not _valid_traffic_sample(sample):
+            continue
+        ts = float(sample["ts"])
+        if ts < cutoff:
+            continue
+        history.append({
+            "ts": ts,
+            "rx_bps": max(0.0, float(sample.get("rx_bps", 0))),
+            "tx_bps": max(0.0, float(sample.get("tx_bps", 0))),
+            "rx": int(sample.get("rx", 0) or 0),
+            "tx": int(sample.get("tx", 0) or 0),
+        })
+    history.sort(key=lambda s: s["ts"])
+    return history
+
+def _save_traffic_history(history: List[Dict[str, Any]]) -> None:
+    import tempfile
+    fd,tmp_path = tempfile.mkstemp(prefix="traffic.", suffix=".json.tmp", dir="/tmp")
+    try:
+        with os.fdopen(fd,"w",encoding="utf-8") as f:
+            json.dump(history, f, separators=(",", ":"))
+        try:
+            os.makedirs(os.path.dirname(TRAFFIC_HISTORY), exist_ok=True)
+            os.replace(tmp_path, TRAFFIC_HISTORY)
+            return
+        except Exception:
+            pass
+        _sudo(["/usr/bin/install","-m","640","-o","root","-g","www-data",tmp_path,TRAFFIC_HISTORY])
+    finally:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except:
+            pass
+
+def _traffic_history() -> List[Dict[str, Any]]:
+    if "_traffic_history" not in app.config:
+        app.config["_traffic_history"] = _load_traffic_history()
+        app.config["_traffic_last_flush"] = 0.0
+    return app.config["_traffic_history"]
+
+def _prune_traffic_history(history: List[Dict[str, Any]], now: float = None) -> List[Dict[str, Any]]:
+    cutoff = (now if now is not None else time.time()) - TRAFFIC_RETENTION_SECONDS
+    return [s for s in history if s.get("ts", 0) >= cutoff]
+
+def _record_traffic_sample(sample: Dict[str, Any]) -> None:
+    history = _traffic_history()
+    if history and sample["ts"] <= history[-1]["ts"]:
+        history[-1] = sample
+    else:
+        history.append(sample)
+    history = _prune_traffic_history(history, sample["ts"])
+    app.config["_traffic_history"] = history
+    last_flush = float(app.config.get("_traffic_last_flush", 0) or 0)
+    if sample["ts"] - last_flush >= TRAFFIC_FLUSH_SECONDS:
+        _save_traffic_history(history)
+        app.config["_traffic_last_flush"] = sample["ts"]
+
+def _downsample_traffic(samples: List[Dict[str, Any]], max_points: int) -> List[Dict[str, Any]]:
+    if max_points <= 0 or len(samples) <= max_points:
+        return samples
+    bucket_size = max(1, int((len(samples) + max_points - 1) / max_points))
+    out = []
+    for i in range(0, len(samples), bucket_size):
+        bucket = samples[i:i + bucket_size]
+        if not bucket:
+            continue
+        out.append({
+            "ts": bucket[-1]["ts"],
+            "rx_bps": sum(s["rx_bps"] for s in bucket) / len(bucket),
+            "tx_bps": sum(s["tx_bps"] for s in bucket) / len(bucket),
+            "rx": bucket[-1].get("rx", 0),
+            "tx": bucket[-1].get("tx", 0),
+        })
+    return out
 
 def _server_pubkey() -> str:
     if os.path.exists("/usr/bin/wg"):
@@ -706,13 +816,40 @@ def api_traffic():
     global _last_run
     if "_snap" not in app.config:
         app.config["_snap"]={"ts":now,"rx":rx,"tx":tx}
-        return jsonify({"iface":iface,"ts":int(now),"rx_bps":0,"tx_bps":0,"rx":rx,"tx":tx})
+        sample={"ts":now,"rx_bps":0.0,"tx_bps":0.0,"rx":rx,"tx":tx}
+        _record_traffic_sample(sample)
+        return jsonify({"iface":iface,**sample})
     snap=app.config["_snap"]
     dt=max(1e-6,now-snap["ts"])
     rx_bps=max(0,(rx-snap["rx"])/dt)
     tx_bps=max(0,(tx-snap["tx"])/dt)
     app.config["_snap"]={"ts":now,"rx":rx,"tx":tx}
-    return jsonify({"iface":iface,"ts":int(now),"rx_bps":rx_bps,"tx_bps":tx_bps,"rx":rx,"tx":tx})
+    sample={"ts":now,"rx_bps":rx_bps,"tx_bps":tx_bps,"rx":rx,"tx":tx}
+    _record_traffic_sample(sample)
+    return jsonify({"iface":iface,**sample})
+
+@app.route("/api/traffic/history")
+def api_traffic_history():
+    range_arg=str(request.args.get("range","1m")).lower()
+    ranges={"1m":60,"5m":5*60,"1h":60*60,"24h":24*60*60}
+    seconds=ranges.get(range_arg, 60)
+    try:
+        max_points=int(request.args.get("max_points","1200"))
+    except (TypeError, ValueError):
+        max_points=1200
+    max_points=max(2, min(5000, max_points))
+    now=time.time()
+    history=_prune_traffic_history(_traffic_history(), now)
+    app.config["_traffic_history"]=history
+    cutoff=now-seconds
+    samples=[s for s in history if s.get("ts", 0) >= cutoff]
+    samples=_downsample_traffic(samples, max_points)
+    return jsonify({
+        "range": range_arg if range_arg in ranges else "1m",
+        "seconds": seconds,
+        "retention_seconds": TRAFFIC_RETENTION_SECONDS,
+        "samples": samples,
+    })
 
 @app.route("/api/ports",methods=["GET","POST"])
 def api_ports():
