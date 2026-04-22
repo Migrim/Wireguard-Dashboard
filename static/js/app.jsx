@@ -33,22 +33,20 @@ function App({ tweaks, setTweaks }) {
   // Previous cumulative bytes per peer — used to compute sparkline deltas
   const prevBytesRef = uR({});
 
-  // Initialize per-peer drawer buffers for newly seen peers
+  // Initialize per-peer drawer buffers for newly seen peers (40 pts × 3s = 2-min window)
   const ensurePeerState = (mapped) => {
     setPeerThr(prev => {
       const next = { ...prev };
-      mapped.forEach((p, i) => {
+      mapped.forEach(p => {
         if (!next[p.id]) {
-          next[p.id] = p.status === 'connected'
-            ? { rx: window.WG.initThroughput(i * 17 + 2, 150_000), tx: window.WG.initThroughput(i * 19 + 5, 80_000) }
-            : { rx: [], tx: [] };
+          next[p.id] = { rx: new Array(40).fill(0), tx: new Array(40).fill(0) };
         }
       });
       return next;
     });
   };
 
-  // Poll /api/status every 3s — also drives sparklines from real byte deltas
+  // Poll /api/status every 3s — drives sparklines + drawer charts from real byte deltas
   uE(() => {
     let cancelled = false;
     const fetchStatus = async () => {
@@ -68,26 +66,45 @@ function App({ tweaks, setTweaks }) {
         });
         ensurePeerState(mapped);
 
-        // Compute byte deltas and push into sparklines
+        // Pre-compute per-peer deltas before touching state
         const prev = prevBytesRef.current;
         const next = {};
-        mapped.forEach(p => { next[p.id] = p.bytesIn + p.bytesOut; });
+        const deltas = {};  // {id: {rxBps, txBps, total}}
+        mapped.forEach(p => {
+          next[p.id] = { rx: p.bytesIn, tx: p.bytesOut };
+          const pr = prev[p.id];
+          if (p.status === 'connected' && pr !== undefined) {
+            const rxDelta = Math.max(0, p.bytesIn  - pr.rx);
+            const txDelta = Math.max(0, p.bytesOut - pr.tx);
+            deltas[p.id] = { rxBps: rxDelta / 3, txBps: txDelta / 3, total: rxDelta + txDelta };
+          } else {
+            deltas[p.id] = { rxBps: 0, txBps: 0, total: 0 };
+          }
+        });
+        prevBytesRef.current = next;
+
+        // Sparklines (combined bytes per poll)
         setSparks(s => {
           const out = { ...s };
           mapped.forEach(p => {
             const buf = out[p.id] || new Array(28).fill(0);
-            const arr = buf.slice(1);
-            if (p.status === 'connected') {
-              const prevTotal = prev[p.id];
-              arr.push(prevTotal !== undefined ? Math.max(0, next[p.id] - prevTotal) : 0);
-            } else {
-              arr.push(0);
-            }
-            out[p.id] = arr;
+            out[p.id] = [...buf.slice(1), deltas[p.id].total];
           });
           return out;
         });
-        prevBytesRef.current = next;
+
+        // Drawer throughput charts (separate rx / tx bytes/s)
+        setPeerThr(pt => {
+          const out = { ...pt };
+          mapped.forEach(p => {
+            const buf = out[p.id] || { rx: new Array(40).fill(0), tx: new Array(40).fill(0) };
+            out[p.id] = {
+              rx: [...buf.rx.slice(1), deltas[p.id].rxBps],
+              tx: [...buf.tx.slice(1), deltas[p.id].txBps],
+            };
+          });
+          return out;
+        });
       } catch (_) {}
     };
     fetchStatus();
@@ -130,31 +147,6 @@ function App({ tweaks, setTweaks }) {
     return () => { cancelled = true; clearInterval(id); };
   }, []);
 
-  // Animation loop — peer drawer throughput charts only (sparklines use real data now)
-  uE(() => {
-    if (peers.length === 0) return;
-    const id = setInterval(() => {
-      const rand = Math.random;
-      setPeerThr(prev => {
-        const out = { ...prev };
-        peers.forEach(p => {
-          if (p.status !== 'connected') return;
-          const cur = prev[p.id];
-          if (!cur || !cur.rx.length) return;
-          const nextRx = cur.rx.slice(1);
-          const nextTx = cur.tx.slice(1);
-          let rx = cur.rx[cur.rx.length - 1] + (rand() - 0.5) * 100_000;
-          rx = Math.max(10_000, Math.min(2_000_000, rx));
-          let tx = cur.tx[cur.tx.length - 1] + (rand() - 0.5) * 50_000;
-          tx = Math.max(5_000, Math.min(500_000, tx));
-          nextRx.push(rx); nextTx.push(tx);
-          out[p.id] = { rx: nextRx, tx: nextTx };
-        });
-        return out;
-      });
-    }, 1000);
-    return () => clearInterval(id);
-  }, [peers.length]);
 
   const doService = async (action) => {
     try {
