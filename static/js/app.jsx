@@ -78,6 +78,7 @@ function App({ tweaks, setTweaks }) {
         });
         ensurePeerState(mapped);
         const serverSparks = j.clients.spark_history || {};
+        const serverPeerThr = j.clients.peer_throughput_history || {};
 
         // Pre-compute per-peer deltas before touching state
         const prev = prevBytesRef.current;
@@ -112,11 +113,18 @@ function App({ tweaks, setTweaks }) {
         setPeerThr(pt => {
           const out = { ...pt };
           mapped.forEach(p => {
-            const buf = out[p.id] || { rx: new Array(40).fill(0), tx: new Array(40).fill(0) };
-            out[p.id] = {
+            const seeded = serverPeerThr[p.id] || {};
+            const seededRx = (seeded.rx || []).slice(-40);
+            const seededTx = (seeded.tx || []).slice(-40);
+            const seedBuf = {
+              rx: seededRx.length ? [...new Array(Math.max(0, 40 - seededRx.length)).fill(0), ...seededRx] : new Array(40).fill(0),
+              tx: seededTx.length ? [...new Array(Math.max(0, 40 - seededTx.length)).fill(0), ...seededTx] : new Array(40).fill(0),
+            };
+            const buf = out[p.id] || seedBuf;
+            out[p.id] = deltas[p.id].hasPrev ? {
               rx: [...buf.rx.slice(1), deltas[p.id].rxBps],
               tx: [...buf.tx.slice(1), deltas[p.id].txBps],
-            };
+            } : buf;
           });
           return out;
         });

@@ -31,6 +31,7 @@ TRAFFIC_RETENTION_SECONDS=24*60*60
 TRAFFIC_FLUSH_SECONDS=10
 PEER_SPARK_HISTORY=os.environ.get("PEER_SPARK_HISTORY", os.path.join(WG_DIR, "peer_spark_history.json"))
 PEER_SPARK_RETENTION_SECONDS=60
+PEER_THROUGHPUT_RETENTION_SECONDS=2*60
 PEER_SPARK_FLUSH_SECONDS=10
 GEO_CACHE_SECONDS=6*60*60
 SUDO_BIN=os.environ.get("SUDO_BIN","/usr/bin/sudo")
@@ -318,7 +319,7 @@ def _load_peer_spark_history() -> Dict[str, List[Dict[str, Any]]]:
         return {}
     if not isinstance(raw, dict):
         return {}
-    cutoff = time.time() - PEER_SPARK_RETENTION_SECONDS
+    cutoff = time.time() - PEER_THROUGHPUT_RETENTION_SECONDS
     history = {}
     for name, samples in raw.items():
         if not isinstance(samples, list):
@@ -330,10 +331,12 @@ def _load_peer_spark_history() -> Dict[str, List[Dict[str, Any]]]:
             try:
                 ts = float(sample.get("ts", 0))
                 total = max(0.0, float(sample.get("total", 0)))
+                rx_bps = max(0.0, float(sample.get("rx_bps", 0)))
+                tx_bps = max(0.0, float(sample.get("tx_bps", 0)))
             except Exception:
                 continue
             if ts >= cutoff:
-                clean.append({"ts": ts, "total": total})
+                clean.append({"ts": ts, "total": total, "rx_bps": rx_bps, "tx_bps": tx_bps})
         if clean:
             history[str(name)] = clean
     return history
@@ -365,7 +368,7 @@ def _peer_spark_history() -> Dict[str, List[Dict[str, Any]]]:
     return app.config["_peer_spark_history"]
 
 def _prune_peer_spark_history(history: Dict[str, List[Dict[str, Any]]], now: float = None) -> Dict[str, List[Dict[str, Any]]]:
-    cutoff = (now if now is not None else time.time()) - PEER_SPARK_RETENTION_SECONDS
+    cutoff = (now if now is not None else time.time()) - PEER_THROUGHPUT_RETENTION_SECONDS
     out = {}
     for name, samples in history.items():
         kept = [s for s in samples if s.get("ts", 0) >= cutoff]
@@ -384,12 +387,15 @@ def _record_peer_spark_samples(live: List[Dict[str, Any]]) -> Dict[str, List[flo
             continue
         rx = int(p.get("bytes_recv", 0) or 0)
         tx = int(p.get("bytes_sent", 0) or 0)
-        next_prev[name] = {"rx": rx, "tx": tx}
+        next_prev[name] = {"rx": rx, "tx": tx, "ts": now}
         old = prev.get(name)
         if not old:
             continue
-        total = max(0, rx - int(old.get("rx", 0))) + max(0, tx - int(old.get("tx", 0)))
-        history.setdefault(name, []).append({"ts": now, "total": total})
+        dt = max(1e-6, now - float(old.get("ts", now)))
+        rx_delta = max(0, rx - int(old.get("rx", 0)))
+        tx_delta = max(0, tx - int(old.get("tx", 0)))
+        total = rx_delta + tx_delta
+        history.setdefault(name, []).append({"ts": now, "total": total, "rx_bps": rx_delta / dt, "tx_bps": tx_delta / dt})
     app.config["_peer_spark_prev"] = next_prev
     history = _prune_peer_spark_history(history, now)
     app.config["_peer_spark_history"] = history
@@ -403,9 +409,10 @@ def _peer_spark_payload(history: Dict[str, List[Dict[str, Any]]] = None) -> Dict
     now = time.time()
     history = _prune_peer_spark_history(history if history is not None else _peer_spark_history(), now)
     app.config["_peer_spark_history"] = history
+    spark_cutoff = now - PEER_SPARK_RETENTION_SECONDS
     bucket_count = 20
     bucket_seconds = PEER_SPARK_RETENTION_SECONDS / bucket_count
-    start = now - PEER_SPARK_RETENTION_SECONDS
+    start = spark_cutoff
     out = {}
     for name, samples in history.items():
         buckets = [0.0] * bucket_count
@@ -415,10 +422,43 @@ def _peer_spark_payload(history: Dict[str, List[Dict[str, Any]]] = None) -> Dict
                 total = float(sample.get("total", 0) or 0)
             except Exception:
                 continue
+            if ts < spark_cutoff:
+                continue
             idx = int((ts - start) / bucket_seconds)
             if 0 <= idx < bucket_count:
                 buckets[idx] += max(0.0, total)
         out[name] = buckets
+    return out
+
+def _peer_throughput_payload(history: Dict[str, List[Dict[str, Any]]] = None) -> Dict[str, Dict[str, List[float]]]:
+    now = time.time()
+    history = _prune_peer_spark_history(history if history is not None else _peer_spark_history(), now)
+    app.config["_peer_spark_history"] = history
+    bucket_count = 40
+    bucket_seconds = PEER_THROUGHPUT_RETENTION_SECONDS / bucket_count
+    start = now - PEER_THROUGHPUT_RETENTION_SECONDS
+    out = {}
+    for name, samples in history.items():
+        rx = [0.0] * bucket_count
+        tx = [0.0] * bucket_count
+        counts = [0] * bucket_count
+        for sample in samples:
+            try:
+                ts = float(sample.get("ts", 0))
+                rx_bps = float(sample.get("rx_bps", 0) or 0)
+                tx_bps = float(sample.get("tx_bps", 0) or 0)
+            except Exception:
+                continue
+            idx = int((ts - start) / bucket_seconds)
+            if 0 <= idx < bucket_count:
+                rx[idx] += max(0.0, rx_bps)
+                tx[idx] += max(0.0, tx_bps)
+                counts[idx] += 1
+        for i, count in enumerate(counts):
+            if count:
+                rx[i] /= count
+                tx[i] /= count
+        out[name] = {"rx": rx, "tx": tx}
     return out
 
 def _endpoint_ip(endpoint: str) -> str:
@@ -788,8 +828,10 @@ def api_status():
         issued,live=[],[]
     try:
         spark_history=_record_peer_spark_samples(live)
+        peer_throughput_history=_peer_throughput_payload()
     except Exception:
         spark_history={}
+        peer_throughput_history={}
     try:
         ntp=timedate_ntp()
     except:
@@ -798,7 +840,7 @@ def api_status():
     payload={
         "service":{"active":False,"enabled":False,"unit":UNIT},
         "network":{"host_ip":HOST_IP,"port":int(lp),"ufw_udp_open":False,"listening":False,"ping_ok":False,"iface":iface,"rx":rx,"tx":tx},
-        "clients":{"count":len(issued),"issued":issued,"live":live,"status_updated":None,"spark_history":spark_history},
+        "clients":{"count":len(issued),"issued":issued,"live":live,"status_updated":None,"spark_history":spark_history,"peer_throughput_history":peer_throughput_history},
         "config":{
             "path":WG_CONF,
             "port":lp,
