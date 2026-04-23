@@ -48,6 +48,10 @@ function mapApiPeers(issued, live) {
       country: '',
       pingMs: null,
       handshakeInterval: null,
+      note: iss.note || '',
+      dns: iss.dns || '',
+      clientAllowedIps: iss.client_allowed_ips || '',
+      keepalive: iss.keepalive != null ? String(iss.keepalive) : '25',
     };
   });
 }

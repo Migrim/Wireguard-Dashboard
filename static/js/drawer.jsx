@@ -5,17 +5,43 @@ const { useState: _useState, useEffect: _useEffect, useRef: _useRef, useMemo: _u
 // ============================================================
 // PeerDrawer — slide-out detail with charts + controls
 // ============================================================
-function PeerDrawer({ peer, onClose, sparklines, throughputBuffers, onRevoke }) {
+function PeerDrawer({ peer, onClose, sparklines, throughputBuffers, onRevoke, onPeerUpdated }) {
   const [copied, setCopied] = _useState('');
   const [downloading, setDownloading] = _useState(false);
   const [revoking, setRevoking] = _useState(false);
   const [diag, setDiag] = _useState({ loading: true, pingMs: null, pingStatus: '', location: null, endpointIp: '', pingIp: '' });
+
+  // Settings edit state
+  const [note, setNote] = _useState('');
+  const [dns, setDns] = _useState('');
+  const [clientAllowedIps, setClientAllowedIps] = _useState('');
+  const [keepaliveEnabled, setKeepaliveEnabled] = _useState(true);
+  const [keepaliveVal, setKeepaliveVal] = _useState('25');
+  const [settingsSaving, setSettingsSaving] = _useState(false);
+  const [settingsMsg, setSettingsMsg] = _useState('');
+  const [renaming, setRenaming] = _useState(false);
+  const [newName, setNewName] = _useState('');
+  const [renameSaving, setRenameSaving] = _useState(false);
 
   _useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  // Sync settings state when peer changes
+  _useEffect(() => {
+    if (!peer) return;
+    setNote(peer.note || '');
+    setDns(peer.dns || '');
+    setClientAllowedIps(peer.clientAllowedIps || '');
+    const ka = peer.keepalive || '25';
+    setKeepaliveEnabled(ka !== '0');
+    setKeepaliveVal(ka === '0' ? '25' : ka);
+    setNewName(peer.name);
+    setSettingsMsg('');
+    setRenaming(false);
+  }, [peer && peer.name]);
 
   _useEffect(() => {
     if (!peer) return;
@@ -41,6 +67,42 @@ function PeerDrawer({ peer, onClose, sparklines, throughputBuffers, onRevoke }) 
     const id = setInterval(fetchDiag, 5000);
     return () => { cancelled = true; clearInterval(id); };
   }, [peer && peer.name]);
+
+  const saveSettings = async (patch) => {
+    setSettingsSaving(true);
+    setSettingsMsg('');
+    try {
+      await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/settings', {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      });
+      setSettingsMsg('Saved');
+      setTimeout(() => setSettingsMsg(''), 2000);
+      if (onPeerUpdated) onPeerUpdated();
+    } catch (e) {
+      setSettingsMsg('Error: ' + (e.message || 'save failed'));
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
+
+  const renamePeer = async () => {
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === peer.name) { setRenaming(false); return; }
+    setRenameSaving(true);
+    try {
+      await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/rename', {
+        method: 'POST',
+        body: JSON.stringify({ name: trimmed }),
+      });
+      setRenaming(false);
+      if (onPeerUpdated) onPeerUpdated();
+    } catch (e) {
+      alert('Rename failed: ' + (e.message || 'API error'));
+    } finally {
+      setRenameSaving(false);
+    }
+  };
 
   if (!peer) return null;
 
@@ -186,6 +248,160 @@ function PeerDrawer({ peer, onClose, sparklines, throughputBuffers, onRevoke }) 
                 </>
               )}
             </dl>
+          </section>
+
+          <section className="drawer-section">
+            <div className="section-head">
+              <span className="section-label">CONFIGURATION</span>
+              {settingsMsg && (
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: settingsMsg.startsWith('Error') ? 'var(--danger)' : 'var(--accent-2)' }}>
+                  {settingsMsg}
+                </span>
+              )}
+            </div>
+            <div className="settings-list">
+
+              {/* Rename */}
+              <div className="setting-row">
+                <div>
+                  <div className="setting-title">Name</div>
+                  <div className="setting-desc">Identifier used in WireGuard config</div>
+                </div>
+                <div className="setting-control">
+                  {renaming ? (
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <input
+                        className="select-input"
+                        style={{ width: 130 }}
+                        value={newName}
+                        onChange={e => setNewName(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') renamePeer(); if (e.key === 'Escape') setRenaming(false); }}
+                        autoFocus
+                        maxLength={64}
+                      />
+                      <button className="mini-btn" onClick={renamePeer} disabled={renameSaving}>
+                        {renameSaving ? '…' : 'save'}
+                      </button>
+                      <button className="mini-btn" onClick={() => { setRenaming(false); setNewName(peer.name); }}>✕</button>
+                    </div>
+                  ) : (
+                    <button className="mini-btn" onClick={() => setRenaming(true)}>rename</button>
+                  )}
+                </div>
+              </div>
+
+              {/* Note */}
+              <div className="setting-row">
+                <div>
+                  <div className="setting-title">Note</div>
+                  <div className="setting-desc">Free-text label (e.g. "John's laptop")</div>
+                </div>
+                <div className="setting-control">
+                  <input
+                    className="select-input"
+                    style={{ width: 160 }}
+                    placeholder="—"
+                    value={note}
+                    maxLength={200}
+                    onChange={e => setNote(e.target.value)}
+                    onBlur={() => saveSettings({ note })}
+                  />
+                </div>
+              </div>
+
+              {/* Routing mode */}
+              <div className="setting-row">
+                <div>
+                  <div className="setting-title">Routing mode</div>
+                  <div className="setting-desc">
+                    What traffic is tunnelled in the generated config
+                    <div style={{ marginTop: 4 }}>
+                      <select
+                        className="select-input"
+                        value={clientAllowedIps || 'full'}
+                        disabled={settingsSaving}
+                        onChange={e => {
+                          const v = e.target.value;
+                          if (v === 'full') {
+                            setClientAllowedIps('');
+                            saveSettings({ client_allowed_ips: '' });
+                          } else if (v === 'split') {
+                            const val = peer.addr || peer.allowedIps || '10.8.0.0/24';
+                            setClientAllowedIps(val);
+                            saveSettings({ client_allowed_ips: val });
+                          } else {
+                            setClientAllowedIps(v);
+                            saveSettings({ client_allowed_ips: v });
+                          }
+                        }}
+                      >
+                        <option value="full">Full tunnel (0.0.0.0/0, ::/0)</option>
+                        <option value="split">Split tunnel (peer subnet only)</option>
+                        {clientAllowedIps && clientAllowedIps !== 'full' && clientAllowedIps !== 'split' && (
+                          <option value={clientAllowedIps}>Custom: {clientAllowedIps}</option>
+                        )}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* DNS */}
+              <div className="setting-row">
+                <div style={{ flex: 1 }}>
+                  <div className="setting-title">DNS override</div>
+                  <div className="setting-desc">DNS servers in generated config (blank = server default)</div>
+                </div>
+                <div className="setting-control">
+                  <input
+                    className="select-input"
+                    style={{ width: 160 }}
+                    placeholder="1.1.1.1, 1.0.0.1"
+                    value={dns}
+                    onChange={e => setDns(e.target.value)}
+                    onBlur={() => saveSettings({ dns })}
+                  />
+                </div>
+              </div>
+
+              {/* Keepalive */}
+              <div className="setting-row">
+                <div>
+                  <div className="setting-title">Persistent keepalive</div>
+                  <div className="setting-desc">Interval (seconds) — keeps NAT mapping alive</div>
+                </div>
+                <div className="setting-control" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  {keepaliveEnabled && (
+                    <div className="stepper">
+                      <button disabled={settingsSaving} onClick={() => {
+                        const v = String(Math.max(1, parseInt(keepaliveVal, 10) - 5));
+                        setKeepaliveVal(v);
+                        saveSettings({ keepalive: parseInt(v, 10) });
+                      }}>−</button>
+                      <span className="mono">{keepaliveVal}s</span>
+                      <button disabled={settingsSaving} onClick={() => {
+                        const v = String(Math.min(300, parseInt(keepaliveVal, 10) + 5));
+                        setKeepaliveVal(v);
+                        saveSettings({ keepalive: parseInt(v, 10) });
+                      }}>+</button>
+                    </div>
+                  )}
+                  <button
+                    className={`toggle ${keepaliveEnabled ? 'on' : ''}`}
+                    disabled={settingsSaving}
+                    onClick={() => {
+                      const next = !keepaliveEnabled;
+                      setKeepaliveEnabled(next);
+                      saveSettings({ keepalive: next ? parseInt(keepaliveVal, 10) : 0 });
+                    }}
+                    aria-pressed={keepaliveEnabled}
+                  >
+                    <span className="toggle-knob" />
+                  </button>
+                </div>
+              </div>
+
+            </div>
           </section>
 
           <section className="drawer-section">

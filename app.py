@@ -883,7 +883,11 @@ def list_clients() -> List[Dict[str, Any]]:
             "status": "active",
             "created": meta.get("created", ""),
             "public_key": meta.get("public_key", ""),
-            "ip": meta.get("address", "")
+            "ip": meta.get("address", ""),
+            "note": meta.get("note", ""),
+            "dns": meta.get("dns", ""),
+            "client_allowed_ips": meta.get("client_allowed_ips", ""),
+            "keepalive": meta.get("keepalive", "25"),
         })
 
     return issued, live
@@ -903,12 +907,12 @@ def gen_client_conf(name: str) -> Tuple[str,str]:
     client_priv=meta["private_key"]
     client_addr=meta["address"]
     conf=_read_conf()
-    dns=conf.get("Interface",{}).get("DNS","").strip() or CLIENT_DNS
+    dns=meta.get("dns","").strip() or conf.get("Interface",{}).get("DNS","").strip() or CLIENT_DNS
     srv_pub=_server_pubkey()
     lp=conf.get("Interface",{}).get("ListenPort",str(WG_PORT))
     endpoint=f"{PUBLIC_IP}:{lp}"
-    allowed_client="0.0.0.0/0, ::/0"
-    keepalive="25"
+    allowed_client=meta.get("client_allowed_ips","").strip() or "0.0.0.0/0, ::/0"
+    keepalive=str(meta.get("keepalive","25") or "25")
     txt=[]
     txt.append("[Interface]")
     txt.append(f"PrivateKey = {client_priv}")
@@ -919,7 +923,8 @@ def gen_client_conf(name: str) -> Tuple[str,str]:
     txt.append(f"PublicKey = {srv_pub}")
     txt.append(f"AllowedIPs = {allowed_client}")
     txt.append(f"Endpoint = {endpoint}")
-    txt.append(f"PersistentKeepalive = {keepalive}")
+    if keepalive != "0":
+        txt.append(f"PersistentKeepalive = {keepalive}")
     return "\n".join(txt).strip()+"\n", meta.get("public_key","")
 
 def _ensure_peer_removed_from_conf(pubkey: str) -> None:
@@ -1108,6 +1113,40 @@ def api_users_rename(name: str):
     db[new_name]=db.pop(name)
     _save_peers_db(db)
     return jsonify({"ok":True,"name":new_name})
+
+@app.route("/api/users/<name>/settings", methods=["PATCH"])
+def api_users_settings(name: str):
+    data = request.get_json(force=True, silent=True) or {}
+    db = _load_peers_db()
+    meta = db.get(name)
+    if not meta:
+        abort(404)
+
+    if "note" in data:
+        meta["note"] = str(data["note"])[:200].strip()
+
+    if "dns" in data:
+        dns_val = str(data["dns"]).strip()
+        if dns_val and not re.match(r'^[\d\s.,a-fA-F:]+$', dns_val):
+            return jsonify({"ok": False, "error": "invalid_dns", "hint": "Use comma-separated IP addresses"}), 400
+        meta["dns"] = dns_val
+
+    if "client_allowed_ips" in data:
+        meta["client_allowed_ips"] = str(data["client_allowed_ips"]).strip()
+
+    if "keepalive" in data:
+        ka = data["keepalive"]
+        try:
+            ka_int = int(ka)
+            if ka_int < 0 or ka_int > 65535:
+                return jsonify({"ok": False, "error": "invalid_keepalive", "hint": "0–65535 seconds (0 = disabled)"}), 400
+            meta["keepalive"] = str(ka_int)
+        except (ValueError, TypeError):
+            return jsonify({"ok": False, "error": "invalid_keepalive", "hint": "Must be a number"}), 400
+
+    db[name] = meta
+    _save_peers_db(db)
+    return jsonify({"ok": True, "name": name})
 
 @app.route("/api/users/<name>/revoke",methods=["POST"])
 def api_users_revoke(name: str):
