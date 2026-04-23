@@ -845,7 +845,7 @@ function LogsDrawer({ alerts, onClose, verbose, setVerbose }) {
                 <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 11 }}>No matching logs</div>
               ) : filtered.map((l, i) => (
                 <div key={i} className={`log-line log-${l.level}`}>
-                  <span className="log-time">{verbose ? new Date(l.t).toTimeString().slice(0, 12) : new Date(l.t).toTimeString().slice(0, 8)}</span>
+                  {!verbose && <span className="log-time">{new Date(l.t).toTimeString().slice(0, 8)}</span>}
                   <span className="log-level">{l.level}</span>
                   <span className="log-msg">{l.msg}</span>
                 </div>

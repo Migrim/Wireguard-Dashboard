@@ -34,6 +34,8 @@ PEER_SPARK_HISTORY=os.environ.get("PEER_SPARK_HISTORY", os.path.join(WG_DIR, "pe
 PEER_SPARK_RETENTION_SECONDS=60
 PEER_THROUGHPUT_RETENTION_SECONDS=2*60
 PEER_SPARK_FLUSH_SECONDS=10
+HANDSHAKE_CACHE=os.environ.get("HANDSHAKE_CACHE", os.path.join(WG_DIR, "handshakes.json"))
+HANDSHAKE_FLUSH_SECONDS=30
 GEO_CACHE_SECONDS=6*60*60
 SUDO_BIN=os.environ.get("SUDO_BIN","/usr/bin/sudo")
 BASH_BIN=os.environ.get("BASH_BIN","/bin/bash")
@@ -594,6 +596,59 @@ def _save_peers_db(db: Dict[str,Any]) -> None:
         except:
             pass
 
+def _load_handshake_cache() -> Dict[str, int]:
+    try:
+        with open(HANDSHAKE_CACHE, "r", encoding="utf-8") as f:
+            return {k: int(v) for k, v in json.load(f).items()}
+    except FileNotFoundError:
+        return {}
+    except PermissionError:
+        out, rc = _sudo_cat(HANDSHAKE_CACHE)
+        if rc == 0 and out:
+            try:
+                return {k: int(v) for k, v in json.loads(out).items()}
+            except Exception:
+                return {}
+        return {}
+    except Exception:
+        return {}
+
+def _flush_handshake_cache(cache: Dict[str, int]) -> None:
+    import tempfile
+    fd, tmp = tempfile.mkstemp(prefix="handshakes.", suffix=".json.tmp", dir="/tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(cache, f)
+        try:
+            os.replace(tmp, HANDSHAKE_CACHE)
+            return
+        except Exception:
+            pass
+        _sudo(["/usr/bin/install", "-m", "640", "-o", "root", "-g", "www-data", tmp, HANDSHAKE_CACHE])
+    finally:
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except:
+            pass
+
+def _get_handshake_cache() -> Dict[str, int]:
+    if "_hs_cache" not in app.config:
+        app.config["_hs_cache"] = _load_handshake_cache()
+        app.config["_hs_cache_last_flush"] = 0.0
+    return app.config["_hs_cache"]
+
+def _update_handshake_cache(name: str, ts: int) -> None:
+    cache = _get_handshake_cache()
+    if ts > cache.get(name, 0):
+        cache[name] = ts
+        app.config["_hs_cache"] = cache
+        now = time.time()
+        last_flush = float(app.config.get("_hs_cache_last_flush", 0) or 0)
+        if now - last_flush >= HANDSHAKE_FLUSH_SECONDS:
+            _flush_handshake_cache(cache)
+            app.config["_hs_cache_last_flush"] = now
+
 def _load_data_budget_db() -> Dict[str, Any]:
     default = {
         "settings": {"budget_gb": 50, "alerts": True, "reset_time": "00:00"},
@@ -860,16 +915,24 @@ def list_clients() -> List[Dict[str, Any]]:
                 name = k
                 break
 
+        # persist the handshake timestamp; fall back to cached value after a restart
+        if lh_raw > 0 and lh_raw < now + 10:
+            if name:
+                _update_handshake_cache(name, lh_raw)
+            effective_lh = lh_raw
+        else:
+            effective_lh = _get_handshake_cache().get(name or "", 0) if name else 0
+
         live.append({
             "name": name or pub[:8],
             "cn": name or pub[:8],
             "remote": endpoint,
             "bytes_recv": rx,   # client → server
             "bytes_sent": tx,   # server → client
-            "last_handshake": lh_raw if lh_raw > 0 and lh_raw < now + 10 else 0,
+            "last_handshake": effective_lh,
             "since": (
-                datetime.datetime.utcfromtimestamp(lh_raw).strftime("%Y-%m-%d %H:%M:%S")
-                if lh_raw > 0 and lh_raw < now + 10 else ""
+                datetime.datetime.utcfromtimestamp(effective_lh).strftime("%Y-%m-%d %H:%M:%S")
+                if effective_lh > 0 else ""
             ),
             "allowed_ips": allowed,
             "public_key": pub,
