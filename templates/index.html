@@ -565,7 +565,7 @@ body {
   from { opacity: 0; transform: translateX(-4px); }
   to { opacity: 1; transform: translateX(0); }
 }
-.log-time { color: var(--muted-2); }
+.log-time { color: var(--muted-2); display: none; }
 .log-level {
   text-transform: uppercase;
   font-size: 9.5px;
@@ -582,7 +582,6 @@ body {
 .log-msg {
   color: var(--ink-2);
   min-width: 0;
-  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
