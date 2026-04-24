@@ -1,4 +1,4 @@
-import os, subprocess, datetime, re, time, shlex, json, ipaddress, urllib.request, threading
+import os, subprocess, datetime, re, time, shlex, json, ipaddress, urllib.request
 from typing import Tuple, Dict, Any, List
 import logging
 from flask import Flask, render_template, request, send_file, redirect, url_for, jsonify, abort
@@ -1570,98 +1570,47 @@ def api_fix():
     return jsonify({"ok":len(errors)==0,"actions":actions,"errors":errors,"service_active":service_active()})
 
 _CF_UA = "Mozilla/5.0 (compatible; WGDash/1.0)"
-_st_states: Dict[str, Any] = {}
 
-def _run_speedtest(state: Dict[str, Any]) -> None:
-    # ── Ping ────────────────────────────────────────────────────
+@app.route("/api/speedtest/ping")
+def api_speedtest_ping():
     try:
         out, code = _run("ping -c 4 1.1.1.1 2>&1")
         m = re.search(r'(?:rtt|round-trip) min/avg/max/\S+ = [\d.]+/([\d.]+)/[\d.]+/[\d.]+ ms', out) if code == 0 else None
-        state.update(ping_ok=bool(m), ping_ms=round(float(m.group(1)), 1) if m else None)
+        if m:
+            return jsonify({"ok": True, "ping_ms": round(float(m.group(1)), 1)})
+        return jsonify({"ok": False, "ping_ms": None})
     except Exception as e:
-        state.update(ping_ok=False, ping_ms=None)
+        return jsonify({"ok": False, "ping_ms": None, "error": str(e)})
 
-    # ── Download (live speed via chunked read) ───────────────────
-    state["phase"] = "download"
+@app.route("/api/speedtest/download")
+def api_speedtest_download():
     try:
-        req = urllib.request.Request(
-            "https://speed.cloudflare.com/__down?bytes=25000000",
-            headers={"User-Agent": _CF_UA})
+        req = urllib.request.Request("https://speed.cloudflare.com/__down?bytes=25000000",
+                                     headers={"User-Agent": _CF_UA})
+        start = time.time()
         with urllib.request.urlopen(req, timeout=60) as resp:
-            total_rx = 0
-            start = win_start = time.time()
-            win_bytes = 0
-            last_tick = start
-            while True:
-                chunk = resp.read(65_536)
-                if not chunk:
-                    break
-                total_rx += len(chunk)
-                win_bytes += len(chunk)
-                now = time.time()
-                if now - last_tick >= 0.2:
-                    win_elapsed = now - win_start
-                    if win_elapsed > 0:
-                        state["live_mbps"] = round((win_bytes * 8) / (win_elapsed * 1_000_000), 1)
-                    win_start = now
-                    win_bytes = 0
-                    last_tick = now
+            data = resp.read()
         elapsed = time.time() - start
-        state.update(download_ok=True,
-                     download_mbps=round((total_rx * 8) / (elapsed * 1_000_000), 2) if elapsed > 0 else 0)
-    except Exception:
-        state.update(download_ok=False, download_mbps=None)
-    state["live_mbps"] = None
+        mbps = round((len(data) * 8) / (elapsed * 1_000_000), 2) if elapsed > 0 else 0
+        return jsonify({"ok": True, "mbps": mbps})
+    except Exception as e:
+        return jsonify({"ok": False, "mbps": None, "error": str(e)})
 
-    # ── Upload (5 × 2 MB requests — one reading per chunk) ──────
-    state["phase"] = "upload"
+@app.route("/api/speedtest/upload")
+def api_speedtest_upload():
     try:
-        chunk_size = 2_000_000
-        total_bytes = 0
-        start_all = time.time()
-        for _ in range(5):
-            payload = os.urandom(chunk_size)
-            req = urllib.request.Request(
-                "https://speed.cloudflare.com/__up", data=payload,
-                headers={"Content-Type": "application/octet-stream", "User-Agent": _CF_UA})
-            t0 = time.time()
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                resp.read()
-            elapsed = time.time() - t0
-            total_bytes += chunk_size
-            state["live_mbps"] = round((chunk_size * 8) / (elapsed * 1_000_000), 1) if elapsed > 0 else 0
-        total_elapsed = time.time() - start_all
-        state.update(upload_ok=True,
-                     upload_mbps=round((total_bytes * 8) / (total_elapsed * 1_000_000), 2) if total_elapsed > 0 else 0)
-    except Exception:
-        state.update(upload_ok=False, upload_mbps=None)
-
-    state["phase"] = "done"
-    state["done"] = True
-
-@app.route("/api/speedtest/start", methods=["POST"])
-def api_speedtest_start():
-    import uuid
-    tid = uuid.uuid4().hex[:8]
-    state: Dict[str, Any] = dict(
-        phase="ping", done=False, live_mbps=None,
-        ping_ok=None, ping_ms=None,
-        download_ok=None, download_mbps=None,
-        upload_ok=None, upload_mbps=None,
-    )
-    _st_states[tid] = state
-    if len(_st_states) > 20:                          # prevent unbounded growth
-        oldest = next(iter(_st_states))
-        _st_states.pop(oldest, None)
-    threading.Thread(target=_run_speedtest, args=(state,), daemon=True).start()
-    return jsonify({"test_id": tid})
-
-@app.route("/api/speedtest/status/<tid>")
-def api_speedtest_status(tid: str):
-    state = _st_states.get(tid)
-    if state is None:
-        abort(404)
-    return jsonify(state)
+        payload = os.urandom(10_000_000)
+        req = urllib.request.Request("https://speed.cloudflare.com/__up", data=payload,
+                                     headers={"Content-Type": "application/octet-stream",
+                                              "User-Agent": _CF_UA})
+        start = time.time()
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            resp.read()
+        elapsed = time.time() - start
+        mbps = round((len(payload) * 8) / (elapsed * 1_000_000), 2) if elapsed > 0 else 0
+        return jsonify({"ok": True, "mbps": mbps})
+    except Exception as e:
+        return jsonify({"ok": False, "mbps": None, "error": str(e)})
 
 @app.route("/download/<name>.conf")
 def download_conf(name: str):

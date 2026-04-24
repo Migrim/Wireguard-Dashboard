@@ -1159,9 +1159,30 @@ function PortCheckDrawer({ peers, onClose }) {
 // ============================================================
 // SpeedTestDrawer — server network speed test
 // ============================================================
-function SpeedGauge({ value, phase }) {
+function SpeedGauge({ value, phase, scanning }) {
   const size = 180, cx = size / 2, cy = 100, r = 70;
   const startDeg = 225, sweepDeg = 270, maxVal = 500;
+
+  // Animated display fraction: sweeps while scanning, snaps to real value when done
+  const [dispFraction, setDispFraction] = _useState(0);
+  const rafRef = _useRef(null);
+
+  _useEffect(() => {
+    if (scanning) {
+      let t = 0;
+      const tick = () => {
+        t += 0.03;
+        // Oscillate between 15 % and 65 % of scale — feels like a real measurement sweep
+        setDispFraction(0.4 + 0.25 * Math.sin(t));
+        rafRef.current = requestAnimationFrame(tick);
+      };
+      rafRef.current = requestAnimationFrame(tick);
+      return () => cancelAnimationFrame(rafRef.current);
+    } else {
+      cancelAnimationFrame(rafRef.current);
+      setDispFraction(Math.min((value ?? 0) / maxVal, 1));
+    }
+  }, [scanning, value]);
 
   const toXY = (deg, radius) => {
     const rad = (deg - 90) * Math.PI / 180;
@@ -1172,47 +1193,38 @@ function SpeedGauge({ value, phase }) {
     return `M ${s.x} ${s.y} A ${radius} ${radius} 0 ${sweep > 180 ? 1 : 0} 1 ${e.x} ${e.y}`;
   };
 
-  const fraction = Math.min((value ?? 0) / maxVal, 1);
   const arcLen = r * sweepDeg * Math.PI / 180;
-  // needle: vertical line from (0,0) to (0,-needleLen) in local coords, rotated around (cx,cy)
-  const needleAngle = startDeg + sweepDeg * fraction;
+  const needleAngle = startDeg + sweepDeg * dispFraction;
   const needleLen = r - 14;
+  const color = phase === 'upload' ? 'var(--accent-2)' : 'var(--accent)';
   const hasValue = value != null && value > 0;
 
   return (
     <div className="st-gauge-wrap">
       <svg className="st-gauge-svg" width={size} height={110} viewBox={`0 0 ${size} 110`}>
-        {/* track */}
         <path d={arcPath(startDeg, sweepDeg, r)} fill="none" stroke="var(--border)" strokeWidth="7" strokeLinecap="round" />
-        {/* animated fill via stroke-dashoffset */}
-        <path d={arcPath(startDeg, sweepDeg, r)} fill="none"
-          stroke={phase === 'upload' ? 'var(--accent-2)' : 'var(--accent)'}
+        <path d={arcPath(startDeg, sweepDeg, r)} fill="none" stroke={color}
           strokeWidth="7" strokeLinecap="round"
-          strokeDasharray={arcLen}
-          strokeDashoffset={arcLen * (1 - fraction)}
+          strokeDasharray={arcLen} strokeDashoffset={arcLen * (1 - dispFraction)}
           style={{
-            transition: 'stroke-dashoffset 0.25s cubic-bezier(0.22,1,0.36,1), stroke 0.4s ease',
-            filter: hasValue ? 'drop-shadow(0 0 6px color-mix(in oklab, var(--accent) 55%, transparent))' : 'none',
+            transition: scanning ? 'none' : 'stroke-dashoffset 0.6s cubic-bezier(0.22,1,0.36,1)',
+            filter: dispFraction > 0.02 ? `drop-shadow(0 0 6px color-mix(in oklab, ${color} 55%, transparent))` : 'none',
           }} />
-        {/* needle — CSS rotate transition around pivot (cx, cy) */}
         <g style={{
           transform: `translate(${cx}px,${cy}px) rotate(${needleAngle}deg)`,
-          transition: 'transform 0.25s cubic-bezier(0.22,1,0.36,1)',
+          transition: scanning ? 'none' : 'transform 0.6s cubic-bezier(0.22,1,0.36,1)',
         }}>
-          <line x1="0" y1="0" x2="0" y2={-needleLen}
-            stroke={hasValue ? (phase === 'upload' ? 'var(--accent-2)' : 'var(--accent)') : 'var(--muted)'}
-            strokeWidth="2.5" strokeLinecap="round"
+          <line x1="0" y1="0" x2="0" y2={-needleLen} stroke={color} strokeWidth="2.5" strokeLinecap="round"
             style={{ transition: 'stroke 0.4s ease' }} />
         </g>
-        <circle cx={cx} cy={cy} r="5" fill={hasValue ? (phase === 'upload' ? 'var(--accent-2)' : 'var(--accent)') : 'var(--muted)'}
-          style={{ transition: 'fill 0.4s ease' }} />
+        <circle cx={cx} cy={cy} r="5" fill={color} style={{ transition: 'fill 0.4s ease' }} />
         <circle cx={cx} cy={cy} r="2.5" fill="var(--bg)" />
       </svg>
-      <div className={`st-gauge-num${!hasValue ? ' loading' : ''}`}>{value != null ? value : '—'}</div>
-      <div className="st-gauge-unit">Mbps</div>
-      <div className="st-gauge-label" style={{ transition: 'opacity 0.3s' }}>
-        {phase === 'upload' ? '↑ Upload' : '↓ Download'}
+      <div className={`st-gauge-num${scanning ? ' loading' : ''}`}>
+        {scanning ? '…' : hasValue ? value : '—'}
       </div>
+      <div className="st-gauge-unit">Mbps</div>
+      <div className="st-gauge-label">{phase === 'upload' ? '↑ Upload' : '↓ Download'}</div>
     </div>
   );
 }
@@ -1228,63 +1240,35 @@ function SpeedTestDrawer({ onClose }) {
   const [done, setDone]        = _useState(false);
   const [running, setRunning]  = _useState(false);
   const [apiError, setApiError]= _useState(null);
-  const [liveSpeed, setLiveSpeed] = _useState(null);
-  const [livePhase, setLivePhase] = _useState('download');
-  const pollRef = _useRef(null);
+  const [gaugePhase, setGaugePhase] = _useState('download');
 
   _useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      clearInterval(pollRef.current);
-    };
+    return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const run = () => {
-    clearInterval(pollRef.current);
+  const run = async () => {
     setRunning(true); setDone(false); setResults({});
-    setApiError(null); setLiveSpeed(null); setLivePhase('download');
-    setCurrent(0);
+    setApiError(null); setGaugePhase('download');
 
-    window.WG.apiCall('/api/speedtest/start', { method: 'POST' })
-      .then(({ test_id }) => {
-        pollRef.current = setInterval(() => {
-          window.WG.apiCall(`/api/speedtest/status/${test_id}`)
-            .then(s => {
-              const phaseMap = { ping: 0, download: 1, upload: 2 };
-              setCurrent(s.done ? -1 : (phaseMap[s.phase] ?? 0));
+    try {
+      setCurrent(0);
+      const pingRes = await window.WG.apiCall('/api/speedtest/ping');
+      setResults(prev => ({ ...prev, ping: { ok: pingRes.ok, val: pingRes.ping_ms } }));
 
-              if (s.phase === 'download' || s.phase === 'upload') {
-                setLivePhase(s.phase);
-                if (s.live_mbps != null) setLiveSpeed(s.live_mbps);
-              }
+      setCurrent(1); setGaugePhase('download');
+      const dlRes = await window.WG.apiCall('/api/speedtest/download');
+      setResults(prev => ({ ...prev, download: { ok: dlRes.ok, val: dlRes.mbps } }));
 
-              // surface final results as each phase completes
-              setResults(prev => {
-                const next = { ...prev };
-                if (s.ping_ms   != null && !prev.ping)     next.ping     = { ok: s.ping_ok,     val: s.ping_ms     };
-                if (s.download_mbps != null && !prev.download) next.download = { ok: s.download_ok, val: s.download_mbps };
-                if (s.upload_mbps   != null && !prev.upload)   next.upload   = { ok: s.upload_ok,   val: s.upload_mbps   };
-                return next;
-              });
+      setCurrent(2); setGaugePhase('upload');
+      const ulRes = await window.WG.apiCall('/api/speedtest/upload');
+      setResults(prev => ({ ...prev, upload: { ok: ulRes.ok, val: ulRes.mbps } }));
+    } catch (e) {
+      setApiError(e.message || 'Speed test failed');
+    }
 
-              if (s.done) {
-                clearInterval(pollRef.current);
-                setRunning(false); setDone(true);
-              }
-            })
-            .catch(() => {
-              clearInterval(pollRef.current);
-              setApiError('Lost connection to server');
-              setRunning(false); setDone(true); setCurrent(-1);
-            });
-        }, 200);
-      })
-      .catch(e => {
-        setApiError(e.message || 'Failed to start speed test');
-        setRunning(false); setDone(true);
-      });
+    setRunning(false); setDone(true); setCurrent(-1);
   };
 
   _useEffect(() => { run(); }, []);
@@ -1293,9 +1277,9 @@ function SpeedTestDrawer({ onClose }) {
   const ulVal   = results.upload?.val   ?? null;
   const pingVal = results.ping?.val     ?? null;
 
-  // gauge shows live readings while running; settle on dl result when done
-  const gaugeVal   = running ? liveSpeed : dlVal;
-  const gaugePhase = running ? livePhase : 'download';
+  // gauge shows the settled result once available; sweeps while current phase is active
+  const gaugeVal     = gaugePhase === 'upload' ? ulVal : dlVal;
+  const gaugeScanning = current === 1 || current === 2;
 
   const subLine = running
     ? (current === 0 ? 'Testing latency…' : current === 1 ? 'Measuring download…' : 'Measuring upload…')
@@ -1329,7 +1313,7 @@ function SpeedTestDrawer({ onClose }) {
         <div className="drawer-body">
           <section className="drawer-section">
             <div className="st-hero">
-              <SpeedGauge value={gaugeVal} phase={gaugePhase} />
+              <SpeedGauge value={gaugeVal} phase={gaugePhase} scanning={gaugeScanning} />
               <div className="st-metrics">
                 {[
                   { id: 'ping',     label: 'Ping · ms',   val: pingVal, loading: current === 0,
