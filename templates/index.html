@@ -1109,11 +1109,11 @@ body {
   }
 
   .data-row {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) 92px 26px;
     grid-template-areas:
-      "identity action"
-      "traffic traffic";
+      "identity traffic action";
     gap: 7px;
+    align-items: center;
     padding: 10px;
     margin: 0;
     background: var(--card-raised);
@@ -1130,32 +1130,26 @@ body {
     grid-area: identity;
     gap: 8px;
     min-width: 0;
+    align-items: center;
   }
   .row-action {
     grid-area: action;
-    align-self: start;
+    align-self: center;
+    justify-self: end;
   }
   .peer-status-cell { display: none !important; }
-  .peer-traffic-cell { grid-area: traffic; display: block !important; }
+  .peer-traffic-cell {
+    grid-area: traffic;
+    display: block !important;
+    min-width: 0;
+  }
 
   .peer-traffic-cell {
-    background: var(--bg-2);
-    border: 1px solid var(--border);
-    border-radius: 9px;
-    padding: 8px 9px;
+    background: none;
+    border: none;
+    border-radius: 0;
+    padding: 0;
   }
-
-  .peer-traffic-cell::before {
-    display: block;
-    font-family: var(--mono);
-    font-size: 9px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 3px;
-  }
-
-  .peer-traffic-cell::before { content: "Traffic"; }
 
   .peer-name {
     font-size: 12px;
@@ -1171,8 +1165,8 @@ body {
   }
 
   .peer-traffic-cell svg {
-    width: 100% !important;
-    height: 28px !important;
+    width: 92px !important;
+    height: 24px !important;
     display: block;
   }
 
@@ -1320,6 +1314,15 @@ body {
 
   .peers-table {
     padding: 0 8px;
+  }
+
+  .data-row {
+    grid-template-columns: minmax(0, 1fr) 82px 26px;
+  }
+
+  .peer-traffic-cell svg {
+    width: 82px !important;
+    height: 22px !important;
   }
 
   .drawer-body {
