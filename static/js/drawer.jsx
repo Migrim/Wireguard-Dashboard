@@ -1156,4 +1156,260 @@ function PortCheckDrawer({ peers, onClose }) {
   );
 }
 
-Object.assign(window, { PeerDrawer, LogsPanel, DataBudgetDrawer, LogsDrawer, PortCheckDrawer });
+// ============================================================
+// SpeedTestDrawer — server network speed test
+// ============================================================
+function SpeedGauge({ value, phase }) {
+  const size = 180, cx = size / 2, cy = 100, r = 70;
+  const startDeg = 225, sweepDeg = 270, maxVal = 500;
+
+  const toXY = (deg, radius) => {
+    const rad = (deg - 90) * Math.PI / 180;
+    return { x: cx + radius * Math.cos(rad), y: cy + radius * Math.sin(rad) };
+  };
+  const arcPath = (start, sweep, radius) => {
+    const s = toXY(start, radius), e = toXY(start + sweep, radius);
+    return `M ${s.x} ${s.y} A ${radius} ${radius} 0 ${sweep > 180 ? 1 : 0} 1 ${e.x} ${e.y}`;
+  };
+
+  const fraction = Math.min((value ?? 0) / maxVal, 1);
+  const arcLen = r * sweepDeg * Math.PI / 180;
+  // needle: vertical line from (0,0) to (0,-needleLen) in local coords, rotated around (cx,cy)
+  const needleAngle = startDeg + sweepDeg * fraction;
+  const needleLen = r - 14;
+  const hasValue = value != null && value > 0;
+
+  return (
+    <div className="st-gauge-wrap">
+      <svg className="st-gauge-svg" width={size} height={110} viewBox={`0 0 ${size} 110`}>
+        {/* track */}
+        <path d={arcPath(startDeg, sweepDeg, r)} fill="none" stroke="var(--border)" strokeWidth="7" strokeLinecap="round" />
+        {/* animated fill via stroke-dashoffset */}
+        <path d={arcPath(startDeg, sweepDeg, r)} fill="none"
+          stroke={phase === 'upload' ? 'var(--accent-2)' : 'var(--accent)'}
+          strokeWidth="7" strokeLinecap="round"
+          strokeDasharray={arcLen}
+          strokeDashoffset={arcLen * (1 - fraction)}
+          style={{
+            transition: 'stroke-dashoffset 0.25s cubic-bezier(0.22,1,0.36,1), stroke 0.4s ease',
+            filter: hasValue ? 'drop-shadow(0 0 6px color-mix(in oklab, var(--accent) 55%, transparent))' : 'none',
+          }} />
+        {/* needle — CSS rotate transition around pivot (cx, cy) */}
+        <g style={{
+          transform: `translate(${cx}px,${cy}px) rotate(${needleAngle}deg)`,
+          transition: 'transform 0.25s cubic-bezier(0.22,1,0.36,1)',
+        }}>
+          <line x1="0" y1="0" x2="0" y2={-needleLen}
+            stroke={hasValue ? (phase === 'upload' ? 'var(--accent-2)' : 'var(--accent)') : 'var(--muted)'}
+            strokeWidth="2.5" strokeLinecap="round"
+            style={{ transition: 'stroke 0.4s ease' }} />
+        </g>
+        <circle cx={cx} cy={cy} r="5" fill={hasValue ? (phase === 'upload' ? 'var(--accent-2)' : 'var(--accent)') : 'var(--muted)'}
+          style={{ transition: 'fill 0.4s ease' }} />
+        <circle cx={cx} cy={cy} r="2.5" fill="var(--bg)" />
+      </svg>
+      <div className={`st-gauge-num${!hasValue ? ' loading' : ''}`}>{value != null ? value : '—'}</div>
+      <div className="st-gauge-unit">Mbps</div>
+      <div className="st-gauge-label" style={{ transition: 'opacity 0.3s' }}>
+        {phase === 'upload' ? '↑ Upload' : '↓ Download'}
+      </div>
+    </div>
+  );
+}
+
+function SpeedTestDrawer({ onClose }) {
+  const phases = [
+    { id: 'ping',     label: 'Latency',       detail: 'Round-trip time to 1.1.1.1',  unit: 'ms'   },
+    { id: 'download', label: 'Download speed', detail: 'Download via Cloudflare CDN', unit: 'Mbps' },
+    { id: 'upload',   label: 'Upload speed',   detail: 'Upload via Cloudflare CDN',   unit: 'Mbps' },
+  ];
+  const [current, setCurrent] = _useState(-1);
+  const [results, setResults]  = _useState({});
+  const [done, setDone]        = _useState(false);
+  const [running, setRunning]  = _useState(false);
+  const [apiError, setApiError]= _useState(null);
+  const [liveSpeed, setLiveSpeed] = _useState(null);
+  const [livePhase, setLivePhase] = _useState('download');
+  const pollRef = _useRef(null);
+
+  _useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      clearInterval(pollRef.current);
+    };
+  }, [onClose]);
+
+  const run = () => {
+    clearInterval(pollRef.current);
+    setRunning(true); setDone(false); setResults({});
+    setApiError(null); setLiveSpeed(null); setLivePhase('download');
+    setCurrent(0);
+
+    window.WG.apiCall('/api/speedtest/start', { method: 'POST' })
+      .then(({ test_id }) => {
+        pollRef.current = setInterval(() => {
+          window.WG.apiCall(`/api/speedtest/status/${test_id}`)
+            .then(s => {
+              const phaseMap = { ping: 0, download: 1, upload: 2 };
+              setCurrent(s.done ? -1 : (phaseMap[s.phase] ?? 0));
+
+              if (s.phase === 'download' || s.phase === 'upload') {
+                setLivePhase(s.phase);
+                if (s.live_mbps != null) setLiveSpeed(s.live_mbps);
+              }
+
+              // surface final results as each phase completes
+              setResults(prev => {
+                const next = { ...prev };
+                if (s.ping_ms   != null && !prev.ping)     next.ping     = { ok: s.ping_ok,     val: s.ping_ms     };
+                if (s.download_mbps != null && !prev.download) next.download = { ok: s.download_ok, val: s.download_mbps };
+                if (s.upload_mbps   != null && !prev.upload)   next.upload   = { ok: s.upload_ok,   val: s.upload_mbps   };
+                return next;
+              });
+
+              if (s.done) {
+                clearInterval(pollRef.current);
+                setRunning(false); setDone(true);
+              }
+            })
+            .catch(() => {
+              clearInterval(pollRef.current);
+              setApiError('Lost connection to server');
+              setRunning(false); setDone(true); setCurrent(-1);
+            });
+        }, 200);
+      })
+      .catch(e => {
+        setApiError(e.message || 'Failed to start speed test');
+        setRunning(false); setDone(true);
+      });
+  };
+
+  _useEffect(() => { run(); }, []);
+
+  const dlVal   = results.download?.val ?? null;
+  const ulVal   = results.upload?.val   ?? null;
+  const pingVal = results.ping?.val     ?? null;
+
+  // gauge shows live readings while running; settle on dl result when done
+  const gaugeVal   = running ? liveSpeed : dlVal;
+  const gaugePhase = running ? livePhase : 'download';
+
+  const subLine = running
+    ? (current === 0 ? 'Testing latency…' : current === 1 ? 'Measuring download…' : 'Measuring upload…')
+    : done
+      ? `Done · ↓ ${dlVal != null ? dlVal + ' Mbps' : '–'} · ↑ ${ulVal != null ? ulVal + ' Mbps' : '–'}`
+      : 'Idle';
+
+  return (
+    <>
+      <div className="drawer-scrim" onClick={onClose} />
+      <aside className="drawer" role="dialog" aria-label="Speed test">
+        <header className="drawer-head">
+          <div className="drawer-head-left">
+            <div className="peer-avatar" style={{ background: 'var(--accent-soft)' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M5.3 15A7 7 0 1 1 18.7 15" strokeLinecap="round"/>
+                <path d="M12 12 9.2 8.1" strokeLinecap="round"/>
+                <circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none"/>
+              </svg>
+            </div>
+            <div>
+              <h2 className="drawer-title">Speed test</h2>
+              <div className="drawer-sub">{subLine}</div>
+            </div>
+          </div>
+          <button className="icon-btn" onClick={onClose} aria-label="Close">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </header>
+
+        <div className="drawer-body">
+          <section className="drawer-section">
+            <div className="st-hero">
+              <SpeedGauge value={gaugeVal} phase={gaugePhase} />
+              <div className="st-metrics">
+                {[
+                  { id: 'ping',     label: 'Ping · ms',   val: pingVal, loading: current === 0,
+                    icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 12h20"/><path d="M12 2a10 10 0 0 1 10 10"/><path d="M12 22a10 10 0 0 1-10-10"/></svg> },
+                  { id: 'download', label: 'Down · Mbps', val: dlVal,   loading: current === 1,
+                    icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v14M5 14l7 7 7-7"/></svg> },
+                  { id: 'upload',   label: 'Up · Mbps',   val: ulVal,   loading: current === 2,
+                    icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 21V7M5 10l7-7 7 7"/></svg> },
+                ].map(m => (
+                  <div key={m.id} className={`st-metric ${results[m.id] ? (results[m.id].ok ? 'result-ok' : 'result-fail') : ''}`}>
+                    <div className="st-metric-icon">{m.icon}</div>
+                    <div className={`st-metric-val${m.val == null && !m.loading ? ' pending' : ''}`}>
+                      {m.loading ? '…' : m.val != null ? m.val : '—'}
+                    </div>
+                    <div className="st-metric-lbl">{m.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section className="drawer-section">
+            <div className="pc-steps">
+              <div className="pc-line" />
+              <div className="pc-line-fill" style={{ height: current === -1 && done ? '100%' : current === -1 ? '0%' : `${((current + 0.5) / phases.length) * 100}%` }} />
+              {phases.map((phase, i) => {
+                const res = results[phase.id];
+                const isActive = current === i;
+                const isDone = res !== undefined;
+                const st = isDone ? (res.ok ? 'ok' : 'fail') : null;
+                return (
+                  <div key={phase.id} className={`pc-step ${isActive ? 'active' : ''} ${isDone ? 'done' : ''} ${st ? `result-${st}` : ''}`}>
+                    <div className="pc-marker">
+                      {isDone ? (
+                        res.ok
+                          ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M5 12l5 5L20 7"/></svg>
+                          : <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                      ) : isActive ? <span className="pc-spinner" /> : <span className="pc-idle-dot" />}
+                    </div>
+                    <div className="pc-step-body">
+                      <div className="pc-step-title">{phase.label}</div>
+                      <div className="pc-step-detail">{phase.detail}{isActive && <span className="pc-typing">...</span>}</div>
+                      {isDone && (
+                        <div className={`pc-badge pc-badge-${res.ok ? 'ok' : 'fail'}`}>
+                          {res.ok && res.val != null ? `${res.val} ${phase.unit}` : res.ok ? 'OK' : 'FAILED'}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          {apiError && (
+            <section className="drawer-section">
+              <div className="pc-tip">
+                <div className="pc-tip-icon">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg>
+                </div>
+                <div className="pc-tip-body">
+                  <div className="pc-tip-title">Test failed</div>
+                  <div className="pc-tip-desc">{apiError}</div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          <section className="drawer-section">
+            <div className="action-row">
+              <button className="btn btn-primary" onClick={run} disabled={running}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 12a9 9 0 11-9-9c2.5 0 4.7 1 6.4 2.6L21 3v6h-6"/></svg>
+                {running ? 'Testing…' : 'Run again'}
+              </button>
+            </div>
+          </section>
+        </div>
+      </aside>
+    </>
+  );
+}
+
+Object.assign(window, { PeerDrawer, LogsPanel, DataBudgetDrawer, LogsDrawer, PortCheckDrawer, SpeedTestDrawer });

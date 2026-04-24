@@ -8,6 +8,7 @@ function App({ tweaks, setTweaks }) {
   const [selectedPeer, setSelectedPeer] = uS(null);
   const [dataDrawerOpen, setDataDrawerOpen] = uS(false);
   const [portCheckOpen, setPortCheckOpen] = uS(false);
+  const [speedTestOpen, setSpeedTestOpen] = uS(false);
   const [logsDrawerOpen, setLogsDrawerOpen] = uS(false);
   const [addOpen, setAddOpen] = uS(false);
   const [dataBudget, setDataBudget] = uS(50);
@@ -330,6 +331,10 @@ function App({ tweaks, setTweaks }) {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 10v6m-9-9h6m10 0h6"/></svg>
             Check ports
           </button>
+          <button className="btn btn-ghost" onClick={() => setSpeedTestOpen(true)}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M5.3 15A7 7 0 1 1 18.7 15" strokeLinecap="round"/><path d="M12 12 9.2 8.1" strokeLinecap="round"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>
+            Speed
+          </button>
           <button className="btn btn-primary" onClick={() => setAddOpen(true)}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a6 6 0 016-6h4a6 6 0 016 6v2M18 10v6M15 13h6"/></svg>
             Add peer
@@ -464,6 +469,7 @@ function App({ tweaks, setTweaks }) {
 
       {tweaks._tweaksOpen && <TweaksPanel tweaks={tweaks} setTweaks={setTweaks} />}
       {portCheckOpen && <PortCheckDrawer peers={peers} onClose={() => setPortCheckOpen(false)} />}
+      {speedTestOpen && <SpeedTestDrawer onClose={() => setSpeedTestOpen(false)} />}
       {logsDrawerOpen && <LogsDrawer alerts={alerts} onClose={() => setLogsDrawerOpen(false)} verbose={logsVerbose} setVerbose={setLogsVerbose} />}
       {addOpen && (
         <AddPeerModal
