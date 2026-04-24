@@ -958,6 +958,38 @@ body {
     gap: 10px;
   }
 
+  .kpi-foot {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+
+  .kpi-foot .mono {
+    min-width: 0;
+    white-space: nowrap;
+  }
+
+  .kpi-foot .mono:last-child {
+    text-align: right;
+  }
+
+  .pc-summary {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+
+  .pc-stat {
+    min-width: 0;
+    flex: 1 1 0;
+    justify-content: center;
+    text-align: center;
+  }
+
   .kpi-big {
     font-size: 36px;
   }
@@ -1225,6 +1257,29 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .stats-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .stat-cell {
+    padding: 9px 8px;
+    min-width: 0;
+  }
+
+  .stat-val {
+    font-size: 16px;
+    line-height: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .stat-label {
+    font-size: 8px;
+    letter-spacing: 0.08em;
+  }
+
   .kv {
     grid-template-columns: 1fr;
     row-gap: 4px;
@@ -1264,6 +1319,26 @@ body {
   .stepper,
   .select-input {
     width: 100%;
+  }
+
+  .setting-control {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .setting-row .setting-control {
+    justify-content: space-between !important;
+    flex-wrap: nowrap;
+  }
+
+  .setting-row .setting-control .stepper {
+    width: auto;
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  .setting-row .setting-control .toggle {
+    flex: 0 0 auto;
   }
 
   .action-row {
@@ -1330,10 +1405,26 @@ body {
     padding-right: 12px;
   }
 
-  .stats-grid,
   .log-stats,
   .st-metrics {
     grid-template-columns: 1fr;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .stat-cell {
+    padding: 8px 6px;
+  }
+
+  .stat-val {
+    font-size: 14px;
+  }
+
+  .stat-label {
+    font-size: 7.5px;
   }
 
   .range-pills {
