@@ -78,7 +78,7 @@
 [data-theme="dark"].accent-amber { --accent: oklch(75% 0.15 75); --accent-soft: oklch(30% 0.09 75); }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; }
+html, body { margin: 0; padding: 0; overscroll-behavior: none; }
 body {
   font-family: var(--sans);
   background: var(--bg);
@@ -707,7 +707,7 @@ body {
 }
 .drawer-title { font-family: var(--serif); font-size: 26px; margin: 0; color: var(--ink); line-height: 1; font-weight: 400; letter-spacing: -0.01em; }
 .drawer-sub { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
-.drawer-body { flex: 1; overflow-y: auto; padding: 20px 22px 40px; display: flex; flex-direction: column; gap: 24px; }
+.drawer-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 20px 22px 40px; display: flex; flex-direction: column; gap: 24px; }
 .drawer-section { }
 .section-head {
   display: flex; justify-content: space-between; align-items: center;
