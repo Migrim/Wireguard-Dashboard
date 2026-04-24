@@ -927,7 +927,10 @@ body {
   .log-expand-hint,
   .peer-device,
   .handshake-abs,
-  .peer-traffic-cell {
+  .peer-traffic-cell,
+  .peer-address-cell,
+  .peer-bytes-in-cell,
+  .peer-bytes-out-cell {
     display: none !important;
   }
 
@@ -1110,15 +1113,13 @@ body {
     grid-template-areas:
       "identity action"
       "status status"
-      "address address"
-      "bytesin bytesout"
       "handshake handshake";
-    gap: 8px;
-    padding: 12px;
+    gap: 7px;
+    padding: 10px;
     margin: 0;
     background: var(--card-raised);
     border: 1px solid var(--border);
-    border-radius: 14px;
+    border-radius: 12px;
     box-shadow: var(--shadow-sm);
   }
 
@@ -1136,24 +1137,15 @@ body {
     align-self: start;
   }
   .peer-status-cell { grid-area: status; }
-  .peer-address-cell { grid-area: address; }
-  .peer-bytes-in-cell { grid-area: bytesin; }
-  .peer-bytes-out-cell { grid-area: bytesout; }
   .peer-handshake-cell { grid-area: handshake; }
 
-  .peer-address-cell,
-  .peer-bytes-in-cell,
-  .peer-bytes-out-cell,
   .peer-handshake-cell {
     background: var(--bg-2);
     border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 9px 10px;
+    border-radius: 9px;
+    padding: 8px 9px;
   }
 
-  .peer-address-cell::before,
-  .peer-bytes-in-cell::before,
-  .peer-bytes-out-cell::before,
   .peer-handshake-cell::before {
     display: block;
     font-family: var(--mono);
@@ -1164,37 +1156,20 @@ body {
     margin-bottom: 3px;
   }
 
-  .peer-address-cell::before { content: "Address"; }
-  .peer-bytes-in-cell::before { content: "Inbound"; }
-  .peer-bytes-out-cell::before { content: "Outbound"; }
   .peer-handshake-cell::before { content: "Last Handshake"; }
 
   .peer-name {
-    font-size: 13px;
+    font-size: 12px;
     line-height: 1.2;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .peer-address-cell,
   .peer-handshake-cell,
-  .peer-bytes-in-cell,
-  .peer-bytes-out-cell {
+  .peer-status-cell {
     font-size: 11px;
     line-height: 1.35;
-  }
-
-  .peer-address-cell {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .peer-bytes-in-cell,
-  .peer-bytes-out-cell {
-    text-align: left;
-    justify-self: stretch !important;
   }
 
   .num,
@@ -1204,20 +1179,20 @@ body {
   }
 
   .peer-avatar-sm {
-    width: 32px;
-    height: 32px;
-    border-radius: 9px;
-    font-size: 10px;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    font-size: 9px;
   }
 
   .status-pill {
-    font-size: 10px;
-    padding: 3px 8px 3px 6px;
+    font-size: 9.5px;
+    padding: 2px 7px 2px 6px;
   }
 
   .row-action .icon-btn-sm {
-    width: 28px;
-    height: 28px;
+    width: 26px;
+    height: 26px;
   }
 
   .drawer {
@@ -1336,18 +1311,11 @@ body {
   }
 
   .data-row {
-    padding: 12px;
+    padding: 9px;
   }
 
   .peers-table {
-    padding: 0 10px;
-  }
-
-  .peer-address-cell,
-  .peer-bytes-in-cell,
-  .peer-bytes-out-cell,
-  .peer-handshake-cell {
-    padding: 8px 9px;
+    padding: 0 8px;
   }
 
   .drawer-body {
