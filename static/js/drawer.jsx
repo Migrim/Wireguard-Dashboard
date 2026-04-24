@@ -1327,14 +1327,17 @@ function SpeedTestDrawer({ onClose }) {
       const t0 = performance.now();
       let winT = t0;
       let winB = 0;
+      let sawProgress = false;
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         total += value.byteLength;
         winB += value.byteLength;
+        sawProgress = true;
         const now = performance.now();
         if (now - winT >= 250) {
+          setGaugeScanning(false);
           setGaugeLive(round1((winB * 8) / ((now - winT) * 1000)));
           winB = 0;
           winT = now;
@@ -1344,6 +1347,11 @@ function SpeedTestDrawer({ onClose }) {
       const elapsed = performance.now() - t0;
       if (elapsed > 0 && total > 0) {
         samples.push((total * 8) / (elapsed * 1000));
+      }
+
+      if (!sawProgress) {
+        setGaugeScanning(false);
+        setGaugeLive(round1((total * 8) / (elapsed * 1000)));
       }
     }
     const mbps = median(samples);
@@ -1387,8 +1395,8 @@ function SpeedTestDrawer({ onClose }) {
 
         setCurrent(1);
         setGaugePhase('download');
-        setGaugeScanning(false);
-        setGaugeLive(0);
+        setGaugeScanning(true);
+        setGaugeLive(null);
         setGaugeSettled(null);
         const dlMbps = await measureDownload();
         setGaugeLive(null);

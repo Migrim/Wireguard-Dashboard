@@ -1,7 +1,7 @@
 import os, subprocess, datetime, re, time, shlex, json, ipaddress, urllib.request, threading
 from typing import Tuple, Dict, Any, List
 import logging
-from flask import Flask, render_template, request, send_file, redirect, url_for, jsonify, abort, Response
+from flask import Flask, render_template, request, send_file, redirect, url_for, jsonify, abort, Response, stream_with_context
 
 APP_PORT=int(os.environ.get("APP_PORT","8088"))
 WG_IFACE=os.environ.get("WG_IFACE","wg0")
@@ -1588,6 +1588,7 @@ def api_speedtest_download():
         total = _SPEEDTEST_DEFAULT_BYTES
     total = max(1, min(_SPEEDTEST_MAX_BYTES, total))
 
+    @stream_with_context
     def generate():
         sent = 0
         while sent < total:
@@ -1596,9 +1597,13 @@ def api_speedtest_download():
             yield _SPEEDTEST_CHUNK[:n]
 
     resp = Response(generate(), mimetype="application/octet-stream")
+    resp.direct_passthrough = True
     resp.headers["Content-Length"] = str(total)
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     resp.headers["X-Speedtest-Bytes"] = str(total)
+    resp.headers["X-Accel-Buffering"] = "no"
+    resp.headers["Content-Encoding"] = "identity"
+    resp.headers["Connection"] = "keep-alive"
     return resp
 
 @app.route("/api/speedtest/upload", methods=["POST"])
