@@ -1436,6 +1436,181 @@ body {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+/* ============================================================
+   Login Screen
+============================================================ */
+.login-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  background-image:
+    radial-gradient(1200px 600px at 15% -10%, color-mix(in oklab, var(--accent) 8%, transparent), transparent 60%),
+    radial-gradient(900px 500px at 100% 10%, color-mix(in oklab, var(--accent-2) 6%, transparent), transparent 60%);
+  z-index: 9999;
+  animation: loginFadeIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.login-screen.exit {
+  animation: loginFadeOut 0.45s cubic-bezier(0.4, 0, 1, 1) forwards;
+  pointer-events: none;
+}
+
+.login-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 40px 40px 36px;
+  width: 100%;
+  max-width: 380px;
+  animation: loginSlideIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.login-card.exit {
+  animation: loginSlideOut 0.45s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+.login-card.shake {
+  animation: loginShake 0.46s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 32px;
+}
+.login-brand-mark {
+  width: 44px;
+  height: 44px;
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.login-brand-text { display: flex; flex-direction: column; gap: 2px; }
+.login-title {
+  font-family: var(--serif);
+  font-size: 24px;
+  line-height: 1.1;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+}
+.login-subtitle {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.login-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 7px;
+}
+.login-input {
+  width: 100%;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--ink);
+  padding: 10px 14px;
+  font-family: var(--sans);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.login-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent);
+}
+.login-input:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.login-error {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--danger);
+  padding: 8px 12px;
+  background: var(--danger-soft);
+  border: 1px solid color-mix(in oklab, var(--danger) 22%, transparent);
+  border-radius: var(--radius-sm);
+  animation: loginFadeIn 0.2s ease both;
+}
+
+.login-btn {
+  width: 100%;
+  justify-content: center;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  gap: 8px;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.login-btn:active { transform: scale(0.98); }
+
+.login-spinner-sm {
+  width: 14px;
+  height: 14px;
+  border: 2px solid color-mix(in oklab, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  display: inline-block;
+  animation: loginSpin 0.65s linear infinite;
+  flex-shrink: 0;
+}
+
+.login-checking-spinner {
+  width: 30px;
+  height: 30px;
+  border: 2.5px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: loginSpin 0.7s linear infinite;
+}
+
+@keyframes loginFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes loginFadeOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+@keyframes loginSlideIn {
+  from { opacity: 0; transform: translateY(22px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes loginSlideOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(-14px) scale(1.02); }
+}
+@keyframes loginShake {
+  0%, 100% { transform: translateX(0); }
+  15%  { transform: translateX(-9px); }
+  30%  { transform: translateX(8px); }
+  45%  { transform: translateX(-6px); }
+  60%  { transform: translateX(5px); }
+  75%  { transform: translateX(-3px); }
+  90%  { transform: translateX(2px); }
+}
+@keyframes loginSpin {
+  to { transform: rotate(360deg); }
+}
 </style>
 </head>
 <body data-base="{{ request.script_root or '' }}">
@@ -1467,7 +1642,7 @@ body {
       localStorage.setItem(THEME_KEY, tweaks.theme || 'light');
     }, [tweaks.theme]);
 
-    return <App tweaks={tweaks} setTweaks={setTweaks} />;
+    return <AuthWrapper tweaks={tweaks} setTweaks={setTweaks} />;
   }
 
   ReactDOM.createRoot(document.getElementById('root')).render(<Root />);

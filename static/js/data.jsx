@@ -16,6 +16,10 @@ async function apiCall(path, opt = {}) {
     });
     let data = null;
     try { data = await res.json(); } catch (_) {}
+    if (res.status === 401) {
+      if (typeof window.WG?.onUnauthorized === 'function') window.WG.onUnauthorized();
+      throw new Error('Unauthorized');
+    }
     if (!res.ok) {
       const msg = (data && (data.hint || data.error || data.out)) || ('HTTP ' + res.status);
       throw new Error(String(msg));

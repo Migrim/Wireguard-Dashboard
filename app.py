@@ -1,7 +1,8 @@
-import os, subprocess, datetime, re, time, shlex, json, ipaddress, urllib.request, threading
+import os, subprocess, datetime, re, time, shlex, json, ipaddress, urllib.request, threading, secrets as _secrets
 from typing import Tuple, Dict, Any, List
 import logging
-from flask import Flask, render_template, request, send_file, redirect, url_for, jsonify, abort, Response, stream_with_context
+from flask import Flask, render_template, request, send_file, redirect, url_for, jsonify, abort, Response, stream_with_context, session
+from werkzeug.security import check_password_hash
 
 APP_PORT=int(os.environ.get("APP_PORT","8088"))
 WG_IFACE=os.environ.get("WG_IFACE","wg0")
@@ -39,8 +40,11 @@ HANDSHAKE_FLUSH_SECONDS=30
 GEO_CACHE_SECONDS=6*60*60
 SUDO_BIN=os.environ.get("SUDO_BIN","/usr/bin/sudo")
 BASH_BIN=os.environ.get("BASH_BIN","/bin/bash")
+DASHBOARD_PASSWORD_HASH=os.environ.get("DASHBOARD_PASSWORD_HASH","")
 
 app=Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY") or _secrets.token_hex(32)
+app.permanent_session_lifetime = datetime.timedelta(days=7)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 app.logger.setLevel(logging.INFO)
 
@@ -78,6 +82,17 @@ def _sudo(args: List[str], input_data: bytes = None) -> Tuple[str,int]:
 @app.before_request
 def _log_request():
     app.logger.info("%s %s", request.method, request.path)
+
+_AUTH_OPEN = {"/", "/api/auth/check", "/api/auth/login", "/api/auth/logout"}
+
+@app.before_request
+def _require_auth():
+    if not DASHBOARD_PASSWORD_HASH:
+        return
+    if request.path in _AUTH_OPEN or request.path.startswith("/static/"):
+        return
+    if not session.get("authenticated"):
+        return jsonify({"error": "Unauthorized"}), 401
 
 @app.after_request
 def _log_response(res):
@@ -994,6 +1009,25 @@ def _ensure_peer_removed_from_conf(pubkey: str) -> None:
     data=_read_conf()
     data["Peers"]=[p for p in data.get("Peers",[]) if p.get("PublicKey","").strip()!=pubkey.strip()]
     _write_conf(data)
+
+@app.route("/api/auth/check")
+def auth_check():
+    return jsonify({"authenticated": bool(session.get("authenticated")) or not bool(DASHBOARD_PASSWORD_HASH)})
+
+@app.route("/api/auth/login", methods=["POST"])
+def auth_login():
+    data = request.get_json(silent=True) or {}
+    password = data.get("password", "")
+    if DASHBOARD_PASSWORD_HASH and check_password_hash(DASHBOARD_PASSWORD_HASH, password):
+        session.permanent = True
+        session["authenticated"] = True
+        return jsonify({"ok": True})
+    return jsonify({"error": "Invalid password"}), 401
+
+@app.route("/api/auth/logout", methods=["POST"])
+def auth_logout():
+    session.clear()
+    return jsonify({"ok": True})
 
 @app.route("/")
 def home():

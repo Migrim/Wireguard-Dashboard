@@ -17,6 +17,20 @@ APP_MODULE=${APP_MODULE:-app:app}
 REPO_URL=${REPO_URL:-https://github.com/Migrim/Wireguard-Dashboard.git}
 BRANCH=${BRANCH:-main}
 
+echo ""
+echo "┌──────────────────────────────────────────┐"
+echo "│     WireGuard Dashboard — Set Password   │"
+echo "└──────────────────────────────────────────┘"
+while true; do
+  read -rsp "  Enter dashboard password: " DASH_PASSWORD; echo ""
+  [ -z "$DASH_PASSWORD" ] && echo "  Password cannot be empty. Try again." && continue
+  read -rsp "  Confirm password: " DASH_PASSWORD2; echo ""
+  [ "$DASH_PASSWORD" = "$DASH_PASSWORD2" ] && break
+  echo "  Passwords do not match. Try again."
+done
+echo "  Password accepted."
+echo ""
+
 # figure out outgoing iface + public IP
 NET_IF=$(ip route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++){if($i=="dev"){print $(i+1); exit}}}')
 PUBLIC_IP=$(curl -s --max-time 5 https://api.ipify.org || curl -s --max-time 5 https://ifconfig.me/ip || hostname -I | awk '{print $1}')
@@ -103,6 +117,21 @@ python3 -m venv "${DASH_ENV}"
 "${DASH_ENV}/bin/pip" install --upgrade pip wheel
 "${DASH_ENV}/bin/pip" install flask gunicorn
 
+# Hash the dashboard password using werkzeug (just installed with flask)
+export _DASH_PWD="${DASH_PASSWORD}"
+DASH_PASSWORD_HASH=$("${DASH_ENV}/bin/python3" -c \
+  "import os; from werkzeug.security import generate_password_hash; print(generate_password_hash(os.environ['_DASH_PWD']))")
+unset _DASH_PWD
+unset DASH_PASSWORD
+unset DASH_PASSWORD2
+
+# Preserve SECRET_KEY across reinstalls so existing sessions survive
+if [ -f /etc/wg-dashboard.env ] && grep -q "^SECRET_KEY=" /etc/wg-dashboard.env; then
+  SECRET_KEY=$(grep "^SECRET_KEY=" /etc/wg-dashboard.env | cut -d= -f2-)
+else
+  SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+fi
+
 # 9) www-data
 id -u www-data >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin www-data
 # Grant journal read access so /api/logs works without sudo falling back on permission errors
@@ -120,6 +149,8 @@ WG_PORT=${WG_PORT}
 SERVER_ADDR=${SERVER_ADDR}
 SERVER_PUBLIC_IP=${PUBLIC_IP}
 FLASK_ENV=production
+SECRET_KEY=${SECRET_KEY}
+DASHBOARD_PASSWORD_HASH=${DASH_PASSWORD_HASH}
 ENV
 chmod 640 /etc/wg-dashboard.env
 

@@ -3,7 +3,7 @@
 const { useState: uS, useEffect: uE, useRef: uR, useMemo: uM, useCallback: uC } = React;
 const LOG_VERBOSE_KEY = 'WG_LOG_VERBOSE';
 
-function App({ tweaks, setTweaks }) {
+function App({ tweaks, setTweaks, onLogout }) {
   const [peers, setPeers] = uS([]);
   const [selectedPeer, setSelectedPeer] = uS(null);
   const [dataDrawerOpen, setDataDrawerOpen] = uS(false);
@@ -341,6 +341,11 @@ function App({ tweaks, setTweaks }) {
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>
             )}
           </button>
+          {onLogout && (
+            <button className="icon-btn" onClick={onLogout} aria-label="Sign out" title="Sign out">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+            </button>
+          )}
         </div>
       </header>
 
@@ -829,4 +834,118 @@ function TweaksPanel({ tweaks, setTweaks }) {
   );
 }
 
-Object.assign(window, { App, PeerRow, TweaksPanel, KPIServiceControl, KPIThroughput, KPIDataToday, KPIActiveSessions, AddPeerModal });
+// ============================================================
+// Login screen
+// ============================================================
+function LoginScreen({ onLogin, loading, error, exiting }) {
+  const [password, setPassword] = uS('');
+  const [shake, setShake] = uS(false);
+  const inputRef = uR(null);
+
+  uE(() => { inputRef.current?.focus(); }, []);
+
+  uE(() => {
+    if (!error) return;
+    setShake(true);
+    const id = setTimeout(() => setShake(false), 460);
+    return () => clearTimeout(id);
+  }, [error]);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!loading && password) onLogin(password);
+  };
+
+  return (
+    <div className={`login-screen${exiting ? ' exit' : ''}`}>
+      <div className={`login-card${shake ? ' shake' : ''}${exiting ? ' exit' : ''}`}>
+        <div className="login-brand">
+          <div className="login-brand-mark">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M12 2L3 7v6c0 5 4 9 9 10 5-1 9-5 9-10V7l-9-5z"/>
+              <path d="M9 12l2 2 4-4"/>
+            </svg>
+          </div>
+          <div className="login-brand-text">
+            <div className="login-title">WireGuard</div>
+            <div className="login-subtitle">Dashboard</div>
+          </div>
+        </div>
+        <form onSubmit={handleSubmit} className="login-form">
+          <div>
+            <label className="login-label">Password</label>
+            <input
+              ref={inputRef}
+              type="password"
+              className="login-input"
+              placeholder="Enter dashboard password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              autoComplete="current-password"
+              disabled={loading}
+            />
+          </div>
+          {error && <div className="login-error">{error}</div>}
+          <button type="submit" className="btn btn-primary login-btn" disabled={loading || !password}>
+            {loading && <span className="login-spinner-sm" />}
+            {loading ? 'Signing in…' : 'Sign in'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Auth wrapper — gates the full App behind a login screen
+// ============================================================
+function AuthWrapper({ tweaks, setTweaks }) {
+  const [authState, setAuthState] = uS('checking');
+  const [loginError, setLoginError] = uS('');
+  const [loginLoading, setLoginLoading] = uS(false);
+  const [exiting, setExiting] = uS(false);
+
+  uE(() => {
+    window.WG.onUnauthorized = () => { setExiting(false); setAuthState('login'); };
+    window.WG.apiCall('/api/auth/check')
+      .then(j => setAuthState(j.authenticated ? 'dashboard' : 'login'))
+      .catch(() => setAuthState('login'));
+    return () => { window.WG.onUnauthorized = null; };
+  }, []);
+
+  const handleLogin = async (password) => {
+    setLoginLoading(true);
+    setLoginError('');
+    try {
+      await window.WG.apiCall('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ password }),
+      });
+      setExiting(true);
+      setTimeout(() => { setExiting(false); setAuthState('dashboard'); }, 480);
+    } catch (_) {
+      setLoginError('Incorrect password');
+      setLoginLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try { await window.WG.apiCall('/api/auth/logout', { method: 'POST' }); } catch (_) {}
+    setLoginError('');
+    setAuthState('login');
+  };
+
+  if (authState === 'checking') {
+    return (
+      <div className="login-screen">
+        <div className="login-checking-spinner" />
+      </div>
+    );
+  }
+  if (authState === 'login') {
+    return <LoginScreen onLogin={handleLogin} loading={loginLoading} error={loginError} exiting={exiting} />;
+  }
+  return <App tweaks={tweaks} setTweaks={setTweaks} onLogout={handleLogout} />;
+}
+
+Object.assign(window, { App, AuthWrapper, LoginScreen, PeerRow, TweaksPanel, KPIServiceControl, KPIThroughput, KPIDataToday, KPIActiveSessions, AddPeerModal });
