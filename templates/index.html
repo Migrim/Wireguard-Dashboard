@@ -2,7 +2,7 @@
 <html lang="en" data-theme="light">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>WG-Quick · WireGuard Dashboard</title>
 <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='icons/favicon.ico') }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1610,6 +1610,29 @@ body {
 }
 @keyframes loginSpin {
   to { transform: rotate(360deg); }
+}
+
+@media (max-width: 480px) {
+  .login-screen {
+    align-items: flex-start;
+    background-image: none;
+  }
+  .login-card {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 56px 28px 32px;
+    max-width: 100%;
+    min-height: 100dvh;
+    animation: loginFadeIn 0.4s ease both;
+  }
+  .login-card.exit {
+    animation: loginFadeOut 0.35s ease forwards;
+  }
+  .login-brand { margin-bottom: 40px; }
+  .login-input { padding: 13px 16px; }
+  .login-btn   { padding: 13px 18px; font-size: 15px; }
 }
 </style>
 </head>
