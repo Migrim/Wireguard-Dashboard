@@ -927,10 +927,10 @@ body {
   .log-expand-hint,
   .peer-device,
   .handshake-abs,
-  .peer-traffic-cell,
   .peer-address-cell,
   .peer-bytes-in-cell,
-  .peer-bytes-out-cell {
+  .peer-bytes-out-cell,
+  .peer-handshake-cell {
     display: none !important;
   }
 
@@ -1112,8 +1112,7 @@ body {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
       "identity action"
-      "status status"
-      "handshake handshake";
+      "traffic traffic";
     gap: 7px;
     padding: 10px;
     margin: 0;
@@ -1136,17 +1135,17 @@ body {
     grid-area: action;
     align-self: start;
   }
-  .peer-status-cell { grid-area: status; }
-  .peer-handshake-cell { grid-area: handshake; }
+  .peer-status-cell { display: none !important; }
+  .peer-traffic-cell { grid-area: traffic; display: block !important; }
 
-  .peer-handshake-cell {
+  .peer-traffic-cell {
     background: var(--bg-2);
     border: 1px solid var(--border);
     border-radius: 9px;
     padding: 8px 9px;
   }
 
-  .peer-handshake-cell::before {
+  .peer-traffic-cell::before {
     display: block;
     font-family: var(--mono);
     font-size: 9px;
@@ -1156,7 +1155,7 @@ body {
     margin-bottom: 3px;
   }
 
-  .peer-handshake-cell::before { content: "Last Handshake"; }
+  .peer-traffic-cell::before { content: "Traffic"; }
 
   .peer-name {
     font-size: 12px;
@@ -1166,10 +1165,15 @@ body {
     white-space: nowrap;
   }
 
-  .peer-handshake-cell,
-  .peer-status-cell {
+  .peer-traffic-cell {
     font-size: 11px;
     line-height: 1.35;
+  }
+
+  .peer-traffic-cell svg {
+    width: 100% !important;
+    height: 28px !important;
+    display: block;
   }
 
   .num,
