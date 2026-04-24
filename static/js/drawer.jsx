@@ -1159,30 +1159,30 @@ function PortCheckDrawer({ peers, onClose }) {
 // ============================================================
 // SpeedTestDrawer — server network speed test
 // ============================================================
-function SpeedGauge({ value, phase, scanning }) {
+function SpeedGauge({ live, settled, phase }) {
   const size = 180, cx = size / 2, cy = 100, r = 70;
   const startDeg = 225, sweepDeg = 270, maxVal = 500;
 
-  // Animated display fraction: sweeps while scanning, snaps to real value when done
+  // sweep only when we have no data at all
+  const scanning = live == null && settled == null;
   const [dispFraction, setDispFraction] = _useState(0);
   const rafRef = _useRef(null);
 
   _useEffect(() => {
+    cancelAnimationFrame(rafRef.current);
     if (scanning) {
       let t = 0;
       const tick = () => {
         t += 0.03;
-        // Oscillate between 15 % and 65 % of scale — feels like a real measurement sweep
         setDispFraction(0.4 + 0.25 * Math.sin(t));
         rafRef.current = requestAnimationFrame(tick);
       };
       rafRef.current = requestAnimationFrame(tick);
-      return () => cancelAnimationFrame(rafRef.current);
     } else {
-      cancelAnimationFrame(rafRef.current);
-      setDispFraction(Math.min((value ?? 0) / maxVal, 1));
+      setDispFraction(Math.min((live ?? settled ?? 0) / maxVal, 1));
     }
-  }, [scanning, value]);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [scanning, live, settled]);
 
   const toXY = (deg, radius) => {
     const rad = (deg - 90) * Math.PI / 180;
@@ -1193,11 +1193,14 @@ function SpeedGauge({ value, phase, scanning }) {
     return `M ${s.x} ${s.y} A ${radius} ${radius} 0 ${sweep > 180 ? 1 : 0} 1 ${e.x} ${e.y}`;
   };
 
-  const arcLen = r * sweepDeg * Math.PI / 180;
+  const arcLen   = r * sweepDeg * Math.PI / 180;
   const needleAngle = startDeg + sweepDeg * dispFraction;
-  const needleLen = r - 14;
+  const needleLen   = r - 14;
   const color = phase === 'upload' ? 'var(--accent-2)' : 'var(--accent)';
-  const hasValue = value != null && value > 0;
+  // live updates: short transition so numbers feel fluid; settle: spring snap
+  const trans = scanning ? 'none' : live != null ? '0.22s ease-out' : '0.6s cubic-bezier(0.22,1,0.36,1)';
+
+  const displayNum = scanning ? '…' : (live ?? settled ?? '—');
 
   return (
     <div className="st-gauge-wrap">
@@ -1207,22 +1210,17 @@ function SpeedGauge({ value, phase, scanning }) {
           strokeWidth="7" strokeLinecap="round"
           strokeDasharray={arcLen} strokeDashoffset={arcLen * (1 - dispFraction)}
           style={{
-            transition: scanning ? 'none' : 'stroke-dashoffset 0.6s cubic-bezier(0.22,1,0.36,1)',
-            filter: dispFraction > 0.02 ? `drop-shadow(0 0 6px color-mix(in oklab, ${color} 55%, transparent))` : 'none',
+            transition: `stroke-dashoffset ${trans}, stroke 0.4s ease`,
+            filter: dispFraction > 0.02 ? `drop-shadow(0 0 6px color-mix(in oklab,${color} 55%,transparent))` : 'none',
           }} />
-        <g style={{
-          transform: `translate(${cx}px,${cy}px) rotate(${needleAngle}deg)`,
-          transition: scanning ? 'none' : 'transform 0.6s cubic-bezier(0.22,1,0.36,1)',
-        }}>
+        <g style={{ transform: `translate(${cx}px,${cy}px) rotate(${needleAngle}deg)`, transition: `transform ${trans}` }}>
           <line x1="0" y1="0" x2="0" y2={-needleLen} stroke={color} strokeWidth="2.5" strokeLinecap="round"
             style={{ transition: 'stroke 0.4s ease' }} />
         </g>
         <circle cx={cx} cy={cy} r="5" fill={color} style={{ transition: 'fill 0.4s ease' }} />
         <circle cx={cx} cy={cy} r="2.5" fill="var(--bg)" />
       </svg>
-      <div className={`st-gauge-num${scanning ? ' loading' : ''}`}>
-        {scanning ? '…' : hasValue ? value : '—'}
-      </div>
+      <div className={`st-gauge-num${scanning ? ' loading' : ''}`}>{displayNum}</div>
       <div className="st-gauge-unit">Mbps</div>
       <div className="st-gauge-label">{phase === 'upload' ? '↑ Upload' : '↓ Download'}</div>
     </div>
@@ -1235,40 +1233,65 @@ function SpeedTestDrawer({ onClose }) {
     { id: 'download', label: 'Download speed', detail: 'Download via Cloudflare CDN', unit: 'Mbps' },
     { id: 'upload',   label: 'Upload speed',   detail: 'Upload via Cloudflare CDN',   unit: 'Mbps' },
   ];
-  const [current, setCurrent] = _useState(-1);
-  const [results, setResults]  = _useState({});
-  const [done, setDone]        = _useState(false);
-  const [running, setRunning]  = _useState(false);
-  const [apiError, setApiError]= _useState(null);
-  const [gaugePhase, setGaugePhase] = _useState('download');
+  const [current,   setCurrent]   = _useState(-1);
+  const [results,   setResults]   = _useState({});
+  const [done,      setDone]      = _useState(false);
+  const [running,   setRunning]   = _useState(false);
+  const [apiError,  setApiError]  = _useState(null);
+  const [liveSpeed, setLiveSpeed] = _useState(null);
+  const [gaugePhase,setGaugePhase]= _useState('download');
+  const pollRef  = _useRef(null);
+  const retryRef = _useRef(0);
 
   _useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => { window.removeEventListener('keydown', onKey); clearInterval(pollRef.current); };
   }, [onClose]);
 
-  const run = async () => {
+  const run = () => {
+    clearInterval(pollRef.current);
+    retryRef.current = 0;
     setRunning(true); setDone(false); setResults({});
-    setApiError(null); setGaugePhase('download');
+    setApiError(null); setLiveSpeed(null); setGaugePhase('download'); setCurrent(0);
 
-    try {
-      setCurrent(0);
-      const pingRes = await window.WG.apiCall('/api/speedtest/ping');
-      setResults(prev => ({ ...prev, ping: { ok: pingRes.ok, val: pingRes.ping_ms } }));
+    window.WG.apiCall('/api/speedtest/start', { method: 'POST' })
+      .then(({ test_id }) => {
+        pollRef.current = setInterval(() => {
+          window.WG.apiCall('/api/speedtest/status/' + test_id)
+            .then(s => {
+              retryRef.current = 0;
+              const idx = { ping: 0, download: 1, upload: 2 };
+              setCurrent(s.done ? -1 : (idx[s.phase] ?? 0));
 
-      setCurrent(1); setGaugePhase('download');
-      const dlRes = await window.WG.apiCall('/api/speedtest/download');
-      setResults(prev => ({ ...prev, download: { ok: dlRes.ok, val: dlRes.mbps } }));
+              if (s.phase === 'download' || s.phase === 'upload') {
+                setGaugePhase(s.phase);
+                setLiveSpeed(s.live_mbps);   // null between chunks — gauge sweeps briefly
+              }
 
-      setCurrent(2); setGaugePhase('upload');
-      const ulRes = await window.WG.apiCall('/api/speedtest/upload');
-      setResults(prev => ({ ...prev, upload: { ok: ulRes.ok, val: ulRes.mbps } }));
-    } catch (e) {
-      setApiError(e.message || 'Speed test failed');
-    }
+              setResults(prev => {
+                const n = { ...prev };
+                if (s.ping_ms       != null && !prev.ping)     n.ping     = { ok: s.ping_ok,     val: s.ping_ms       };
+                if (s.download_mbps != null && !prev.download) n.download = { ok: s.download_ok, val: s.download_mbps };
+                if (s.upload_mbps   != null && !prev.upload)   n.upload   = { ok: s.upload_ok,   val: s.upload_mbps   };
+                return n;
+              });
 
-    setRunning(false); setDone(true); setCurrent(-1);
+              if (s.done) {
+                clearInterval(pollRef.current);
+                setLiveSpeed(null); setRunning(false); setDone(true);
+              }
+            })
+            .catch(() => {
+              if (++retryRef.current > 4) {
+                clearInterval(pollRef.current);
+                setApiError('Lost connection — try again');
+                setRunning(false); setDone(true); setCurrent(-1);
+              }
+            });
+        }, 250);
+      })
+      .catch(e => { setApiError(e.message || 'Could not start test'); setRunning(false); setDone(true); });
   };
 
   _useEffect(() => { run(); }, []);
@@ -1277,9 +1300,9 @@ function SpeedTestDrawer({ onClose }) {
   const ulVal   = results.upload?.val   ?? null;
   const pingVal = results.ping?.val     ?? null;
 
-  // gauge shows the settled result once available; sweeps while current phase is active
-  const gaugeVal     = gaugePhase === 'upload' ? ulVal : dlVal;
-  const gaugeScanning = current === 1 || current === 2;
+  // live: real server reading during active phase; settled: final value to snap to when done
+  const gaugeLive    = running && (gaugePhase === 'download' || gaugePhase === 'upload') ? liveSpeed : null;
+  const gaugeSettled = running ? null : dlVal;   // show dl result once done; upload shown in badge
 
   const subLine = running
     ? (current === 0 ? 'Testing latency…' : current === 1 ? 'Measuring download…' : 'Measuring upload…')
@@ -1313,7 +1336,7 @@ function SpeedTestDrawer({ onClose }) {
         <div className="drawer-body">
           <section className="drawer-section">
             <div className="st-hero">
-              <SpeedGauge value={gaugeVal} phase={gaugePhase} scanning={gaugeScanning} />
+              <SpeedGauge live={gaugeLive} settled={gaugeSettled} phase={gaugePhase} />
               <div className="st-metrics">
                 {[
                   { id: 'ping',     label: 'Ping · ms',   val: pingVal, loading: current === 0,
