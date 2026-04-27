@@ -411,7 +411,9 @@ function App({ tweaks, setTweaks, onLogout }) {
           <ThroughputChart dataIn={chartTraffic.rx} dataOut={chartTraffic.tx} width={900} height={240} range={trafficRange} />
         </div>
 
-        <LogsPanel logs={logs} alerts={alerts} onExpand={() => setLogsDrawerOpen(true)} onDismiss={dismissAlert} />
+        <div className="logs-card-shell">
+          <LogsPanel logs={logs} alerts={alerts} onExpand={() => setLogsDrawerOpen(true)} onDismiss={dismissAlert} />
+        </div>
       </section>
 
       <section className="peers-card">
