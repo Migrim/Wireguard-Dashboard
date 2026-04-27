@@ -610,7 +610,7 @@ body {
 }
 .peers-row {
   display: grid;
-  grid-template-columns: 110px 1.4fr 1fr 130px 0.8fr 0.8fr 1.3fr 40px;
+  grid-template-columns: 24px 1.4fr 1fr 130px 0.8fr 0.8fr 1.3fr 40px;
   gap: 14px;
   align-items: center;
   padding: 10px 20px;
@@ -643,8 +643,7 @@ body {
   width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
 }
 .status-connected .status-dot {
-  box-shadow: 0 0 0 0 color-mix(in oklab, var(--success) 60%, transparent);
-  animation: pulse 1.6s infinite;
+  box-shadow: 0 0 4px 1px color-mix(in oklab, var(--success) 40%, transparent);
 }
 
 .peer-name-cell { display: flex; align-items: center; gap: 10px; }
@@ -804,13 +803,13 @@ body {
 @media (max-width: 1200px) {
   .kpi-row { grid-template-columns: repeat(2, 1fr); }
   .main-grid { grid-template-columns: 1fr; }
-  .peers-row { grid-template-columns: 90px 1.2fr 0.9fr 100px 0.7fr 0.7fr 1fr 40px; gap: 10px; font-size: 12px; }
+  .peers-row { grid-template-columns: 24px 1.2fr 0.9fr 100px 0.7fr 0.7fr 1fr 40px; gap: 10px; font-size: 12px; }
 }
 @media (max-width: 720px) {
   .topbar { grid-template-columns: auto auto; }
   .topbar-center { grid-column: 1 / -1; order: 3; }
   .kpi-row { grid-template-columns: 1fr; }
-  .peers-row { grid-template-columns: 80px 1fr 70px 40px; gap: 8px; }
+  .peers-row { grid-template-columns: 20px 1fr 70px 40px; gap: 8px; }
   .peers-row > div:nth-child(3), .peers-row > div:nth-child(4), .peers-row > div:nth-child(7) { display: none; }
   .drawer { width: 100vw; }
 }

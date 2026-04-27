@@ -789,7 +789,6 @@ function LogsDrawer({ alerts, onClose, verbose, setVerbose, onDismiss }) {
             <div>
               <h2 className="drawer-title">Logs</h2>
               <div className="drawer-sub">
-                <span className="pulse-dot" /> wg0 · {loading ? 'loading…' : `${filtered.length} of ${localLogs.length} lines`}
                 {verbose && <span style={{ marginLeft: 6, color: 'var(--accent)', fontFamily: 'var(--mono)', fontSize: 10 }}>VERBOSE</span>}
               </div>
             </div>
