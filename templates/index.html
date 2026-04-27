@@ -508,7 +508,7 @@ body {
 .range-pill.active { background: var(--card); color: var(--ink); box-shadow: var(--shadow-sm); }
 
 /* LOGS PANEL */
-.logs-card { display: flex; flex-direction: column; overflow: hidden; min-height: 350px; max-height: 350px; }
+.logs-card { display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
 .logs-card-clickable { cursor: pointer; transition: border-color 0.15s; }
 .logs-card-clickable:hover { border-color: var(--border-strong); }
 .logs-card-clickable:hover .log-expand-hint { color: var(--accent); }
@@ -547,6 +547,7 @@ body {
 .log-toolbar { display: flex; gap: 10px; align-items: center; }
 .logs-stream {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 4px 16px 14px;
   font-family: var(--mono);
