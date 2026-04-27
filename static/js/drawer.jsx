@@ -428,7 +428,7 @@ function PeerDrawer({ peer, onClose, sparklines, throughputBuffers, onRevoke, on
 // ============================================================
 // LogsPanel — live streaming logs with alerts callout
 // ============================================================
-function LogsPanel({ logs, alerts, onExpand }) {
+function LogsPanel({ logs, alerts, onExpand, onDismiss }) {
   const scrollRef = _useRef(null);
 
   _useEffect(() => {
@@ -454,6 +454,11 @@ function LogsPanel({ logs, alerts, onExpand }) {
                 <div className="alert-title">{a.title}</div>
                 <div className="alert-desc">{a.desc}</div>
               </div>
+              {onDismiss && (
+                <button className="alert-dismiss" onClick={e => { e.stopPropagation(); onDismiss(a.key); }} aria-label="Dismiss">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -673,7 +678,7 @@ function DataBudgetDrawer({ total, budget, setBudget, alerts, setAlerts, resetTi
 // ============================================================
 // LogsDrawer — full log history, own polling, verbose, retention, download
 // ============================================================
-function LogsDrawer({ alerts, onClose, verbose, setVerbose }) {
+function LogsDrawer({ alerts, onClose, verbose, setVerbose, onDismiss }) {
   const [levelFilter, setLevelFilter] = _useState('all');
   const [search, setSearch] = _useState('');
   const [autoScroll, setAutoScroll] = _useState(true);
@@ -808,6 +813,11 @@ function LogsDrawer({ alerts, onClose, verbose, setVerbose }) {
                       <div className="alert-title">{a.title}</div>
                       <div className="alert-desc">{a.desc}</div>
                     </div>
+                    {onDismiss && (
+                      <button className="alert-dismiss" onClick={() => onDismiss(a.key)} aria-label="Dismiss">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>

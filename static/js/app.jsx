@@ -25,6 +25,7 @@ function App({ tweaks, setTweaks, onLogout }) {
 
   const [trafficRange, setTrafficRange] = uS('1m');
   const [trafficHistory, setTrafficHistory] = uS([]);
+  const [dismissedAlerts, setDismissedAlerts] = uS(new Set());
 
   // Per-peer sparklines (values = byte delta per poll cycle)
   const [sparks, setSparks] = uS({});
@@ -281,12 +282,17 @@ function App({ tweaks, setTweaks, onLogout }) {
   const offlineLong = peers.filter(p => p.status === 'offline' && p.lastHs && (Date.now() - p.lastHs) > 24 * 3600_000);
   const neverConnected = peers.filter(p => p.status === 'offline' && !p.lastHs);
 
+  const dismissAlert = uC((key) => setDismissedAlerts(s => { const n = new Set(s); n.add(key); return n; }), []);
+
   const alerts = [];
   if (offlineLong.length > 0 || neverConnected.length > 0) {
     const parts = [];
     if (offlineLong.length) parts.push(offlineLong.map(p => `${p.name}: offline >24h`).join(' · '));
     if (neverConnected.length) parts.push(neverConnected.map(p => `${p.name}: never connected`).join(' · '));
-    alerts.push({ level: 'warn', title: `${offlineLong.length + neverConnected.length} peer(s) need attention`, desc: parts.join(' · ') });
+    const desc = parts.join(' · ');
+    if (!dismissedAlerts.has(desc)) {
+      alerts.push({ level: 'warn', title: `${offlineLong.length + neverConnected.length} peer(s) need attention`, desc, key: desc });
+    }
   }
 
   const filtered = peers.filter(p => {
@@ -397,7 +403,7 @@ function App({ tweaks, setTweaks, onLogout }) {
           <ThroughputChart dataIn={chartTraffic.rx} dataOut={chartTraffic.tx} width={900} height={240} range={trafficRange} />
         </div>
 
-        <LogsPanel logs={logs} alerts={alerts} onExpand={() => setLogsDrawerOpen(true)} />
+        <LogsPanel logs={logs} alerts={alerts} onExpand={() => setLogsDrawerOpen(true)} onDismiss={dismissAlert} />
       </section>
 
       <section className="peers-card">
@@ -469,7 +475,7 @@ function App({ tweaks, setTweaks, onLogout }) {
 
       {tweaks._tweaksOpen && <TweaksPanel tweaks={tweaks} setTweaks={setTweaks} />}
       {portCheckOpen && <PortCheckDrawer peers={peers} onClose={() => setPortCheckOpen(false)} />}
-      {logsDrawerOpen && <LogsDrawer alerts={alerts} onClose={() => setLogsDrawerOpen(false)} verbose={logsVerbose} setVerbose={setLogsVerbose} />}
+      {logsDrawerOpen && <LogsDrawer alerts={alerts} onClose={() => setLogsDrawerOpen(false)} verbose={logsVerbose} setVerbose={setLogsVerbose} onDismiss={dismissAlert} />}
       {addOpen && (
         <AddPeerModal
           onClose={() => setAddOpen(false)}
