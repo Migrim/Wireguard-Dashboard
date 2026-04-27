@@ -2,6 +2,7 @@
 
 const { useState: uS, useEffect: uE, useRef: uR, useMemo: uM, useCallback: uC } = React;
 const LOG_VERBOSE_KEY = 'WG_LOG_VERBOSE';
+const DISMISSED_ALERTS_KEY = 'WG_DISMISSED_ALERTS';
 
 function App({ tweaks, setTweaks, onLogout }) {
   const [peers, setPeers] = uS([]);
@@ -25,7 +26,10 @@ function App({ tweaks, setTweaks, onLogout }) {
 
   const [trafficRange, setTrafficRange] = uS('1m');
   const [trafficHistory, setTrafficHistory] = uS([]);
-  const [dismissedAlerts, setDismissedAlerts] = uS(new Set());
+  const [dismissedAlerts, setDismissedAlerts] = uS(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(DISMISSED_ALERTS_KEY) || '[]')); }
+    catch { return new Set(); }
+  });
 
   // Per-peer sparklines (values = byte delta per poll cycle)
   const [sparks, setSparks] = uS({});
@@ -40,6 +44,10 @@ function App({ tweaks, setTweaks, onLogout }) {
   uE(() => {
     localStorage.setItem(LOG_VERBOSE_KEY, logsVerbose ? '1' : '0');
   }, [logsVerbose]);
+
+  uE(() => {
+    localStorage.setItem(DISMISSED_ALERTS_KEY, JSON.stringify([...dismissedAlerts]));
+  }, [dismissedAlerts]);
 
   const connectedPeerNames = uM(
     () => peers.filter(p => p.status === 'connected').map(p => p.name).sort(),
@@ -642,9 +650,8 @@ function PeerRow({ peer, spark, onClick }) {
   return (
     <div className={`peers-row data-row ${!isOnline ? 'row-offline' : ''}`} onClick={onClick}>
       <div className="peer-status-cell">
-        <span className={`status-pill status-${peer.status}`}>
+        <span className={`status-dot-wrap status-${peer.status}`}>
           <span className="status-dot" style={{ background: statusColor }} />
-          {peer.status}
         </span>
       </div>
       <div className="peer-name-cell">

@@ -77,7 +77,10 @@
 .accent-amber { --accent: oklch(70% 0.15 75); --accent-soft: oklch(92% 0.06 75); }
 [data-theme="dark"].accent-amber { --accent: oklch(75% 0.15 75); --accent-soft: oklch(30% 0.09 75); }
 
-* { box-sizing: border-box; }
+* { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+*::-webkit-scrollbar { width: 3px; height: 3px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 html, body { margin: 0; padding: 0; overscroll-behavior: none; }
 body {
   font-family: var(--sans);
@@ -553,8 +556,6 @@ body {
   scroll-behavior: smooth;
 }
 .logs-stream-tall.logs-stream { max-height: 320px; padding: 10px 14px; }
-.logs-stream::-webkit-scrollbar { width: 6px; }
-.logs-stream::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 .log-line {
   display: grid;
   grid-template-columns: 60px 48px 1fr;
@@ -634,19 +635,12 @@ body {
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 .peers-row > div.num { justify-self: end; }
 
-.status-pill {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 3px 9px 3px 7px;
-  font-size: 11px;
-  border-radius: 99px;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  color: var(--ink-2);
-  text-transform: capitalize;
+.status-dot-wrap {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px;
 }
-.status-connected { background: var(--success-soft); border-color: color-mix(in oklab, var(--success) 25%, var(--border)); color: var(--success); }
 .status-dot {
-  width: 6px; height: 6px; border-radius: 50%;
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
 }
 .status-connected .status-dot {
   box-shadow: 0 0 0 0 color-mix(in oklab, var(--success) 60%, transparent);
@@ -1216,11 +1210,6 @@ body {
     height: 30px;
     border-radius: 8px;
     font-size: 9px;
-  }
-
-  .status-pill {
-    font-size: 9.5px;
-    padding: 2px 7px 2px 6px;
   }
 
   .row-action .icon-btn-sm {
