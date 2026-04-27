@@ -16,7 +16,7 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
     for (let i = 0; i < n; i++) m = Math.max(m, dataIn[i] || 0, dataOut[i] || 0);
 
     // Work in KB/s or MB/s to get nice round labels
-    const raw = Math.max(m, 1);
+    const raw = Math.max(m, 10 * 1024); // at least 10 KB/s so the idle chart looks sane
     const unitBytes = raw < 1024 * 1024 ? 1024 : 1024 * 1024;
     const unitName = unitBytes === 1024 ? 'KB/s' : 'MB/s';
     const rawInUnit = raw / unitBytes;

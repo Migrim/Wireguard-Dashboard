@@ -565,7 +565,8 @@ body {
   from { opacity: 0; transform: translateX(-4px); }
   to { opacity: 1; transform: translateX(0); }
 }
-.log-time { color: var(--muted-2); display: none; }
+.log-time { color: var(--muted-2); font-variant-numeric: tabular-nums; }
+.log-line.no-ts { grid-template-columns: 48px 1fr; }
 .log-level {
   text-transform: uppercase;
   font-size: 9.5px;

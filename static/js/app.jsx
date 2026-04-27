@@ -547,7 +547,6 @@ function KPIThroughput({ currentRx, currentTx, dataIn, dataOut }) {
     <div className="kpi-tile">
       <div className="kpi-head">
         <span className="section-label">THROUGHPUT</span>
-        <span className="kpi-badge">live</span>
       </div>
       <div className="kpi-body">
         <div className="kpi-number">
