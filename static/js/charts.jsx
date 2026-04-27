@@ -7,15 +7,40 @@ const { useState, useEffect, useRef, useMemo } = React;
 // ============================================================
 function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 'var(--accent)', accent2 = 'var(--accent-2)', range = '2m' }) {
   const n = Math.max(dataIn.length, dataOut.length);
-  const pad = { l: 52, r: 16, t: 18, b: 28 };
+  const pad = { l: 70, r: 16, t: 18, b: 28 };
   const w = width - pad.l - pad.r;
   const h = height - pad.t - pad.b;
 
-  const maxVal = useMemo(() => {
+  const { maxVal, ticks } = useMemo(() => {
     let m = 0;
     for (let i = 0; i < n; i++) m = Math.max(m, dataIn[i] || 0, dataOut[i] || 0);
-    return Math.max(m * 1.15, 100_000);
-  }, [dataIn, dataOut, n]);
+
+    // Work in KB/s or MB/s to get nice round labels
+    const raw = Math.max(m, 1);
+    const unitBytes = raw < 1024 * 1024 ? 1024 : 1024 * 1024;
+    const unitName = unitBytes === 1024 ? 'KB/s' : 'MB/s';
+    const rawInUnit = raw / unitBytes;
+
+    // Nice step: target 4 intervals
+    const roughStep = rawInUnit / 4;
+    const mag = Math.pow(10, Math.floor(Math.log10(Math.max(roughStep, 0.001))));
+    const norm = roughStep / mag;
+    const niceStep = norm < 1.5 ? mag : norm < 3 ? 2 * mag : norm < 7 ? 5 * mag : 10 * mag;
+
+    const niceMaxInUnit = Math.ceil(rawInUnit / niceStep) * niceStep;
+    const niceMax = niceMaxInUnit * unitBytes;
+    const hInner = height - pad.t - pad.b;
+
+    const ticksArr = [];
+    for (let s = 0; s <= niceMaxInUnit + niceStep * 0.01; s += niceStep) {
+      const v = s * unitBytes;
+      const y = pad.t + hInner - (v / niceMax) * hInner;
+      const label = s === 0 ? '0 B/s' : `${Number(s.toFixed(4))} ${unitName}`;
+      ticksArr.push({ v, y, label });
+    }
+
+    return { maxVal: niceMax, ticks: ticksArr };
+  }, [dataIn, dataOut, n, height]);
 
   const xAt = (i) => pad.l + (n <= 1 ? w : (i / (n - 1)) * w);
   const yAt = (v) => pad.t + h - (v / maxVal) * h;
@@ -28,11 +53,6 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
     return d;
   };
   const areaFor = (data) => pathFor(data) + `L${xAt(n - 1).toFixed(1)},${(pad.t + h).toFixed(1)} L${xAt(0).toFixed(1)},${(pad.t + h).toFixed(1)} Z`;
-
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => {
-    const v = maxVal * f;
-    return { v, y: yAt(v), label: window.WG.formatRate(v) };
-  });
 
   const lastIn = dataIn[n - 1] || 0;
   const lastOut = dataOut[n - 1] || 0;
