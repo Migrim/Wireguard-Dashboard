@@ -8,6 +8,7 @@ function App({ tweaks, setTweaks, onLogout }) {
   const [peers, setPeers] = uS([]);
   const [selectedPeer, setSelectedPeer] = uS(null);
   const [dataDrawerOpen, setDataDrawerOpen] = uS(false);
+  const [trafficModeOpen, setTrafficModeOpen] = uS(false);
   const [portCheckOpen, setPortCheckOpen] = uS(false);
   const [logsDrawerOpen, setLogsDrawerOpen] = uS(false);
   const [addOpen, setAddOpen] = uS(false);
@@ -37,6 +38,9 @@ function App({ tweaks, setTweaks, onLogout }) {
 
   // Per-peer drawer throughput buffer
   const [peerThr, setPeerThr] = uS({});
+
+  // Per-peer geo: { [name]: { lat, lng, country } } — filled from /diag responses
+  const [peerGeo, setPeerGeo] = uS({});
 
   // Previous cumulative bytes per peer — used to compute sparkline deltas
   const prevBytesRef = uR({});
@@ -174,6 +178,15 @@ function App({ tweaks, setTweaks, onLogout }) {
           .filter(v => Number.isFinite(v) && v >= 0);
         const avg = values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
         setAvgPingHistory(prev => [...prev.slice(1), avg]);
+        const newGeo = {};
+        results.forEach(r => {
+          if (!r || !r.ok || !r.name) return;
+          const loc = r.location || {};
+          if (loc.lat != null && loc.lng != null) {
+            newGeo[r.name] = { lat: loc.lat, lng: loc.lng, country: loc.label || loc.country || '' };
+          }
+        });
+        if (Object.keys(newGeo).length > 0) setPeerGeo(prev => ({ ...prev, ...newGeo }));
       } catch (_) {}
     };
     pollAveragePing();
@@ -340,6 +353,10 @@ function App({ tweaks, setTweaks, onLogout }) {
           </div>
         </div>
         <div className="topbar-right">
+          <button className="btn btn-ghost" onClick={() => setTrafficModeOpen(true)}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9"/><path d="M2 12h20M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>
+            Traffic
+          </button>
           <button className="btn btn-ghost" onClick={() => setPortCheckOpen(true)}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 10v6m-9-9h6m10 0h6"/></svg>
             Check ports
@@ -483,6 +500,13 @@ function App({ tweaks, setTweaks, onLogout }) {
         />
       )}
 
+      {trafficModeOpen && (
+        <TrafficMode
+          peers={peers.map(p => ({ ...p, ...(peerGeo[p.name] || {}) }))}
+          theme={tweaks.theme}
+          onClose={() => setTrafficModeOpen(false)}
+        />
+      )}
       {tweaks._tweaksOpen && <TweaksPanel tweaks={tweaks} setTweaks={setTweaks} />}
       {portCheckOpen && <PortCheckDrawer peers={peers} onClose={() => setPortCheckOpen(false)} />}
       {logsDrawerOpen && <LogsDrawer alerts={alerts} onClose={() => setLogsDrawerOpen(false)} verbose={logsVerbose} setVerbose={setLogsVerbose} onDismiss={dismissAlert} />}

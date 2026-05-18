@@ -552,12 +552,16 @@ def _lookup_location(ip: str) -> Dict[str, Any]:
             region = str(raw.get("region") or "").strip()
             country = str(raw.get("country") or "").strip()
             parts = [p for p in (city, region, country) if p]
+            lat = raw.get("latitude")
+            lng = raw.get("longitude")
             data = {
                 "ip": ip,
                 "city": city,
                 "region": region,
                 "country": country,
                 "label": ", ".join(parts) if parts else country or ip,
+                "lat": float(lat) if lat is not None else None,
+                "lng": float(lng) if lng is not None else None,
             }
     except Exception:
         pass
