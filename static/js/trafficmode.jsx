@@ -566,7 +566,7 @@ function TrafficMode({ peers, theme, onClose }) {
         const mag = Math.hypot(...raw) || 1;
         const cv = raw.map(v => v / mag);
         const targetY = Math.atan2(-cv[0], cv[2]);
-        const targetX = Math.atan2(cv[1], Math.hypot(cv[0], cv[2])) * 0.55;
+        const targetX = Math.atan2(cv[1], Math.hypot(cv[0], cv[2]));
         rotRef.current.y = targetY; rotRef.current.ty = targetY;
         rotRef.current.x = targetX; rotRef.current.tx = targetX;
         rotRef.current.manualUntil = Number.POSITIVE_INFINITY;
