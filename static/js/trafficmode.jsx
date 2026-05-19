@@ -173,11 +173,6 @@ function TrafficMode({ peers, theme, onClose }) {
     const emit = () => {
       if (pausedRef.current) return;
       const peer = connected[Math.floor(Math.random() * connected.length)];
-      if (peer.lat != null && peer.lng != null && !dragRef.current.active && performance.now() > rotRef.current.manualUntil) {
-        const pv = latLngToVec(peer.lat, peer.lng);
-        rotRef.current.ty = Math.atan2(-pv[0], pv[2]);
-        rotRef.current.tx = Math.atan2(pv[1], Math.hypot(pv[0], pv[2])) * 0.55;
-      }
       const kinds = [
         { k: 'rx', label: 'rx', size: Math.random() * 800 + 80 },
         { k: 'rx', label: 'rx', size: Math.random() * 1500 + 200 },
@@ -564,17 +559,20 @@ function TrafficMode({ peers, theme, onClose }) {
         zoomTargetRef.current = 1;
         rotRef.current.manualUntil = 0; // re-enable auto-pan
       } else {
-        // Expand: zoom insanely close and face the cluster
+        // Expand: snap rotation to cluster center, then animate zoom in
         setExpandedCluster({ peers: hit.items.map(i => i.peer) });
         zoomTargetRef.current = 22;
 
-        // Rotate globe to center on cluster centroid
+        // Compute centroid direction
         const vecs = hit.items.map(i => i.vec);
         const raw = vecs.reduce(([ax, ay, az], v) => [ax + v[0], ay + v[1], az + v[2]], [0, 0, 0]);
         const mag = Math.hypot(...raw) || 1;
         const cv = raw.map(v => v / mag);
-        rotRef.current.ty = Math.atan2(-cv[0], cv[2]);
-        rotRef.current.tx = Math.atan2(cv[1], Math.hypot(cv[0], cv[2])) * 0.55;
+        const targetY = Math.atan2(-cv[0], cv[2]);
+        const targetX = Math.atan2(cv[1], Math.hypot(cv[0], cv[2])) * 0.55;
+        // Snap immediately so zoom-in lands on the right spot
+        rotRef.current.y  = targetY; rotRef.current.ty = targetY;
+        rotRef.current.x  = targetX; rotRef.current.tx = targetX;
         rotRef.current.manualUntil = Number.POSITIVE_INFINITY;
       }
     };
@@ -890,31 +888,31 @@ function haversineKm(lat1, lng1, lat2, lng2) {
 function drawClusterBadge(ctx, sx, sy, z, dpr, count, t, P) {
   if (z < -0.15) return;
   const dim = z > 0 ? 1 : 0.25;
-  const size = 16 * dpr;
+  const size = 9 * dpr;
 
-  // Expanding pulse ring
-  const pulseT = (t / 2000) % 1;
-  const pulseR = size + pulseT * 14 * dpr;
-  ctx.strokeStyle = rgba(P.peerOnRing, (1 - pulseT) * 0.5 * dim);
-  ctx.lineWidth = 1.5 * dpr;
+  // Subtle pulse ring
+  const pulseT = (t / 2200) % 1;
+  const pulseR = size + pulseT * 8 * dpr;
+  ctx.strokeStyle = rgba(P.peerOnRing, (1 - pulseT) * 0.4 * dim);
+  ctx.lineWidth = 1 * dpr;
   ctx.beginPath();
   ctx.arc(sx, sy, pulseR, 0, Math.PI * 2);
   ctx.stroke();
 
   // Badge fill
-  ctx.fillStyle = rgba(P.peerOnGlow, 0.35 * dim);
+  ctx.fillStyle = rgba(P.peerOnGlow, 0.4 * dim);
   ctx.beginPath();
   ctx.arc(sx, sy, size, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.strokeStyle = rgba(P.peerOnRing, 0.9 * dim);
-  ctx.lineWidth = 1.8 * dpr;
+  ctx.strokeStyle = rgba(P.peerOnRing, 0.85 * dim);
+  ctx.lineWidth = 1.2 * dpr;
   ctx.beginPath();
   ctx.arc(sx, sy, size, 0, Math.PI * 2);
   ctx.stroke();
 
   // Count text e.g. "2×"
-  ctx.font = `bold ${11 * dpr}px ui-monospace, SF Mono, JetBrains Mono, monospace`;
+  ctx.font = `bold ${8 * dpr}px ui-monospace, SF Mono, JetBrains Mono, monospace`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = rgba(P.peerOnCore, dim);
