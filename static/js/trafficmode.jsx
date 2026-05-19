@@ -456,23 +456,17 @@ function TrafficMode({ peers, theme, onClose }) {
               ctx.restore();
 
               const distKm = haversineKm(aItem.peer.lat, aItem.peer.lng, bItem.peer.lat, bItem.peer.lng);
-              const distLabel = distKm < 0.05
-                ? 'same location'
-                : distKm < 1
+              if (distKm >= 0.05) {
+                const distLabel = distKm < 1
                   ? `${(distKm * 1000).toFixed(0)} m apart`
                   : `${distKm.toFixed(1)} km apart`;
-              ctx.font = `${9 * dpr}px ui-monospace, SF Mono, JetBrains Mono, monospace`;
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'bottom';
-              ctx.fillStyle = rgba(P.wire, 0.7);
-              ctx.fillText(distLabel, (ax + bx) / 2, ay - 6 * dpr);
+                ctx.font = `${9 * dpr}px ui-monospace, SF Mono, JetBrains Mono, monospace`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.fillStyle = rgba(P.wire, 0.7);
+                ctx.fillText(distLabel, (ax + bx) / 2, ay - 6 * dpr);
+              }
             }
-            // "click to collapse" hint
-            ctx.font = `${8 * dpr}px ui-monospace, SF Mono, JetBrains Mono, monospace`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'top';
-            ctx.fillStyle = rgba(P.peerOnRing, 0.5);
-            ctx.fillText('tap to collapse', cluster.sx, cluster.sy + 24 * dpr);
           } else {
             drawClusterBadge(ctx, cluster.sx, cluster.sy, cluster.z, dpr, n, now2, P);
           }
@@ -580,6 +574,17 @@ function TrafficMode({ peers, theme, onClose }) {
     window.addEventListener('touchmove', onMove, { passive: false });
     window.addEventListener('touchend', onUp);
     canvas.addEventListener('click', onClick);
+    const onDblClick = () => {
+      setExpandedCluster(null);
+      zoomTargetRef.current = 1;
+      const v = latLngToVec(TM_SERVER.lat, TM_SERVER.lng);
+      const y0 = Math.atan2(-v[0], v[2]);
+      const x0 = Math.atan2(v[1], Math.hypot(v[0], v[2])) * 0.7;
+      rotRef.current.y = y0; rotRef.current.ty = y0;
+      rotRef.current.x = x0; rotRef.current.tx = x0;
+      rotRef.current.manualUntil = 0;
+    };
+    canvas.addEventListener('dblclick', onDblClick);
 
     const ZOOM_MIN = 0.5, ZOOM_MAX = 30;
     const onWheel = (e) => {
@@ -634,6 +639,7 @@ function TrafficMode({ peers, theme, onClose }) {
       window.removeEventListener('touchend', onUp);
       canvas.removeEventListener('wheel', onWheel);
       canvas.removeEventListener('click', onClick);
+      canvas.removeEventListener('dblclick', onDblClick);
       canvas.removeEventListener('touchstart', onTouchStart);
       canvas.removeEventListener('touchmove', onTouchMove);
       canvas.removeEventListener('touchend', onTouchEnd);
