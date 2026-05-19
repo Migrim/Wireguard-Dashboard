@@ -33,7 +33,18 @@ echo ""
 
 # figure out outgoing iface + public IP
 NET_IF=$(ip route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++){if($i=="dev"){print $(i+1); exit}}}')
-PUBLIC_IP=$(curl -s --max-time 5 https://api.ipify.org || curl -s --max-time 5 https://ifconfig.me/ip || hostname -I | awk '{print $1}')
+DETECTED_IP=$(curl -s --max-time 5 https://api.ipify.org || curl -s --max-time 5 https://ifconfig.me/ip || hostname -I | awk '{print $1}')
+echo ""
+echo "┌──────────────────────────────────────────┐"
+echo "│     WireGuard Dashboard — Public IP      │"
+echo "└──────────────────────────────────────────┘"
+echo "  Detected public IP: ${DETECTED_IP}"
+echo "  This IP is written into every QR code / .conf file as the VPN endpoint."
+echo "  Press Enter to accept, or type a different IP/hostname to override."
+read -rp "  Public IP or hostname [${DETECTED_IP}]: " IP_OVERRIDE
+PUBLIC_IP="${IP_OVERRIDE:-${DETECTED_IP}}"
+echo "  Using: ${PUBLIC_IP}"
+echo ""
 
 # make wg dir readable for www-data group
 install -d -m 750 -g www-data "${WG_DIR}"
@@ -140,6 +151,7 @@ usermod -aG adm www-data 2>/dev/null || true
 chown -R www-data:www-data "${DASH_DIR}"
 
 # 10) env for service
+CLIENT_DNS=${CLIENT_DNS:-1.1.1.1, 1.0.0.1}
 cat > /etc/wg-dashboard.env <<ENV
 APP_PORT=${DASH_PORT}
 WG_IFACE=${WG_IFACE}
@@ -148,6 +160,7 @@ WG_CONF=${WG_CONF}
 WG_PORT=${WG_PORT}
 SERVER_ADDR=${SERVER_ADDR}
 SERVER_PUBLIC_IP=${PUBLIC_IP}
+CLIENT_DNS=${CLIENT_DNS}
 FLASK_ENV=production
 SECRET_KEY=${SECRET_KEY}
 DASHBOARD_PASSWORD_HASH=${DASH_PASSWORD_HASH}
