@@ -14,7 +14,7 @@ const TM_DARK = {
   sphereMid: [20, 14, 12],
   sphereDark: [10, 8, 8],
   rim: [217, 119, 87],
-  rimAlpha: 0.18,
+  rimAlpha: 0.30,
   wire: [240, 220, 200],
   wireAlpha: 1,
   surfaceDot: [230, 210, 180],
@@ -97,6 +97,17 @@ function TrafficMode({ peers, theme, onClose }) {
   const [paused, setPaused] = React.useState(false);
   const pausedRef = React.useRef(false);
   React.useEffect(() => { pausedRef.current = paused; }, [paused]);
+
+  // Cluster expansion state — ref mirrors state so tick loop always reads current value
+  const [expandedCluster, setExpandedCluster] = React.useState(null); // { peers: [] }
+  const expandedClusterRef = React.useRef(null);
+  React.useEffect(() => { expandedClusterRef.current = expandedCluster; }, [expandedCluster]);
+
+  // Last-frame cluster hit areas for click detection (canvas-px coords)
+  const clustersLastFrameRef = React.useRef([]);
+
+  // Smooth zoom — target is animated toward in the tick loop
+  const zoomTargetRef = React.useRef(1);
 
   React.useEffect(() => {
     themeTargetRef.current = theme === 'light' ? 1 : 0;
@@ -225,6 +236,17 @@ function TrafficMode({ peers, theme, onClose }) {
         r.x = Math.max(-Math.PI * 0.45, Math.min(Math.PI * 0.45, r.x));
       }
 
+      // Smooth zoom animation toward target
+      {
+        const zCur = zoomRef.current;
+        const zTgt = zoomTargetRef.current;
+        const zDiff = zTgt - zCur;
+        if (Math.abs(zDiff) > 0.005) {
+          zoomRef.current = zCur + zDiff * 0.12;
+          setZoom(zoomRef.current);
+        }
+      }
+
       const target = themeTargetRef.current;
       const cur = themeMixRef.current;
       const diff = target - cur;
@@ -238,30 +260,54 @@ function TrafficMode({ peers, theme, onClose }) {
 
       drawStars(ctx, w, h, P, t);
 
-      const halo = ctx.createRadialGradient(cx, cy, R * 0.96, cx, cy, R * 1.35);
-      const haloAlpha = 0.08 * (1 - t * 0.4);
-      halo.addColorStop(0, rgba(P.haloCore, 0));
-      halo.addColorStop(0.5, rgba(P.haloCore, haloAlpha));
-      halo.addColorStop(1, rgba(P.haloCore, 0));
-      ctx.fillStyle = halo;
-      ctx.beginPath();
-      ctx.arc(cx, cy, R * 1.35, 0, Math.PI * 2);
-      ctx.fill();
+      // ── Glow layers (drawn back-to-front before the sphere) ──
+      if (!isLight) {
+        // 1. Deep-space void: large, very faint cool-purple ambient
+        const spaceAmb = ctx.createRadialGradient(cx, cy, R * 0.6, cx, cy, R * 2.8);
+        spaceAmb.addColorStop(0,   rgba([20, 14, 34], 0));
+        spaceAmb.addColorStop(0.4, rgba([14, 10, 26], 0.22));
+        spaceAmb.addColorStop(1,   rgba([6,  4, 12],  0));
+        ctx.fillStyle = spaceAmb;
+        ctx.beginPath(); ctx.arc(cx, cy, R * 2.8, 0, Math.PI * 2); ctx.fill();
+      }
 
+      // 2. Tight atmospheric rim — warm terracotta hugging the sphere edge
+      const atmAlpha = isLight ? 0.05 : 0.38;
+      const atm = ctx.createRadialGradient(cx, cy, R * 0.88, cx, cy, R * 1.20);
+      atm.addColorStop(0,    rgba(P.haloCore, 0));
+      atm.addColorStop(0.45, rgba(P.haloCore, atmAlpha));
+      atm.addColorStop(0.80, rgba(P.haloCore, atmAlpha * 0.25));
+      atm.addColorStop(1,    rgba(P.haloCore, 0));
+      ctx.fillStyle = atm;
+      ctx.beginPath(); ctx.arc(cx, cy, R * 1.20, 0, Math.PI * 2); ctx.fill();
+
+      // 3. Soft outer corona — wide, very faint halo for depth
+      const coronaAlpha = isLight ? 0.02 : 0.10;
+      const corona = ctx.createRadialGradient(cx, cy, R * 1.0, cx, cy, R * 1.75);
+      corona.addColorStop(0, rgba(P.haloCore, coronaAlpha));
+      corona.addColorStop(1, rgba(P.haloCore, 0));
+      ctx.fillStyle = corona;
+      ctx.beginPath(); ctx.arc(cx, cy, R * 1.75, 0, Math.PI * 2); ctx.fill();
+
+      // ── Globe sphere ──────────────────────────────────────────
       const sphere = ctx.createRadialGradient(cx - R * 0.3, cy - R * 0.4, 0, cx, cy, R);
-      sphere.addColorStop(0, rgba(P.sphereLight, isLight ? 0.95 : 0.85));
-      sphere.addColorStop(0.7, rgba(P.sphereMid, 0.92));
-      sphere.addColorStop(1, rgba(P.sphereDark, 0.98));
+      sphere.addColorStop(0,   rgba(P.sphereLight, isLight ? 0.95 : 0.88));
+      sphere.addColorStop(0.7, rgba(P.sphereMid,   0.94));
+      sphere.addColorStop(1,   rgba(P.sphereDark,  1.00));
       ctx.fillStyle = sphere;
-      ctx.beginPath();
-      ctx.arc(cx, cy, R, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
 
+      // Crisp rim stroke
       ctx.strokeStyle = rgba(P.rim, P.rimAlpha);
-      ctx.lineWidth = 1.2 * dpr;
-      ctx.beginPath();
-      ctx.arc(cx, cy, R, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.lineWidth = (isLight ? 1.0 : 1.5) * dpr;
+      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+
+      // Dark mode: second, slightly wider softer rim for a clean glowing edge
+      if (!isLight) {
+        ctx.strokeStyle = rgba(P.haloCore, 0.12);
+        ctx.lineWidth = 4 * dpr;
+        ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+      }
 
       const ry = rotRef.current.y;
       const rx = rotRef.current.x;
@@ -340,10 +386,102 @@ function TrafficMode({ peers, theme, onClose }) {
       const serverVec = latLngToVec(TM_SERVER.lat, TM_SERVER.lng);
       drawServerMarker(ctx, serverVec, ry, rx, cx, cy, R, dpr, performance.now(), P);
 
+      // ── Cluster-aware peer rendering ──────────────────────────
+      const CLUSTER_PX = 28 * dpr;
+      const now2 = performance.now();
+
+      // 1. Compute screen positions for all geolocated peers
+      const peerItems = [];
       peers.forEach(p => {
         if (p.lat == null || p.lng == null) return;
         const vec = latLngToVec(p.lat, p.lng);
-        drawPeerMarker(ctx, vec, ry, rx, cx, cy, R, dpr, p, performance.now(), P);
+        const [vx, vy, vz] = applyRot(vec, ry, rx);
+        peerItems.push({ peer: p, vec, sx: cx + vx * R, sy: cy - vy * R, z: vz });
+      });
+
+      // 2. Greedy cluster pass (screen-space proximity)
+      const assigned = new Set();
+      const clusters = [];
+      peerItems.forEach((item, i) => {
+        if (assigned.has(i)) return;
+        const grp = [item];
+        assigned.add(i);
+        peerItems.forEach((other, j) => {
+          if (i === j || assigned.has(j)) return;
+          if (Math.hypot(other.sx - item.sx, other.sy - item.sy) < CLUSTER_PX) {
+            grp.push(other); assigned.add(j);
+          }
+        });
+        const avgSx = grp.reduce((s, c) => s + c.sx, 0) / grp.length;
+        const avgSy = grp.reduce((s, c) => s + c.sy, 0) / grp.length;
+        const avgZ  = grp.reduce((s, c) => s + c.z,  0) / grp.length;
+        clusters.push({ items: grp, sx: avgSx, sy: avgSy, z: avgZ });
+      });
+      clustersLastFrameRef.current = clusters;
+
+      // 3. Draw each cluster
+      const expanded = expandedClusterRef.current;
+      const expandedIds = expanded ? new Set(expanded.peers.map(p => p.id)) : null;
+
+      clusters.forEach(cluster => {
+        const n = cluster.items.length;
+        if (n === 1) {
+          // Single peer — normal marker
+          const { vec, peer, z } = cluster.items[0];
+          drawPeerMarker(ctx, vec, ry, rx, cx, cy, R, dpr, peer, now2, P);
+        } else {
+          // Multi-peer cluster
+          const isExpanded = expandedIds && cluster.items.every(item => expandedIds.has(item.peer.id));
+          if (isExpanded) {
+            // Spread peers in screen space around cluster center
+            const { sx: csx, sy: csy } = cluster;
+            const spreadPx = 70 * dpr;
+            cluster.items.forEach((item, i) => {
+              const angle = n === 2
+                ? (i === 0 ? Math.PI : 0)        // left / right for 2 peers
+                : (i / n) * Math.PI * 2 - Math.PI / 2;
+              const ox = Math.cos(angle) * spreadPx * (n === 2 ? 1 : 0.9);
+              const oy = Math.sin(angle) * spreadPx * (n === 2 ? 0.3 : 0.9);
+              drawPeerMarker(ctx, item.vec, ry, rx, cx, cy, R, dpr, item.peer, now2, P, ox, oy);
+            });
+            // Distance line + label between first two
+            if (n >= 2) {
+              const aItem = cluster.items[0], bItem = cluster.items[1];
+              const ax = csx - spreadPx,  ay = csy;
+              const bx = csx + spreadPx, by = csy;
+              const padding = 12 * dpr;
+              ctx.save();
+              ctx.setLineDash([4 * dpr, 4 * dpr]);
+              ctx.strokeStyle = rgba(P.wire, 0.45);
+              ctx.lineWidth = 1 * dpr;
+              ctx.beginPath();
+              ctx.moveTo(ax + padding, ay);
+              ctx.lineTo(bx - padding, by);
+              ctx.stroke();
+              ctx.restore();
+
+              const distKm = haversineKm(aItem.peer.lat, aItem.peer.lng, bItem.peer.lat, bItem.peer.lng);
+              const distLabel = distKm < 0.05
+                ? 'same location'
+                : distKm < 1
+                  ? `${(distKm * 1000).toFixed(0)} m apart`
+                  : `${distKm.toFixed(1)} km apart`;
+              ctx.font = `${9 * dpr}px ui-monospace, SF Mono, JetBrains Mono, monospace`;
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'bottom';
+              ctx.fillStyle = rgba(P.wire, 0.7);
+              ctx.fillText(distLabel, (ax + bx) / 2, ay - 6 * dpr);
+            }
+            // "click to collapse" hint
+            ctx.font = `${8 * dpr}px ui-monospace, SF Mono, JetBrains Mono, monospace`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillStyle = rgba(P.peerOnRing, 0.5);
+            ctx.fillText('tap to collapse', cluster.sx, cluster.sy + 24 * dpr);
+          } else {
+            drawClusterBadge(ctx, cluster.sx, cluster.sy, cluster.z, dpr, n, now2, P);
+          }
+        }
       });
 
       const now = performance.now();
@@ -370,6 +508,8 @@ function TrafficMode({ peers, theme, onClose }) {
       dragRef.current.active = true;
       dragRef.current.lastX = pt.clientX;
       dragRef.current.lastY = pt.clientY;
+      dragRef.current.downX = pt.clientX;
+      dragRef.current.downY = pt.clientY;
       rotRef.current.manualUntil = Number.POSITIVE_INFINITY;
       setDragging(true);
       if (e.preventDefault && e.touches) e.preventDefault();
@@ -386,16 +526,57 @@ function TrafficMode({ peers, theme, onClose }) {
       dragRef.current.lastY = pt.clientY;
       const r = rotRef.current;
       r.y += dx * SENS;
-      r.x -= dy * SENS;
+      r.x += dy * SENS;
       r.x = Math.max(-Math.PI * 0.45, Math.min(Math.PI * 0.45, r.x));
       r.ty = r.y; r.tx = r.x;
       if (e.preventDefault && e.touches) e.preventDefault();
     };
-    const onUp = () => {
+    const onUp = (e) => {
       if (!dragRef.current.active) return;
       dragRef.current.active = false;
       rotRef.current.manualUntil = performance.now() + 6000;
       setDragging(false);
+
+      // Click detection: only fire if pointer barely moved
+      const pt = getPt(e);
+      const ptX = pt ? pt.clientX : dragRef.current.lastX;
+      const ptY = pt ? pt.clientY : dragRef.current.lastY;
+      const moved = Math.hypot(ptX - (dragRef.current.downX || ptX), ptY - (dragRef.current.downY || ptY));
+      if (moved > 8) return;
+
+      // Hit-test clusters
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      const cx = (ptX - rect.left) * dpr;
+      const cy = (ptY - rect.top) * dpr;
+      const clusters = clustersLastFrameRef.current;
+      const hit = clusters.find(c => c.items.length >= 2 && Math.hypot(cx - c.sx, cy - c.sy) < 32 * dpr);
+      if (!hit) return;
+
+      const curExpanded = expandedClusterRef.current;
+      const hitIds = new Set(hit.items.map(i => i.peer.id));
+      const isSame = curExpanded && curExpanded.peers.length === hit.items.length &&
+        curExpanded.peers.every(p => hitIds.has(p.id));
+
+      if (isSame) {
+        // Collapse
+        setExpandedCluster(null);
+        zoomTargetRef.current = 1;
+        rotRef.current.manualUntil = 0; // re-enable auto-pan
+      } else {
+        // Expand: zoom insanely close and face the cluster
+        setExpandedCluster({ peers: hit.items.map(i => i.peer) });
+        zoomTargetRef.current = 22;
+
+        // Rotate globe to center on cluster centroid
+        const vecs = hit.items.map(i => i.vec);
+        const raw = vecs.reduce(([ax, ay, az], v) => [ax + v[0], ay + v[1], az + v[2]], [0, 0, 0]);
+        const mag = Math.hypot(...raw) || 1;
+        const cv = raw.map(v => v / mag);
+        rotRef.current.ty = Math.atan2(-cv[0], cv[2]);
+        rotRef.current.tx = Math.atan2(cv[1], Math.hypot(cv[0], cv[2])) * 0.55;
+        rotRef.current.manualUntil = Number.POSITIVE_INFINITY;
+      }
     };
     canvas.addEventListener('pointerdown', onDown);
     window.addEventListener('pointermove', onMove);
@@ -405,12 +586,16 @@ function TrafficMode({ peers, theme, onClose }) {
     window.addEventListener('touchmove', onMove, { passive: false });
     window.addEventListener('touchend', onUp);
 
-    const ZOOM_MIN = 0.5, ZOOM_MAX = 5;
+    const ZOOM_MIN = 0.5, ZOOM_MAX = 30;
     const onWheel = (e) => {
       e.preventDefault();
       const factor = Math.exp(-e.deltaY * 0.0015);
-      const next = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoomRef.current * factor));
-      if (next !== zoomRef.current) { zoomRef.current = next; setZoom(next); }
+      const next = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoomTargetRef.current * factor));
+      zoomTargetRef.current = next;
+      // Also collapse expanded cluster when manually zooming out
+      if (next < 8 && expandedClusterRef.current) {
+        setExpandedCluster(null);
+      }
     };
     canvas.addEventListener('wheel', onWheel, { passive: false });
 
@@ -418,7 +603,7 @@ function TrafficMode({ peers, theme, onClose }) {
       if (e.touches.length === 2) {
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
-        pinchRef.current = { dist: Math.hypot(dx, dy), zoom: zoomRef.current };
+        pinchRef.current = { dist: Math.hypot(dx, dy), zoom: zoomTargetRef.current };
         dragRef.current.active = false;
         e.preventDefault();
       }
@@ -429,7 +614,7 @@ function TrafficMode({ peers, theme, onClose }) {
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         const dist = Math.hypot(dx, dy);
         const next = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, pinchRef.current.zoom * dist / pinchRef.current.dist));
-        zoomRef.current = next; setZoom(next);
+        zoomTargetRef.current = next;
         rotRef.current.manualUntil = Number.POSITIVE_INFINITY;
         e.preventDefault();
       }
@@ -461,7 +646,15 @@ function TrafficMode({ peers, theme, onClose }) {
 
   React.useEffect(() => {
     const onKey = (e) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        if (expandedClusterRef.current) {
+          setExpandedCluster(null);
+          zoomTargetRef.current = 1;
+          rotRef.current.manualUntil = 0;
+        } else {
+          onClose();
+        }
+      }
       if (e.key === ' ') { e.preventDefault(); setPaused(p => !p); }
     };
     window.addEventListener('keydown', onKey);
@@ -685,10 +878,53 @@ function drawServerMarker(ctx, vec, ry, rx, cx, cy, R, dpr, t, P) {
   ctx.stroke();
 }
 
-function drawPeerMarker(ctx, vec, ry, rx, cx, cy, R, dpr, peer, t, P) {
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+function drawClusterBadge(ctx, sx, sy, z, dpr, count, t, P) {
+  if (z < -0.15) return;
+  const dim = z > 0 ? 1 : 0.25;
+  const size = 16 * dpr;
+
+  // Expanding pulse ring
+  const pulseT = (t / 2000) % 1;
+  const pulseR = size + pulseT * 14 * dpr;
+  ctx.strokeStyle = rgba(P.peerOnRing, (1 - pulseT) * 0.5 * dim);
+  ctx.lineWidth = 1.5 * dpr;
+  ctx.beginPath();
+  ctx.arc(sx, sy, pulseR, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Badge fill
+  ctx.fillStyle = rgba(P.peerOnGlow, 0.35 * dim);
+  ctx.beginPath();
+  ctx.arc(sx, sy, size, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = rgba(P.peerOnRing, 0.9 * dim);
+  ctx.lineWidth = 1.8 * dpr;
+  ctx.beginPath();
+  ctx.arc(sx, sy, size, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Count text e.g. "2×"
+  ctx.font = `bold ${11 * dpr}px ui-monospace, SF Mono, JetBrains Mono, monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = rgba(P.peerOnCore, dim);
+  ctx.fillText(`${count}×`, sx, sy);
+}
+
+function drawPeerMarker(ctx, vec, ry, rx, cx, cy, R, dpr, peer, t, P, offSx = 0, offSy = 0) {
   const [x, y, z] = applyRot(vec, ry, rx);
-  const sx = cx + x * R;
-  const sy = cy - y * R;
+  const sx = cx + x * R + offSx;
+  const sy = cy - y * R + offSy;
   if (z < -0.15) return;
   const visible = z > 0;
   const dim = visible ? 1 : 0.25;

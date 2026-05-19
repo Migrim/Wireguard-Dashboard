@@ -514,7 +514,6 @@ function App({ tweaks, setTweaks, onLogout }) {
         <AddPeerModal
           onClose={() => setAddOpen(false)}
           onSuccess={() => {
-            setAddOpen(false);
             window.WG.apiCall('/api/status').then(j => {
               const mapped = window.WG.mapApiPeers(j.clients.issued, j.clients.live);
               setPeers(mapped);
@@ -714,11 +713,30 @@ function PeerRow({ peer, spark, onClick }) {
 // ============================================================
 // Add Peer Modal
 // ============================================================
+const AP_PLATFORMS = [
+  { id: 'iphone',  label: 'iPhone',  prefix: 'iPhone',
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M12 18h.01"/></svg> },
+  { id: 'android', label: 'Android', prefix: 'Android',
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M6 12V9a6 6 0 0112 0v3"/><rect x="4" y="12" width="16" height="8" rx="2"/><path d="M9 21v1M15 21v1M2 15h2M20 15h2M8.5 6.5L7 5M15.5 6.5L17 5"/></svg> },
+  { id: 'mac',     label: 'Mac',     prefix: 'Mac',
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="4" width="18" height="12" rx="1"/><path d="M1 20h22M9 20l1-4h4l1 4"/></svg> },
+  { id: 'windows', label: 'Windows', prefix: 'Windows',
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg> },
+  { id: 'linux',   label: 'Linux',   prefix: 'Linux',
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg> },
+  { id: 'router',  label: 'Router',  prefix: 'Router',
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="2" y="14" width="20" height="6" rx="1"/><path d="M6 14v-4M12 14V8M18 14v-4M9 8h6M6 4l-1-1M18 4l1-1"/></svg> },
+];
+
 function AddPeerModal({ onClose, onSuccess }) {
   const [name, setName] = uS('');
   const [ip, setIp] = uS('');
+  const [platform, setPlatform] = uS(null);
   const [error, setError] = uS('');
   const [loading, setLoading] = uS(false);
+  const [result, setResult] = uS(null);
+  const [qrUrl, setQrUrl] = uS('');
+  const nameRef = uR(null);
 
   uE(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -726,17 +744,44 @@ function AddPeerModal({ onClose, onSuccess }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  uE(() => {
+    if (!platform) return;
+    const plat = AP_PLATFORMS.find(p => p.id === platform);
+    if (!plat) return;
+    setName(prev => {
+      const isAuto = !prev || AP_PLATFORMS.some(p => prev === p.prefix || prev.startsWith(p.prefix + '-'));
+      return isAuto ? plat.prefix : prev;
+    });
+    setTimeout(() => nameRef.current?.focus(), 0);
+  }, [platform]);
+
+  uE(() => {
+    if (!result?.profile || !window.QRCode) return;
+    window.QRCode.toDataURL(result.profile, { errorCorrectionLevel: 'L', width: 220, margin: 2 })
+      .then(url => setQrUrl(url))
+      .catch(() => {});
+  }, [result]);
+
+  const downloadConf = () => {
+    if (!result?.profile) return;
+    const blob = new Blob([result.profile], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = result.name + '.conf';
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+
   const submit = async (e) => {
     e.preventDefault();
     setError('');
     const trimName = name.trim();
     if (!/^[A-Za-z0-9._-]{1,64}$/.test(trimName)) {
-      setError('Invalid name (A-Z, a-z, 0-9, .-_ max 64 chars)');
+      setError('Name may only contain A–Z, 0–9, dot, dash, underscore (max 64 chars)');
       return;
     }
     const trimIp = ip.trim();
     if (trimIp && !/^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/.test(trimIp)) {
-      setError('Invalid IP (use 10.8.0.x or 10.8.0.x/32)');
+      setError('Invalid IP — use 10.8.0.x format, or leave blank for auto-assign');
       return;
     }
     setLoading(true);
@@ -745,72 +790,148 @@ function AddPeerModal({ onClose, onSuccess }) {
         method: 'POST',
         body: JSON.stringify({ name: trimName, cn: trimName, ip: trimIp }),
       });
-      if (r && r.profile) {
-        const blob = new Blob([r.profile], { type: 'text/plain' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = trimName + '.conf';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-      }
+      setResult({ name: trimName, profile: r?.profile || '' });
       onSuccess();
-    } catch (e) {
-      setError(e.message || 'Failed to create peer');
-    } finally {
+    } catch (err) {
+      setError(err.message || 'Failed to create peer');
       setLoading(false);
     }
   };
 
+  if (result) {
+    return (
+      <>
+        <div className="drawer-scrim" onClick={onClose} />
+        <aside className="drawer" role="dialog" aria-label="Peer created" style={{ maxWidth: 460 }}>
+          <header className="drawer-head">
+            <div className="drawer-head-left">
+              <div className="peer-avatar" style={{ background: 'var(--success-soft)', color: 'var(--success)' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5"/></svg>
+              </div>
+              <div>
+                <h2 className="drawer-title">{result.name}</h2>
+                <div className="drawer-sub">Peer created · scan or download to connect</div>
+              </div>
+            </div>
+            <button className="icon-btn" onClick={onClose} aria-label="Close">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+          </header>
+          <div className="drawer-body">
+            <div className="ap-qr-wrap">
+              {qrUrl ? (
+                <img src={qrUrl} width={220} height={220} alt="WireGuard QR code" className="ap-qr-img" />
+              ) : (
+                <div style={{ width: 220, height: 220, display: 'grid', placeItems: 'center', color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 11 }}>
+                  {result.profile ? 'Generating QR…' : 'No config returned'}
+                </div>
+              )}
+              <div className="ap-qr-hint">Scan with the WireGuard app to connect instantly</div>
+            </div>
+            {result.profile && (
+              <div className="ap-conf-preview">
+                <pre className="ap-conf-text">{result.profile}</pre>
+              </div>
+            )}
+            <div className="action-row">
+              <button className="btn btn-primary" onClick={downloadConf}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                Download .conf
+              </button>
+              <button className="btn" onClick={onClose}>Done</button>
+            </div>
+          </div>
+        </aside>
+      </>
+    );
+  }
+
   return (
     <>
       <div className="drawer-scrim" onClick={onClose} />
-      <aside className="drawer" role="dialog" aria-label="Add peer" style={{ maxWidth: 420 }}>
+      <aside className="drawer" role="dialog" aria-label="Add peer" style={{ maxWidth: 460 }}>
         <header className="drawer-head">
           <div className="drawer-head-left">
-            <div className="peer-avatar" style={{ background: 'var(--accent-soft)' }}>
+            <div className="peer-avatar" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a6 6 0 016-6h4a6 6 0 016 6v2M18 10v6M15 13h6"/></svg>
             </div>
             <div>
               <h2 className="drawer-title">Add peer</h2>
-              <div className="drawer-sub">Generate keys and download config</div>
+              <div className="drawer-sub">New keypair · auto-configure · QR ready</div>
             </div>
           </div>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 6l12 12M18 6L6 18"/></svg>
           </button>
         </header>
-        <form className="drawer-body" onSubmit={submit} style={{ gap: 16 }}>
+        <form className="drawer-body" onSubmit={submit}>
           <section className="drawer-section">
+            <div className="section-head" style={{ marginBottom: 10 }}>
+              <span className="section-label">DEVICE TYPE</span>
+              <span className="section-meta" style={{ color: 'var(--muted)', fontSize: 10.5 }}>optional</span>
+            </div>
+            <div className="ap-platforms">
+              {AP_PLATFORMS.map(p => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className={`ap-plat-btn${platform === p.id ? ' ap-plat-active' : ''}`}
+                  onClick={() => setPlatform(prev => prev === p.id ? null : p.id)}
+                >
+                  {p.icon}
+                  <span>{p.label}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+          <section className="drawer-section">
+            <div className="section-head" style={{ marginBottom: 10 }}>
+              <span className="section-label">CONFIGURATION</span>
+            </div>
             <div className="settings-list">
-              <div className="setting-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
-                <div className="setting-title">Peer name</div>
+              <div className="setting-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 7, borderTop: 'none', paddingTop: 0 }}>
+                <div>
+                  <div className="setting-title">Peer name</div>
+                  <div className="setting-desc">Letters, numbers, dot, dash, underscore — max 64 chars</div>
+                </div>
                 <input
-                  style={{ width: '100%', background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 7, color: 'var(--ink)', padding: '8px 10px', fontFamily: 'var(--mono)', fontSize: 12, outline: 'none' }}
-                  placeholder="e.g. Laptop, Phone-iOS"
+                  ref={nameRef}
+                  className="ap-input"
+                  placeholder="e.g. iPhone, Laptop-Work"
                   value={name}
                   onChange={e => setName(e.target.value)}
+                  autoFocus
                   required
                 />
               </div>
-              <div className="setting-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
-                <div className="setting-title">Static IP <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(optional)</span></div>
+              <div className="setting-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 7 }}>
+                <div>
+                  <div className="setting-title">Static IP <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(optional)</span></div>
+                  <div className="setting-desc">Leave blank to auto-assign the next available address</div>
+                </div>
                 <input
-                  style={{ width: '100%', background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 7, color: 'var(--ink)', padding: '8px 10px', fontFamily: 'var(--mono)', fontSize: 12, outline: 'none' }}
-                  placeholder="10.8.0.x or leave blank for auto"
+                  className="ap-input"
+                  placeholder="10.8.0.x"
                   value={ip}
                   onChange={e => setIp(e.target.value)}
                 />
               </div>
             </div>
-            {error && <div style={{ color: 'var(--danger)', fontFamily: 'var(--mono)', fontSize: 11, marginTop: 8 }}>{error}</div>}
+            {error && (
+              <div className="ap-error">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                {error}
+              </div>
+            )}
           </section>
           <section className="drawer-section">
             <div className="action-row">
               <button type="button" className="btn" onClick={onClose}>Cancel</button>
-              <button type="submit" className="btn btn-primary" disabled={loading}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a6 6 0 016-6h4a6 6 0 016 6v2M18 10v6M15 13h6"/></svg>
-                {loading ? 'Creating…' : 'Create peer'}
+              <button type="submit" className="btn btn-primary" disabled={loading || !name.trim()}>
+                {loading
+                  ? <><span className="pc-spinner" style={{ width: 12, height: 12 }} /> Creating…</>
+                  : <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 5v14M5 12h14"/></svg> Create peer</>
+                }
               </button>
             </div>
           </section>
