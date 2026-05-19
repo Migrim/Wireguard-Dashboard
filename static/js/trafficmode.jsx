@@ -526,24 +526,24 @@ function TrafficMode({ peers, theme, onClose }) {
       r.ty = r.y; r.tx = r.x;
       if (e.preventDefault && e.touches) e.preventDefault();
     };
-    const onUp = (e) => {
+    const onUp = () => {
       if (!dragRef.current.active) return;
       dragRef.current.active = false;
       rotRef.current.manualUntil = performance.now() + 6000;
       setDragging(false);
-
-      // Click detection: only fire if pointer barely moved
-      const pt = getPt(e);
-      const ptX = pt ? pt.clientX : dragRef.current.lastX;
-      const ptY = pt ? pt.clientY : dragRef.current.lastY;
-      const moved = Math.hypot(ptX - (dragRef.current.downX || ptX), ptY - (dragRef.current.downY || ptY));
+    };
+    const onClick = (e) => {
+      // Ignore if the pointer actually dragged
+      const moved = Math.hypot(
+        e.clientX - (dragRef.current.downX || e.clientX),
+        e.clientY - (dragRef.current.downY || e.clientY)
+      );
       if (moved > 8) return;
 
-      // Hit-test clusters
       const dpr = window.devicePixelRatio || 1;
       const rect = canvas.getBoundingClientRect();
-      const cx = (ptX - rect.left) * dpr;
-      const cy = (ptY - rect.top) * dpr;
+      const cx = (e.clientX - rect.left) * dpr;
+      const cy = (e.clientY - rect.top) * dpr;
       const clusters = clustersLastFrameRef.current;
       const hit = clusters.find(c => c.items.length >= 2 && Math.hypot(cx - c.sx, cy - c.sy) < 32 * dpr);
       if (!hit) return;
@@ -554,25 +554,21 @@ function TrafficMode({ peers, theme, onClose }) {
         curExpanded.peers.every(p => hitIds.has(p.id));
 
       if (isSame) {
-        // Collapse
         setExpandedCluster(null);
         zoomTargetRef.current = 1;
-        rotRef.current.manualUntil = 0; // re-enable auto-pan
+        rotRef.current.manualUntil = 0;
       } else {
-        // Expand: snap rotation to cluster center, then animate zoom in
         setExpandedCluster({ peers: hit.items.map(i => i.peer) });
         zoomTargetRef.current = 22;
 
-        // Compute centroid direction
         const vecs = hit.items.map(i => i.vec);
         const raw = vecs.reduce(([ax, ay, az], v) => [ax + v[0], ay + v[1], az + v[2]], [0, 0, 0]);
         const mag = Math.hypot(...raw) || 1;
         const cv = raw.map(v => v / mag);
         const targetY = Math.atan2(-cv[0], cv[2]);
         const targetX = Math.atan2(cv[1], Math.hypot(cv[0], cv[2])) * 0.55;
-        // Snap immediately so zoom-in lands on the right spot
-        rotRef.current.y  = targetY; rotRef.current.ty = targetY;
-        rotRef.current.x  = targetX; rotRef.current.tx = targetX;
+        rotRef.current.y = targetY; rotRef.current.ty = targetY;
+        rotRef.current.x = targetX; rotRef.current.tx = targetX;
         rotRef.current.manualUntil = Number.POSITIVE_INFINITY;
       }
     };
@@ -583,6 +579,7 @@ function TrafficMode({ peers, theme, onClose }) {
     canvas.addEventListener('touchstart', onDown, { passive: false });
     window.addEventListener('touchmove', onMove, { passive: false });
     window.addEventListener('touchend', onUp);
+    canvas.addEventListener('click', onClick);
 
     const ZOOM_MIN = 0.5, ZOOM_MAX = 30;
     const onWheel = (e) => {
@@ -636,6 +633,7 @@ function TrafficMode({ peers, theme, onClose }) {
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onUp);
       canvas.removeEventListener('wheel', onWheel);
+      canvas.removeEventListener('click', onClick);
       canvas.removeEventListener('touchstart', onTouchStart);
       canvas.removeEventListener('touchmove', onTouchMove);
       canvas.removeEventListener('touchend', onTouchEnd);
