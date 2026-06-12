@@ -1,4 +1,4 @@
-import os, subprocess, datetime, re, time, shlex, json, ipaddress, urllib.request, threading, secrets as _secrets
+import os, subprocess, datetime, re, time, shlex, json, ipaddress, urllib.request, urllib.parse, threading, secrets as _secrets
 from typing import Tuple, Dict, Any, List
 import logging
 from flask import Flask, render_template, request, send_file, redirect, url_for, jsonify, abort, Response, stream_with_context, session
@@ -1709,21 +1709,74 @@ def api_system_info():
 # ── Update API ─────────────────────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_BRANCH = os.environ.get("REPO_BRANCH", "main")
-_GITHUB_RAW_VERSION = f"https://raw.githubusercontent.com/Migrim/Wireguard-Dashboard/{REPO_BRANCH}/.version"
+VERSION_FILE = ".version"
+_DEFAULT_GITHUB_RAW_VERSION = f"https://raw.githubusercontent.com/Migrim/OpenVPN-Dashboard/{REPO_BRANCH}/{VERSION_FILE}"
+
+def _git(args: List[str]) -> Tuple[str, int]:
+    try:
+        r = subprocess.run(["git", "-C", BASE_DIR, *args],
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        return r.stdout.strip(), r.returncode
+    except Exception as e:
+        return str(e), 1
+
+def _github_raw_version_url() -> str:
+    override = os.environ.get("UPDATE_VERSION_URL", "").strip()
+    if override:
+        return override
+
+    remote, rc = _git(["config", "--get", "remote.origin.url"])
+    if rc != 0 or not remote:
+        return _DEFAULT_GITHUB_RAW_VERSION
+
+    owner_repo = ""
+    if remote.startswith("git@github.com:"):
+        owner_repo = remote.split(":", 1)[1]
+    else:
+        parsed = urllib.parse.urlparse(remote)
+        if parsed.netloc.lower() == "github.com":
+            owner_repo = parsed.path.lstrip("/")
+
+    if not owner_repo:
+        return _DEFAULT_GITHUB_RAW_VERSION
+
+    if owner_repo.endswith(".git"):
+        owner_repo = owner_repo[:-4]
+    return f"https://raw.githubusercontent.com/{owner_repo}/{REPO_BRANCH}/{VERSION_FILE}"
 
 def _local_version() -> str:
     try:
-        with open(os.path.join(BASE_DIR, ".version")) as f:
+        with open(os.path.join(BASE_DIR, VERSION_FILE)) as f:
             return f.read().strip()
     except Exception:
         return "unknown"
 
 def _remote_version() -> str:
     try:
-        req = urllib.request.urlopen(_GITHUB_RAW_VERSION, timeout=6)
+        req = urllib.request.urlopen(_github_raw_version_url(), timeout=6)
         return req.read().decode().strip()
     except Exception:
         return ""
+
+def _git_version(ref: str) -> str:
+    out, rc = _git(["show", f"{ref}:{VERSION_FILE}"])
+    return out.strip() if rc == 0 else ""
+
+def _is_version_file_dirty() -> bool:
+    out, rc = _git(["status", "--porcelain", "--", VERSION_FILE])
+    return rc == 0 and bool(out.strip())
+
+def _write_local_version(version: str) -> bool:
+    value = (version or "").strip()
+    if not value:
+        return False
+    try:
+        with open(os.path.join(BASE_DIR, VERSION_FILE), "w") as f:
+            f.write(value + "\n")
+        return True
+    except Exception as e:
+        app.logger.warning("failed to update local version metadata: %s", e)
+        return False
 
 def _version_key(version: str):
     value = (version or "").strip()
@@ -1778,25 +1831,41 @@ def api_update_apply():
                 return
 
             yield _sse({"event": "stage", "id": "fetch", "label": "Fetching updates",
-                        "detail": "checking origin/main", "progress": 5})
-            out, rc = _run(f"git -C {shlex.quote(BASE_DIR)} fetch origin {REPO_BRANCH} 2>&1")
+                        "detail": f"checking origin/{REPO_BRANCH}", "progress": 5})
+            out, rc = _git(["fetch", "origin", REPO_BRANCH])
             if rc != 0:
                 yield _sse({"event": "error", "detail": out[:300]}); return
 
-            ahead_out, _ = _run(f"git -C {shlex.quote(BASE_DIR)} rev-list HEAD..origin/{REPO_BRANCH} --count 2>&1")
+            origin_ref = f"origin/{REPO_BRANCH}"
+            target_version = _git_version(origin_ref) or remote
+
+            if _is_version_file_dirty():
+                yield _sse({"event": "stage", "id": "fetch", "label": "Fetching updates",
+                            "detail": "refreshing version metadata", "progress": 15})
+                out, rc = _git(["checkout", "--", VERSION_FILE])
+                if rc != 0:
+                    yield _sse({"event": "error", "detail": out[:300]}); return
+
+            ahead_out, _ = _git(["rev-list", f"HEAD..{origin_ref}", "--count"])
             if ahead_out.strip() == "0":
+                if _compare_versions(_local_version(), target_version) == 1:
+                    _write_local_version(target_version)
                 yield _sse({"event": "done", "version": _local_version(),
                             "detail": "already up to date", "progress": 100}); return
 
             yield _sse({"event": "stage", "id": "pull", "label": "Pulling changes",
                         "detail": "merging commits", "progress": 30})
-            out, rc = _run(f"git -C {shlex.quote(BASE_DIR)} pull origin {REPO_BRANCH} 2>&1")
+            out, rc = _git(["pull", "origin", REPO_BRANCH])
             if rc != 0:
                 yield _sse({"event": "error", "detail": out[:300]}); return
 
             first_line = next((l for l in out.splitlines() if l.strip()), out[:80])
             yield _sse({"event": "stage", "id": "pull", "label": "Pulling changes",
                         "detail": first_line[:80], "progress": 65})
+
+            head_version = _git_version("HEAD")
+            if head_version and _local_version() != head_version:
+                _write_local_version(head_version)
 
             yield _sse({"event": "stage", "id": "restart", "label": "Restarting service",
                         "detail": "wg-dashboard", "progress": 88})
