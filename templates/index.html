@@ -4,6 +4,14 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>WG-Quick · WireGuard Dashboard</title>
+<script>
+  (() => {
+    const savedTheme = localStorage.getItem('WG_THEME');
+    if (savedTheme === 'dark' || savedTheme === 'light') {
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    }
+  })();
+</script>
 <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='icons/favicon.ico') }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,6 +24,7 @@
   --serif: 'Instrument Serif', Georgia, serif;
   --sans: 'Inter', -apple-system, system-ui, sans-serif;
   --mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  color-scheme: light;
 
   /* Light */
   --bg: #F5EEE2;
@@ -46,6 +55,7 @@
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
   --bg: #1A1613;
   --bg-2: #221C17;
   --card: #211B16;
@@ -78,6 +88,26 @@
 [data-theme="dark"].accent-amber { --accent: oklch(75% 0.15 75); --accent-soft: oklch(30% 0.09 75); --accent-2: oklch(71% 0.10 215); }
 
 * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+html.theme-switching,
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition:
+    background-color 0.28s ease,
+    border-color 0.28s ease,
+    box-shadow 0.28s ease !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  html.theme-switching,
+  html.theme-switching *,
+  html.theme-switching *::before,
+  html.theme-switching *::after {
+    transition: none !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
 *::-webkit-scrollbar { width: 3px; height: 3px; }
 *::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
@@ -219,8 +249,45 @@ body {
   transition: all 0.12s;
   box-shadow: var(--shadow-sm);
 }
+.theme-toggle {
+  overflow: hidden;
+}
 .icon-btn:hover:not(:disabled) { background: var(--card-raised); color: var(--ink); }
 .icon-btn:disabled { opacity: 0.38; cursor: not-allowed; background: var(--bg-2); color: var(--muted); box-shadow: none; }
+.theme-toggle-icon {
+  display: grid;
+  place-items: center;
+  transform-origin: 50% 50%;
+  backface-visibility: hidden;
+  contain: paint;
+  transform: translateZ(0);
+  will-change: transform, opacity, filter;
+}
+html.theme-switching .theme-toggle-icon {
+  animation: themeIconTurnFadeBlur 0.42s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+@keyframes themeIconTurnFadeBlur {
+  0% {
+    opacity: 0;
+    filter: blur(4px);
+    transform: translateZ(0) rotate(-110deg) scale(0.74);
+  }
+  58% {
+    opacity: 1;
+    filter: blur(0.6px);
+    transform: translateZ(0) rotate(8deg) scale(1.06);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateZ(0) rotate(0) scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html.theme-switching .theme-toggle-icon {
+    animation: none;
+  }
+}
 .icon-btn-sm {
   width: 26px; height: 26px;
   display: grid; place-items: center;
@@ -2176,11 +2243,30 @@ body {
 
   function Root() {
     const [tweaks, setTweaks] = React.useState({ ...TWEAKS_DEFAULTS });
+    const themeMounted = React.useRef(false);
+    const themeTimer = React.useRef(null);
 
     React.useEffect(() => {
-      document.documentElement.setAttribute('data-theme', tweaks.theme || 'light');
-      localStorage.setItem(THEME_KEY, tweaks.theme || 'light');
+      const theme = tweaks.theme || 'light';
+      if (themeMounted.current) {
+        document.documentElement.classList.add('theme-switching');
+        window.clearTimeout(themeTimer.current);
+        themeTimer.current = window.setTimeout(() => {
+          document.documentElement.classList.remove('theme-switching');
+        }, 360);
+      } else {
+        themeMounted.current = true;
+      }
+
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem(THEME_KEY, theme);
+
+      return () => window.clearTimeout(themeTimer.current);
     }, [tweaks.theme]);
+
+    React.useEffect(() => {
+      return () => window.clearTimeout(themeTimer.current);
+    }, []);
 
     return <AuthWrapper tweaks={tweaks} setTweaks={setTweaks} />;
   }
