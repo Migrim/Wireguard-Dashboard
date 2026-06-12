@@ -1427,9 +1427,9 @@ html.theme-switching .theme-toggle-icon {
 }
 .tm-orbital-log-open { right: 0; }
 
-/* Override the default .tm-log-body max-height inside the drawer */
+/* Scroll area: content-sized, shrinks if drawer is too short, spacer pushes legend to bottom */
 .tm-orbital-log-scroll {
-  flex: 1;
+  flex: 0 1 auto;
   min-height: 0;
   max-height: none !important;
   overflow-y: auto;

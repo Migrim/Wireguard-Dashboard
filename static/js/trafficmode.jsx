@@ -99,7 +99,7 @@ function TrafficMode({ peers, theme, onClose }) {
       p.lastHit = performance.now();
       statsRef.current = { events: statsRef.current.events + 1, bytes: statsRef.current.bytes + size * 1024 };
       setStats({ ...statsRef.current });
-      setEvents(prev => [{ ts: Date.now(), peer: p.name, kind, label, size }, ...prev].slice(0, 20));
+      setEvents(prev => [{ ts: Date.now(), peer: p.name, kind, label, size }, ...prev].slice(0, 50));
     };
 
     const emit = () => {
@@ -129,8 +129,9 @@ function TrafficMode({ peers, theme, onClose }) {
 
     const resize = () => {
       dpr = window.devicePixelRatio || 1;
-      const r = canvas.getBoundingClientRect();
-      W = r.width; H = r.height;
+      // Use window dimensions — getBoundingClientRect is skewed by the tm-open scale animation
+      W = window.innerWidth;
+      H = window.innerHeight;
       canvas.width = W * dpr;
       canvas.height = H * dpr;
     };
@@ -309,39 +310,42 @@ function TrafficMode({ peers, theme, onClose }) {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const CHAR_W   = 6.6;  // approx px per char at Inter 11px
-    const ENTER_R  = 28;   // hit radius to acquire hover
-    const EXIT_R   = 52;   // larger radius to release hover (hysteresis keeps it sticky)
-    const LBL_H    = 20;   // vertical hit height for label strip
+    const CHAR_W  = 6.6;  // approx px per char at Inter 11px
+    const ENTER_R = 28;   // hit radius to acquire hover
+    const EXIT_R  = 38;   // release radius (hysteresis — slightly larger than ENTER_R)
+    const LBL_H   = 20;   // vertical hit height for label strip
 
     const onMouseMove = (e) => {
-      const rect = canvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      // Canvas is position:fixed inset:0 so clientX/Y are already canvas-relative
+      const mx = e.clientX, my = e.clientY;
       if (draggingRef.current) {
         rotRef.current += (mx - dragXRef.current) * 0.005;
         dragXRef.current = mx;
         return;
       }
-      // Hysteresis: if already hovering a peer, keep it until mouse moves far away
-      const current = hoverPeerRef.current;
-      if (current) {
-        const hit = hitTargetsRef.current.find(h => h.p === current);
-        if (hit && (mx - hit.x) ** 2 + (my - hit.y) ** 2 <= EXIT_R * EXIT_R) {
-          canvas.style.cursor = 'pointer';
-          return;
-        }
-      }
-      // Acquire new hover — dot circle or label strip
-      let best = null;
+      // Find nearest peer within ENTER_R (not just the first match in sort order)
+      let best = null, bestDist = Infinity;
       for (const { p, x, y, onRight } of hitTargetsRef.current) {
-        if ((mx - x) ** 2 + (my - y) ** 2 <= ENTER_R * ENTER_R) { best = p; break; }
-        if (p.connected) {
+        const d2 = (mx - x) ** 2 + (my - y) ** 2;
+        if (d2 <= ENTER_R * ENTER_R && d2 < bestDist) { best = p; bestDist = d2; }
+        if (!best && p.connected) {
           const lblW = p.name.length * CHAR_W;
           const lx0 = onRight ? x + 9 : x - 9 - lblW;
           const lx1 = lx0 + lblW;
-          const ly0 = y - LBL_H / 2;
-          const ly1 = y + LBL_H / 2;
-          if (mx >= lx0 && mx <= lx1 && my >= ly0 && my <= ly1) { best = p; break; }
+          if (mx >= lx0 && mx <= lx1 && my >= y - LBL_H / 2 && my <= y + LBL_H / 2) {
+            best = p; bestDist = 0;
+          }
+        }
+      }
+      // Hysteresis: keep current hover if no closer peer found and still within EXIT_R
+      if (!best) {
+        const current = hoverPeerRef.current;
+        if (current) {
+          const hit = hitTargetsRef.current.find(h => h.p.name === current.name);
+          if (hit && (mx - hit.x) ** 2 + (my - hit.y) ** 2 <= EXIT_R * EXIT_R) {
+            canvas.style.cursor = 'pointer';
+            return;
+          }
         }
       }
       hoverPeerRef.current = best;
@@ -351,7 +355,7 @@ function TrafficMode({ peers, theme, onClose }) {
     const onMouseDown = (e) => {
       draggingRef.current = true;
       hoverPeerRef.current = null;
-      dragXRef.current = e.clientX - canvas.getBoundingClientRect().left;
+      dragXRef.current = e.clientX;
       canvas.style.cursor = 'grabbing';
     };
     const onMouseUp = () => { draggingRef.current = false; canvas.style.cursor = 'crosshair'; };
@@ -466,6 +470,7 @@ function TrafficMode({ peers, theme, onClose }) {
             </div>
           ))}
         </div>
+        <div style={{flex: 1}} />
         <div className="tm-orbital-legend">
           <div className="tm-leg-row">
             <span className="tm-leg-swatch" style={{ color: 'var(--tm-accent)' }} />
