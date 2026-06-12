@@ -1285,16 +1285,35 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
     rafRef.current = requestAnimationFrame(step);
   };
 
-  _useEffect(() => {
+  const [checking, setChecking] = _useState(false);
+  const [onCooldown, setOnCooldown] = _useState(false);
+  const cooldownRef = _useRef(null);
+
+  const checkForUpdates = (manual) => {
+    if (manual) setChecking(true);
     Promise.all([
       fetch('/api/update/check').then(r => r.json()),
       fetch('/api/system/info').then(r => r.json()),
+      manual ? new Promise(r => setTimeout(r, 2000)) : Promise.resolve(),
     ]).then(([upd, sys]) => {
       setVersion(upd.local || 'unknown');
       setNewVersion(upd.remote || '');
       setPhase(upd.available ? 'available' : 'idle');
       setSysInfo(sys);
-    }).catch(() => { setVersion('unknown'); setPhase('idle'); });
+    }).catch(() => { setVersion('unknown'); setPhase('idle'); })
+      .finally(() => {
+        if (!manual) return;
+        setChecking(false);
+        setOnCooldown(true);
+        clearTimeout(cooldownRef.current);
+        cooldownRef.current = setTimeout(() => setOnCooldown(false), 30_000);
+      });
+  };
+
+  _useEffect(() => {
+    checkForUpdates(false);
+    const id = setInterval(() => checkForUpdates(false), 10 * 60 * 1000);
+    return () => clearInterval(id);
   }, []);
 
   _useEffect(() => {
@@ -1303,7 +1322,10 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose, phase]);
 
-  _useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); }, []);
+  _useEffect(() => () => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    clearTimeout(cooldownRef.current);
+  }, []);
 
   const setAccent = (id) => {
     setTweaks({ ...tweaks, accent: id });
@@ -1443,9 +1465,18 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
             )}
 
             {phase === 'idle' && (
-              <div className="upd-card" style={{display:'flex',alignItems:'center',gap:'10px'}}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.2"><path d="M5 12l5 5L20 7"/></svg>
-                <span style={{color:'var(--text-2)',fontSize:'13px'}}>Up to date · <span className="mono">{version}</span></span>
+              <div className="upd-card upd-idle-card">
+                <div className={`upd-idle-content${checking ? ' is-blurring' : ''}`}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.2" style={{flexShrink:0}}><path d="M5 12l5 5L20 7"/></svg>
+                  <span style={{color:'var(--text-2)',fontSize:'13px',flex:1}}>Up to date · <span className="mono">{version}</span></span>
+                  <button className="icon-btn" onClick={() => checkForUpdates(true)} aria-label="Check for updates" title={onCooldown ? 'Check again in a moment' : 'Check for updates'} disabled={checking || onCooldown}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-9-9c2.5 0 4.7 1 6.4 2.6L21 3v6h-6"/></svg>
+                  </button>
+                </div>
+                <div className={`upd-fetch-overlay${checking ? ' is-active' : ''}`}>
+                  <span className="pc-spinner" style={{width:'12px',height:'12px',flexShrink:0}} />
+                  Fetching updates<span className="pc-typing">…</span>
+                </div>
               </div>
             )}
 

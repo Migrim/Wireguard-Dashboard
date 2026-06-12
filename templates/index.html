@@ -476,6 +476,11 @@ body {
 .upd-done-title { font-size: 15px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
 .upd-done-desc { font-size: 11.5px; color: var(--ink-2); line-height: 1.5; max-width: 320px; }
 .upd-refresh-btn { margin-top: 16px; height: 38px; justify-content: center; min-width: 200px; }
+.upd-idle-card { position: relative; overflow: hidden; }
+.upd-idle-content { display: flex; align-items: center; gap: 10px; width: 100%; transition: filter 0.35s ease, opacity 0.35s ease; }
+.upd-idle-content.is-blurring { filter: blur(3px); opacity: 0.15; pointer-events: none; }
+.upd-fetch-overlay { position: absolute; inset: 0; background: var(--bg-2); display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: var(--text-2); font-style: italic; border-radius: 11px; opacity: 0; pointer-events: none; transition: opacity 0.35s ease; }
+.upd-fetch-overlay.is-active { opacity: 1; }
 
 /* Budget drawer */
 .budget-hero { display: flex; flex-direction: column; gap: 18px; padding: 18px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; }
