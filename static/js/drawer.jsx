@@ -1418,7 +1418,7 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
             <div>
               <h2 className="drawer-title">Dashboard settings</h2>
               <div className="drawer-sub">
-                <span className="pulse-dot" /> {SI.service || '…'} · {SI.service_enabled != null ? (SI.service_enabled ? 'enabled' : 'disabled') : '…'}
+                {SI.service || '…'} · {SI.service_enabled != null ? (SI.service_enabled ? 'enabled' : 'disabled') : '…'}
               </div>
             </div>
           </div>
