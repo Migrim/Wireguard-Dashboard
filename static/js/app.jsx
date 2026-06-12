@@ -319,6 +319,9 @@ function App({ tweaks, setTweaks, onLogout }) {
   const dismissAlert = uC((key) => setDismissedAlerts(s => { const n = new Set(s); n.add(key); return n; }), []);
 
   const alerts = [];
+  if (updateAvailable && !dismissedAlerts.has('update-available')) {
+    alerts.push({ level: 'update', title: 'Update available', desc: 'A new version is ready. Open Dashboard settings to install it.', key: 'update-available' });
+  }
   if (offlineLong.length > 0 || neverConnected.length > 0) {
     const parts = [];
     if (offlineLong.length) parts.push(offlineLong.map(p => `${p.name}: offline >24h`).join(' · '));
