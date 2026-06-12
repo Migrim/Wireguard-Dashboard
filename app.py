@@ -1689,6 +1689,7 @@ def api_system_info():
     kernel_out, _ = _run("uname -r")
     uptime_out, _ = _run("uptime -p")
     uptime = uptime_out.replace("up ", "", 1) if uptime_out.startswith("up ") else uptime_out
+    uptime = uptime.replace("minutes", "min").replace("minute", "min")
     port_out, _ = _run(f"grep -m1 'ListenPort' {WG_CONF} 2>/dev/null || echo '{WG_PORT}'")
     try:
         wg_port = int(port_out.split("=")[-1].strip()) if "=" in port_out else int(port_out.strip())

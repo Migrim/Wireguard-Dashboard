@@ -1245,7 +1245,7 @@ const UPDATE_STAGES = [
   { id: 'restart', label: 'Restarting service', detail: 'wg-dashboard' },
 ];
 
-function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose }) {
+function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose, onUpdateAvailable }) {
   const accent = tweaks.accent || 'terracotta';
   const [version, setVersion] = _useState('…');
   const [newVersion, setNewVersion] = _useState('');
@@ -1300,6 +1300,7 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
       setNewVersion(upd.remote || '');
       setPhase(upd.available ? 'available' : 'idle');
       setSysInfo(sys);
+      if (upd.available && onUpdateAvailable) onUpdateAvailable(true);
     }).catch(() => { setVersion('unknown'); setPhase('idle'); })
       .finally(() => {
         if (!manual) return;

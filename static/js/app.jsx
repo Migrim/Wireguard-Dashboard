@@ -13,6 +13,7 @@ function App({ tweaks, setTweaks, onLogout }) {
   const [logsDrawerOpen, setLogsDrawerOpen] = uS(false);
   const [addOpen, setAddOpen] = uS(false);
   const [settingsOpen, setSettingsOpen] = uS(false);
+  const [updateAvailable, setUpdateAvailable] = uS(false);
   const [dataBudget, setDataBudget] = uS(50);
   const [budgetAlerts, setBudgetAlerts] = uS(true);
   const [resetTime, setResetTime] = uS('00:00');
@@ -55,6 +56,15 @@ function App({ tweaks, setTweaks, onLogout }) {
   uE(() => {
     localStorage.setItem(DISMISSED_ALERTS_KEY, JSON.stringify([...dismissedAlerts]));
   }, [dismissedAlerts]);
+
+  uE(() => {
+    const check = () => fetch('/api/update/check').then(r => r.json()).then(j => {
+      if (j.available) setUpdateAvailable(true);
+    }).catch(() => {});
+    check();
+    const id = setInterval(check, 10 * 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const connectedPeerNames = uM(
     () => peers.filter(p => p.status === 'connected').map(p => p.name).sort(),
@@ -392,7 +402,8 @@ function App({ tweaks, setTweaks, onLogout }) {
           connectedCount={connectedCount}
           totalCount={peers.length}
           doService={doService}
-          onOpenSettings={() => setSettingsOpen(true)}
+          updateAvailable={updateAvailable}
+          onOpenSettings={() => { setSettingsOpen(true); setUpdateAvailable(false); }}
         />
         <KPIThroughput currentRx={currentRx} currentTx={currentTx} dataIn={chartTraffic.rx} dataOut={chartTraffic.tx} />
         <KPIDataToday total={totalToday} budget={dataBudget} peerBudgets={peerBudgets} onClick={() => setDataDrawerOpen(true)} />
@@ -512,7 +523,7 @@ function App({ tweaks, setTweaks, onLogout }) {
           onClose={() => setTrafficModeOpen(false)}
         />
       )}
-      {settingsOpen && <SettingsDrawer tweaks={tweaks} setTweaks={setTweaks} connectedCount={connectedCount} totalPeers={peers.length} onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && <SettingsDrawer tweaks={tweaks} setTweaks={setTweaks} connectedCount={connectedCount} totalPeers={peers.length} onClose={() => setSettingsOpen(false)} onUpdateAvailable={setUpdateAvailable} />}
       {tweaks._tweaksOpen && <TweaksPanel tweaks={tweaks} setTweaks={setTweaks} />}
       {portCheckOpen && <PortCheckDrawer peers={peers} onClose={() => setPortCheckOpen(false)} />}
       {logsDrawerOpen && <LogsDrawer alerts={alerts} onClose={() => setLogsDrawerOpen(false)} verbose={logsVerbose} setVerbose={setLogsVerbose} onDismiss={dismissAlert} />}
@@ -535,7 +546,7 @@ function App({ tweaks, setTweaks, onLogout }) {
 // ============================================================
 // KPI tiles
 // ============================================================
-function KPIServiceControl({ serviceActive, serviceEnabled, unit, startedAt, connectedCount, totalCount, doService, onOpenSettings }) {
+function KPIServiceControl({ serviceActive, serviceEnabled, unit, startedAt, connectedCount, totalCount, doService, updateAvailable, onOpenSettings }) {
   const uptimeMs = Date.now() - startedAt;
   const mins = Math.floor(uptimeMs / 60000);
   const hrs = Math.floor(mins / 60);
@@ -582,6 +593,7 @@ function KPIServiceControl({ serviceActive, serviceEnabled, unit, startedAt, con
         <button className="svc-settings-btn" onClick={onOpenSettings}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
           Dashboard settings
+          {updateAvailable && <span className="svc-update-dot" title="Update available" />}
           <svg className="svc-settings-chev" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
         </button>
       </div>
