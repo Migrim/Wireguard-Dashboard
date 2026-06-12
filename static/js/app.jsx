@@ -433,10 +433,7 @@ function App({ tweaks, setTweaks, onLogout }) {
         </div>
 
         <div className="logs-card-shell">
-          <LogsPanel logs={logs} notifications={[
-            ...alerts,
-            { level: 'info', title: 'Update available', desc: 'wireguard-tools 1.0.20251201 is ready to install' },
-          ]} onExpand={() => setLogsDrawerOpen(true)} />
+          <LogsPanel logs={logs} notifications={alerts} onExpand={() => setLogsDrawerOpen(true)} />
         </div>
       </section>
 

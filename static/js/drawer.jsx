@@ -486,7 +486,10 @@ function LogsPanel({ logs, notifications = [], onExpand }) {
                 </button>
               </div>
             ) : (
-              <div className="notif-empty">No notifications</div>
+              <div className="notif-empty">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/><line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" strokeWidth="1.5"/></svg>
+                No notifications
+              </div>
             )}
           </div>
         </div>
