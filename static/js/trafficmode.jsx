@@ -45,12 +45,13 @@ function buildOrderedPeers(peers) {
   }));
 }
 
-function orbitalPeerPos(p, rotation, zoom, W, H) {
+function orbitalPeerPos(p, rotation, zoom, W, H, norm) {
   const cx = W / 2;
   const cy = H / 2 + 10;
   const R = Math.min(W, H) * 0.40 * zoom;
   const a = p.angle + rotation;
-  return { x: cx + Math.cos(a) * R * p.norm, y: cy + Math.sin(a) * R * p.norm * 0.62 };
+  const n = norm ?? p.norm;
+  return { x: cx + Math.cos(a) * R * n, y: cy + Math.sin(a) * R * n * 0.62 };
 }
 
 function TrafficMode({ peers, theme, onClose }) {
@@ -70,6 +71,8 @@ function TrafficMode({ peers, theme, onClose }) {
   const hitTargetsRef = React.useRef([]);
   // Lerped speed multiplier: 1 = full rotation, 0 = paused for hover
   const hoverSpeedRef = React.useRef(1);
+  // Animated norm values per peer name — lerp toward target norm each frame
+  const normAnimRef = React.useRef({});
 
   const [paused, setPaused] = React.useState(false);
   const [logOpen, setLogOpen] = React.useState(false);
@@ -139,11 +142,18 @@ function TrafficMode({ peers, theme, onClose }) {
       lastTime = now;
       // Smoothly slow to a stop when hovering, resume when not
       const targetSpeed = hoverPeerRef.current ? 0 : 1;
-      hoverSpeedRef.current += (targetSpeed - hoverSpeedRef.current) * 0.07;
+      hoverSpeedRef.current += (targetSpeed - hoverSpeedRef.current) * 0.12;
       if (!pausedRef.current) rotRef.current += dt * 0.00004 * hoverSpeedRef.current;
 
       const P = ORBITAL_THEMES[themeRef.current === 'light' ? 'light' : 'dark'];
       const ordered = orderedRef.current;
+
+      // Lerp each peer's orbital radius toward its target norm (smooth latency drift)
+      const normAnim = normAnimRef.current;
+      ordered.forEach(p => {
+        if (normAnim[p.name] == null) normAnim[p.name] = p.norm;
+        else normAnim[p.name] += (p.norm - normAnim[p.name]) * 0.022;
+      });
       const cx = W / 2, cy = H / 2 + 10;
       const R = Math.min(W, H) * 0.40 * zoomRef.current;
 
@@ -182,7 +192,7 @@ function TrafficMode({ peers, theme, onClose }) {
       // Spokes from server to each peer
       ctx.save(); ctx.scale(dpr, dpr);
       ordered.forEach(p => {
-        const pos = orbitalPeerPos(p, rotRef.current, zoomRef.current, W, H);
+        const pos = orbitalPeerPos(p, rotRef.current, zoomRef.current, W, H, normAnim[p.name]);
         const hot = hoverPeerRef.current === p;
         ctx.strokeStyle = hot ? P.spokeHot : P.spoke;
         ctx.lineWidth = hot ? 1.4 : (p.connected ? 1 : 0.7);
@@ -196,7 +206,7 @@ function TrafficMode({ peers, theme, onClose }) {
         const pr = particlesRef.current[i];
         const t = (now - pr.t0) / pr.dur;
         if (t >= 1) { particlesRef.current.splice(i, 1); continue; }
-        const pos = orbitalPeerPos(pr.peer, rotRef.current, zoomRef.current, W, H);
+        const pos = orbitalPeerPos(pr.peer, rotRef.current, zoomRef.current, W, H, normAnim[pr.peer.name]);
         const u = pr.dir > 0 ? t : 1 - t;
         const trail = 0.16;
         const u2 = pr.dir > 0 ? Math.max(0, u - trail) : Math.min(1, u + trail);
@@ -242,7 +252,7 @@ function TrafficMode({ peers, theme, onClose }) {
       // Peer nodes + labels
       ctx.save(); ctx.scale(dpr, dpr);
       ordered.forEach(p => {
-        const pos = orbitalPeerPos(p, rotRef.current, zoomRef.current, W, H);
+        const pos = orbitalPeerPos(p, rotRef.current, zoomRef.current, W, H, normAnim[p.name]);
         const hot = hoverPeerRef.current === p;
         if (p.connected) {
           const recent = p.lastHit ? Math.max(0, 1 - (now - p.lastHit) / 600) : 0;
@@ -281,7 +291,7 @@ function TrafficMode({ peers, theme, onClose }) {
 
       // Snapshot exact draw-time positions so the interaction handler hits what was rendered
       hitTargetsRef.current = ordered.map(p => {
-        const pos = orbitalPeerPos(p, rotRef.current, zoomRef.current, W, H);
+        const pos = orbitalPeerPos(p, rotRef.current, zoomRef.current, W, H, normAnim[p.name]);
         return { p, x: pos.x, y: pos.y, onRight: pos.x >= cx };
       });
 
@@ -299,9 +309,10 @@ function TrafficMode({ peers, theme, onClose }) {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const CHAR_W = 6.6;  // approx px per char at Inter 11px
-    const DOT_R  = 16;   // hit radius around dot centre
-    const LBL_H  = 18;   // vertical hit height for label strip
+    const CHAR_W   = 6.6;  // approx px per char at Inter 11px
+    const ENTER_R  = 28;   // hit radius to acquire hover
+    const EXIT_R   = 52;   // larger radius to release hover (hysteresis keeps it sticky)
+    const LBL_H    = 20;   // vertical hit height for label strip
 
     const onMouseMove = (e) => {
       const rect = canvas.getBoundingClientRect();
@@ -311,11 +322,19 @@ function TrafficMode({ peers, theme, onClose }) {
         dragXRef.current = mx;
         return;
       }
+      // Hysteresis: if already hovering a peer, keep it until mouse moves far away
+      const current = hoverPeerRef.current;
+      if (current) {
+        const hit = hitTargetsRef.current.find(h => h.p === current);
+        if (hit && (mx - hit.x) ** 2 + (my - hit.y) ** 2 <= EXIT_R * EXIT_R) {
+          canvas.style.cursor = 'pointer';
+          return;
+        }
+      }
+      // Acquire new hover — dot circle or label strip
       let best = null;
       for (const { p, x, y, onRight } of hitTargetsRef.current) {
-        // Dot circle
-        if ((mx - x) ** 2 + (my - y) ** 2 <= DOT_R * DOT_R) { best = p; break; }
-        // Label bounding box (only for visible labels: connected peers)
+        if ((mx - x) ** 2 + (my - y) ** 2 <= ENTER_R * ENTER_R) { best = p; break; }
         if (p.connected) {
           const lblW = p.name.length * CHAR_W;
           const lx0 = onRight ? x + 9 : x - 9 - lblW;
@@ -331,6 +350,7 @@ function TrafficMode({ peers, theme, onClose }) {
     const onMouseLeave = () => { hoverPeerRef.current = null; };
     const onMouseDown = (e) => {
       draggingRef.current = true;
+      hoverPeerRef.current = null;
       dragXRef.current = e.clientX - canvas.getBoundingClientRect().left;
       canvas.style.cursor = 'grabbing';
     };
@@ -438,7 +458,7 @@ function TrafficMode({ peers, theme, onClose }) {
         <div className="tm-log-body tm-orbital-log-scroll">
           {events.length === 0 && <div className="tm-log-empty">Waiting for traffic…</div>}
           {events.map((e, i) => (
-            <div key={i} className={`tm-log-row tm-log-${e.kind}`} style={{ opacity: Math.max(0.25, 1 - i * 0.04) }}>
+            <div key={i} className={`tm-log-row tm-log-${e.kind}`}>
               <span className="tm-log-time">{formatTmClock(e.ts)}</span>
               <span className={`tm-log-kind tm-log-kind-${e.kind}`}>{e.label}</span>
               <span className="tm-log-peer">{e.peer}</span>
