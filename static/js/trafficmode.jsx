@@ -7,31 +7,31 @@ const TM_SERVER = { name: 'wg0 · DE-FRA-01', lat: 50.11, lng: 8.68, country: 'F
 // Palettes — dark + light. Canvas blends between these per-frame.
 // ============================================================
 const TM_DARK = {
-  bg: [8, 6, 10],
-  star: [230, 220, 200],
-  haloCore: [217, 119, 87],
-  sphereLight: [40, 30, 26],
-  sphereMid: [20, 14, 12],
-  sphereDark: [10, 8, 8],
-  rim: [217, 119, 87],
-  rimAlpha: 0.30,
-  wire: [240, 220, 200],
-  wireAlpha: 1,
-  surfaceDot: [230, 210, 180],
-  landDot: [245, 220, 188],
-  country: [255, 230, 200],
-  countryAlpha: 0.55,
-  serverGlow: [247, 175, 130],
-  serverRing: [217, 119, 87],
-  serverCore: [255, 220, 190],
-  serverCoreStroke: [255, 100, 50],
-  peerOnGlow: [150, 230, 180],
-  peerOnRing: [120, 220, 170],
-  peerOnCore: [220, 255, 230],
-  peerOnCoreStroke: [80, 200, 140],
-  peerOff: [180, 160, 140],
-  label: [220, 255, 230],
-  labelOff: [200, 190, 180],
+  bg: [26, 22, 19],
+  star: [138, 127, 114],
+  haloCore: [166, 110, 78],
+  sphereLight: [56, 45, 36],
+  sphereMid: [34, 28, 23],
+  sphereDark: [18, 15, 13],
+  rim: [154, 126, 96],
+  rimAlpha: 0.22,
+  wire: [170, 151, 128],
+  wireAlpha: 0.82,
+  surfaceDot: [138, 127, 114],
+  landDot: [204, 174, 136],
+  country: [202, 184, 154],
+  countryAlpha: 0.42,
+  serverGlow: [208, 126, 86],
+  serverRing: [208, 126, 86],
+  serverCore: [232, 176, 135],
+  serverCoreStroke: [116, 66, 47],
+  peerOnGlow: [119, 202, 154],
+  peerOnRing: [119, 202, 154],
+  peerOnCore: [202, 235, 218],
+  peerOnCoreStroke: [61, 139, 98],
+  peerOff: [138, 127, 114],
+  label: [239, 230, 216],
+  labelOff: [200, 190, 174],
   arcTrailWhite: [255, 255, 255],
 };
 const TM_LIGHT = {
@@ -257,17 +257,17 @@ function TrafficMode({ peers, theme, onClose }) {
 
       // ── Glow layers (drawn back-to-front before the sphere) ──
       if (!isLight) {
-        // 1. Deep-space void: large, very faint cool-purple ambient
+        // 1. Deep-space void: large, restrained cool ambient
         const spaceAmb = ctx.createRadialGradient(cx, cy, R * 0.6, cx, cy, R * 2.8);
-        spaceAmb.addColorStop(0,   rgba([20, 14, 34], 0));
-        spaceAmb.addColorStop(0.4, rgba([14, 10, 26], 0.22));
-        spaceAmb.addColorStop(1,   rgba([6,  4, 12],  0));
+        spaceAmb.addColorStop(0,   rgba([34, 28, 23], 0));
+        spaceAmb.addColorStop(0.45, rgba([34, 28, 23], 0.14));
+        spaceAmb.addColorStop(1,   rgba([18, 15, 13],  0));
         ctx.fillStyle = spaceAmb;
         ctx.beginPath(); ctx.arc(cx, cy, R * 2.8, 0, Math.PI * 2); ctx.fill();
       }
 
-      // 2. Tight atmospheric rim — warm terracotta hugging the sphere edge
-      const atmAlpha = isLight ? 0.05 : 0.38;
+      // 2. Tight atmospheric rim
+      const atmAlpha = isLight ? 0.05 : 0.16;
       const atm = ctx.createRadialGradient(cx, cy, R * 0.88, cx, cy, R * 1.20);
       atm.addColorStop(0,    rgba(P.haloCore, 0));
       atm.addColorStop(0.45, rgba(P.haloCore, atmAlpha));
@@ -276,8 +276,8 @@ function TrafficMode({ peers, theme, onClose }) {
       ctx.fillStyle = atm;
       ctx.beginPath(); ctx.arc(cx, cy, R * 1.20, 0, Math.PI * 2); ctx.fill();
 
-      // 3. Soft outer corona — wide, very faint halo for depth
-      const coronaAlpha = isLight ? 0.02 : 0.10;
+      // 3. Soft outer corona — barely visible in dark mode
+      const coronaAlpha = isLight ? 0.02 : 0.03;
       const corona = ctx.createRadialGradient(cx, cy, R * 1.0, cx, cy, R * 1.75);
       corona.addColorStop(0, rgba(P.haloCore, coronaAlpha));
       corona.addColorStop(1, rgba(P.haloCore, 0));
@@ -297,10 +297,10 @@ function TrafficMode({ peers, theme, onClose }) {
       ctx.lineWidth = (isLight ? 1.0 : 1.5) * dpr;
       ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
 
-      // Dark mode: second, slightly wider softer rim for a clean glowing edge
+      // Dark mode: second, slightly wider softer rim
       if (!isLight) {
-        ctx.strokeStyle = rgba(P.haloCore, 0.12);
-        ctx.lineWidth = 4 * dpr;
+        ctx.strokeStyle = rgba(P.haloCore, 0.06);
+        ctx.lineWidth = 3 * dpr;
         ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
       }
 
@@ -857,14 +857,14 @@ function drawServerMarker(ctx, vec, ry, rx, cx, cy, R, dpr, t, P) {
 
   const pulseT = (t / 1400) % 1;
   const pulseR = 6 * dpr + pulseT * 24 * dpr;
-  ctx.strokeStyle = rgba(P.serverRing, (1 - pulseT) * 0.5 * dim);
+  ctx.strokeStyle = rgba(P.serverRing, (1 - pulseT) * 0.28 * dim);
   ctx.lineWidth = 1.5 * dpr;
   ctx.beginPath();
   ctx.arc(sx, sy, pulseR, 0, Math.PI * 2);
   ctx.stroke();
 
   const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, 18 * dpr);
-  glow.addColorStop(0, rgba(P.serverGlow, 0.55 * dim));
+  glow.addColorStop(0, rgba(P.serverGlow, 0.26 * dim));
   glow.addColorStop(1, rgba(P.serverGlow, 0));
   ctx.fillStyle = glow;
   ctx.beginPath();
@@ -897,14 +897,14 @@ function drawClusterBadge(ctx, sx, sy, z, dpr, count, t, P) {
   // Subtle pulse ring
   const pulseT = (t / 2200) % 1;
   const pulseR = size + pulseT * 8 * dpr;
-  ctx.strokeStyle = rgba(P.peerOnRing, (1 - pulseT) * 0.4 * dim);
+  ctx.strokeStyle = rgba(P.peerOnRing, (1 - pulseT) * 0.24 * dim);
   ctx.lineWidth = 1 * dpr;
   ctx.beginPath();
   ctx.arc(sx, sy, pulseR, 0, Math.PI * 2);
   ctx.stroke();
 
   // Badge fill
-  ctx.fillStyle = rgba(P.peerOnGlow, 0.4 * dim);
+  ctx.fillStyle = rgba(P.peerOnGlow, 0.24 * dim);
   ctx.beginPath();
   ctx.arc(sx, sy, size, 0, Math.PI * 2);
   ctx.fill();
@@ -935,14 +935,14 @@ function drawPeerMarker(ctx, vec, ry, rx, cx, cy, R, dpr, peer, t, P, offSx = 0,
   if (on) {
     const pulseT = ((t + peer.id.charCodeAt(0) * 100) / 1800) % 1;
     const pulseR = 3 * dpr + pulseT * 18 * dpr;
-    ctx.strokeStyle = rgba(P.peerOnRing, (1 - pulseT) * 0.45 * dim);
+    ctx.strokeStyle = rgba(P.peerOnRing, (1 - pulseT) * 0.26 * dim);
     ctx.lineWidth = 1.2 * dpr;
     ctx.beginPath();
     ctx.arc(sx, sy, pulseR, 0, Math.PI * 2);
     ctx.stroke();
 
     const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, 12 * dpr);
-    glow.addColorStop(0, rgba(P.peerOnGlow, 0.6 * dim));
+    glow.addColorStop(0, rgba(P.peerOnGlow, 0.28 * dim));
     glow.addColorStop(1, rgba(P.peerOnGlow, 0));
     ctx.fillStyle = glow;
     ctx.beginPath();
@@ -987,10 +987,10 @@ function drawArc(ctx, ev, ry, rx, cx, cy, R, dpr, now, P) {
 
   const isLight = (P.bg[0] + P.bg[1] + P.bg[2]) > 380;
   let color;
-  if (ev.kind === 'tx')      color = isLight ? [40, 140, 90]  : [120, 220, 170];
-  else if (ev.kind === 'rx') color = isLight ? [200, 95, 50]  : [247, 175, 130];
-  else if (ev.kind === 'hs') color = isLight ? [120, 90, 200] : [200, 180, 255];
-  else                       color = isLight ? [165, 130, 50] : [230, 210, 150];
+  if (ev.kind === 'tx')      color = isLight ? [40, 140, 90]  : [119, 202, 154];
+  else if (ev.kind === 'rx') color = isLight ? [200, 95, 50]  : [208, 126, 86];
+  else if (ev.kind === 'hs') color = isLight ? [120, 90, 200] : [173, 148, 122];
+  else                       color = isLight ? [165, 130, 50] : [196, 168, 122];
 
   const headU = Math.min(1, t);
   const tailU = Math.max(0, t - 0.45);
@@ -1009,7 +1009,7 @@ function drawArc(ctx, ev, ry, rx, cx, cy, R, dpr, now, P) {
     const sx0 = cx + x0 * R, sy0 = cy - y0 * R;
     const sx1 = cx + x1 * R, sy1 = cy - y1 * R;
     const distFromHead = Math.max(0, headU - u1);
-    const alpha = Math.max(0, 1 - distFromHead / 0.45) * fade * 0.9;
+    const alpha = Math.max(0, 1 - distFromHead / 0.45) * fade * (isLight ? 0.9 : 0.62);
     ctx.strokeStyle = rgba(color, alpha);
     ctx.beginPath();
     ctx.moveTo(sx0, sy0);
@@ -1024,7 +1024,7 @@ function drawArc(ctx, ev, ry, rx, cx, cy, R, dpr, now, P) {
     if (hz > -0.05) {
       const sx = cx + hx * R, sy = cy - hy * R;
       const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, 10 * dpr);
-      glow.addColorStop(0, rgba(color, 0.9 * fade));
+      glow.addColorStop(0, rgba(color, (isLight ? 0.9 : 0.4) * fade));
       glow.addColorStop(1, rgba(color, 0));
       ctx.fillStyle = glow;
       ctx.beginPath();

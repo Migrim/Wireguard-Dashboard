@@ -1477,7 +1477,12 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
                 </div>
                 <div className={`upd-fetch-overlay${checking ? ' is-active' : ''}`}>
                   <span className="pc-spinner" style={{width:'12px',height:'12px',flexShrink:0}} />
-                  Fetching updates<span className="pc-typing">…</span>
+                  <span className="upd-fetch-text">Fetching updates</span>
+                  <span className="upd-fetch-dots" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                  </span>
                 </div>
               </div>
             )}
