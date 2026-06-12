@@ -194,7 +194,7 @@ function TrafficMode({ peers, theme, onClose }) {
       ctx.save(); ctx.scale(dpr, dpr);
       ordered.forEach(p => {
         const pos = orbitalPeerPos(p, rotRef.current, zoomRef.current, W, H, normAnim[p.name]);
-        const hot = hoverPeerRef.current === p;
+        const hot = hoverPeerRef.current?.name === p.name;
         ctx.strokeStyle = hot ? P.spokeHot : P.spoke;
         ctx.lineWidth = hot ? 1.4 : (p.connected ? 1 : 0.7);
         ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(pos.x, pos.y); ctx.stroke();
@@ -254,7 +254,7 @@ function TrafficMode({ peers, theme, onClose }) {
       ctx.save(); ctx.scale(dpr, dpr);
       ordered.forEach(p => {
         const pos = orbitalPeerPos(p, rotRef.current, zoomRef.current, W, H, normAnim[p.name]);
-        const hot = hoverPeerRef.current === p;
+        const hot = hoverPeerRef.current?.name === p.name;
         if (p.connected) {
           const recent = p.lastHit ? Math.max(0, 1 - (now - p.lastHit) / 600) : 0;
           const pulseT = ((now + p.phase * 300) / 1900) % 1;
@@ -343,6 +343,7 @@ function TrafficMode({ peers, theme, onClose }) {
         if (current) {
           const hit = hitTargetsRef.current.find(h => h.p.name === current.name);
           if (hit && (mx - hit.x) ** 2 + (my - hit.y) ** 2 <= EXIT_R * EXIT_R) {
+            hoverPeerRef.current = hit.p; // refresh to current object after peers rebuild
             canvas.style.cursor = 'pointer';
             return;
           }
