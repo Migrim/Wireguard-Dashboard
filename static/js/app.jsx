@@ -45,6 +45,8 @@ function App({ tweaks, setTweaks, onLogout }) {
 
   // Per-peer geo: { [name]: { lat, lng, country } } — filled from /diag responses
   const [peerGeo, setPeerGeo] = uS({});
+  // Per-peer ping in ms — filled from /diag responses
+  const [peerPings, setPeerPings] = uS({});
 
   // Previous cumulative bytes per peer — used to compute sparkline deltas
   const prevBytesRef = uR({});
@@ -192,13 +194,18 @@ function App({ tweaks, setTweaks, onLogout }) {
         const avg = values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
         setAvgPingHistory(prev => [...prev.slice(1), avg]);
         const newGeo = {};
-        results.forEach(r => {
-          if (!r || !r.ok || !r.name) return;
+        const newPings = {};
+        results.forEach((r, i) => {
+          if (!r) return;
+          const ping = Number(r.ping_ms);
+          if (Number.isFinite(ping) && ping >= 0) newPings[connectedPeerNames[i]] = ping;
+          if (!r.ok || !r.name) return;
           const loc = r.location || {};
           if (loc.lat != null && loc.lng != null) {
             newGeo[r.name] = { lat: loc.lat, lng: loc.lng, country: loc.label || loc.country || '' };
           }
         });
+        if (Object.keys(newPings).length > 0) setPeerPings(prev => ({ ...prev, ...newPings }));
         if (Object.keys(newGeo).length > 0) setPeerGeo(prev => ({ ...prev, ...newGeo }));
       } catch (_) {}
     };
@@ -528,7 +535,7 @@ function App({ tweaks, setTweaks, onLogout }) {
 
       {trafficModeOpen && (
         <TrafficMode
-          peers={peers.map(p => ({ ...p, ...(peerGeo[p.name] || {}) }))}
+          peers={peers.map(p => ({ ...p, ...(peerGeo[p.name] || {}), pingMs: peerPings[p.name] ?? p.pingMs }))}
           theme={tweaks.theme}
           onClose={() => setTrafficModeOpen(false)}
         />
