@@ -66,6 +66,10 @@ function TrafficMode({ peers, theme, onClose }) {
   const themeRef = React.useRef(theme);
   const pausedRef = React.useRef(false);
   const statsRef = React.useRef({ events: 0, bytes: 0 });
+  // Positions written each frame — interaction handler reads these for accurate hit-testing
+  const hitTargetsRef = React.useRef([]);
+  // Lerped speed multiplier: 1 = full rotation, 0 = paused for hover
+  const hoverSpeedRef = React.useRef(1);
 
   const [paused, setPaused] = React.useState(false);
   const [logOpen, setLogOpen] = React.useState(false);
@@ -133,7 +137,10 @@ function TrafficMode({ peers, theme, onClose }) {
     const tick = (now) => {
       const dt = Math.min(50, now - lastTime);
       lastTime = now;
-      if (!pausedRef.current) rotRef.current += dt * 0.00004;
+      // Smoothly slow to a stop when hovering, resume when not
+      const targetSpeed = hoverPeerRef.current ? 0 : 1;
+      hoverSpeedRef.current += (targetSpeed - hoverSpeedRef.current) * 0.07;
+      if (!pausedRef.current) rotRef.current += dt * 0.00004 * hoverSpeedRef.current;
 
       const P = ORBITAL_THEMES[themeRef.current === 'light' ? 'light' : 'dark'];
       const ordered = orderedRef.current;
@@ -272,6 +279,12 @@ function TrafficMode({ peers, theme, onClose }) {
       });
       ctx.restore();
 
+      // Snapshot exact draw-time positions so the interaction handler hits what was rendered
+      hitTargetsRef.current = ordered.map(p => {
+        const pos = orbitalPeerPos(p, rotRef.current, zoomRef.current, W, H);
+        return { p, x: pos.x, y: pos.y, onRight: pos.x >= cx };
+      });
+
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
@@ -285,10 +298,10 @@ function TrafficMode({ peers, theme, onClose }) {
   React.useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    let W = 0, H = 0;
-    const updateSize = () => { const r = canvas.getBoundingClientRect(); W = r.width; H = r.height; };
-    updateSize();
-    window.addEventListener('resize', updateSize);
+
+    const CHAR_W = 6.6;  // approx px per char at Inter 11px
+    const DOT_R  = 16;   // hit radius around dot centre
+    const LBL_H  = 18;   // vertical hit height for label strip
 
     const onMouseMove = (e) => {
       const rect = canvas.getBoundingClientRect();
@@ -298,12 +311,20 @@ function TrafficMode({ peers, theme, onClose }) {
         dragXRef.current = mx;
         return;
       }
-      let best = null, bestD = 26 * 26;
-      orderedRef.current.forEach(p => {
-        const pos = orbitalPeerPos(p, rotRef.current, zoomRef.current, W, H);
-        const d = (pos.x - mx) ** 2 + (pos.y - my) ** 2;
-        if (d < bestD) { bestD = d; best = p; }
-      });
+      let best = null;
+      for (const { p, x, y, onRight } of hitTargetsRef.current) {
+        // Dot circle
+        if ((mx - x) ** 2 + (my - y) ** 2 <= DOT_R * DOT_R) { best = p; break; }
+        // Label bounding box (only for visible labels: connected peers)
+        if (p.connected) {
+          const lblW = p.name.length * CHAR_W;
+          const lx0 = onRight ? x + 9 : x - 9 - lblW;
+          const lx1 = lx0 + lblW;
+          const ly0 = y - LBL_H / 2;
+          const ly1 = y + LBL_H / 2;
+          if (mx >= lx0 && mx <= lx1 && my >= ly0 && my <= ly1) { best = p; break; }
+        }
+      }
       hoverPeerRef.current = best;
       canvas.style.cursor = best ? 'pointer' : 'crosshair';
     };
@@ -343,7 +364,6 @@ function TrafficMode({ peers, theme, onClose }) {
       canvas.removeEventListener('touchstart', onTouchStart);
       canvas.removeEventListener('touchmove', onTouchMove);
       canvas.removeEventListener('touchend', onTouchEnd);
-      window.removeEventListener('resize', updateSize);
     };
   }, []);
 
