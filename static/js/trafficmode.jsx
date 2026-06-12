@@ -1,662 +1,356 @@
-// Traffic Mode — fullscreen 3D globe with live peer access visualization
-// Supports light + dark themes with smooth crossfade.
+// Traffic Mode — Orbital 2D latency-ring visualization
+// Peers arranged radially by ping latency on concentric rings.
+// Log is in a slide-in drawer toggled by the log button.
 
-const TM_SERVER = { name: 'wg0 · DE-FRA-01', lat: 50.11, lng: 8.68, country: 'Frankfurt' };
+const TM_SERVER = { name: 'wg0 · DE-FRA-01', country: 'Frankfurt' };
+const RING_MS = [25, 75, 150, 250];
 
-// ============================================================
-// Palettes — dark + light. Canvas blends between these per-frame.
-// ============================================================
-const TM_DARK = {
-  bg: [26, 22, 19],
-  star: [138, 127, 114],
-  haloCore: [166, 110, 78],
-  sphereLight: [56, 45, 36],
-  sphereMid: [34, 28, 23],
-  sphereDark: [18, 15, 13],
-  rim: [154, 126, 96],
-  rimAlpha: 0.22,
-  wire: [170, 151, 128],
-  wireAlpha: 0.82,
-  surfaceDot: [138, 127, 114],
-  landDot: [204, 174, 136],
-  country: [202, 184, 154],
-  countryAlpha: 0.42,
-  serverGlow: [208, 126, 86],
-  serverRing: [208, 126, 86],
-  serverCore: [232, 176, 135],
-  serverCoreStroke: [116, 66, 47],
-  peerOnGlow: [119, 202, 154],
-  peerOnRing: [119, 202, 154],
-  peerOnCore: [202, 235, 218],
-  peerOnCoreStroke: [61, 139, 98],
-  peerOff: [138, 127, 114],
-  label: [239, 230, 216],
-  labelOff: [200, 190, 174],
-  arcTrailWhite: [255, 255, 255],
-};
-const TM_LIGHT = {
-  bg: [248, 244, 235],
-  star: [200, 180, 150],
-  haloCore: [217, 119, 87],
-  sphereLight: [255, 252, 244],
-  sphereMid: [245, 238, 224],
-  sphereDark: [230, 218, 196],
-  rim: [180, 110, 70],
-  rimAlpha: 0.35,
-  wire: [120, 90, 60],
-  wireAlpha: 1.2,
-  surfaceDot: [120, 90, 60],
-  landDot: [70, 50, 35],
-  country: [50, 30, 15],
-  countryAlpha: 0.7,
-  serverGlow: [217, 119, 87],
-  serverRing: [180, 80, 40],
-  serverCore: [180, 70, 30],
-  serverCoreStroke: [255, 240, 220],
-  peerOnGlow: [60, 160, 110],
-  peerOnRing: [40, 130, 90],
-  peerOnCore: [30, 110, 70],
-  peerOnCoreStroke: [220, 255, 230],
-  peerOff: [150, 130, 110],
-  label: [40, 80, 55],
-  labelOff: [130, 115, 95],
-  arcTrailWhite: [40, 30, 20],
-};
-
-function tmBlendPalette(t) {
-  const out = {};
-  for (const k of Object.keys(TM_DARK)) {
-    const a = TM_DARK[k], b = TM_LIGHT[k];
-    if (Array.isArray(a)) {
-      out[k] = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-    } else {
-      out[k] = a + (b - a) * t;
-    }
+const ORBITAL_THEMES = {
+  dark: {
+    bg0: '#221A13', bg1: '#150F0B',
+    star: 'rgba(230,220,200,',
+    ring: 'rgba(245,220,188,0.28)', ringLabel: 'rgba(245,220,188,0.48)',
+    spoke: 'rgba(245,220,188,0.10)', spokeHot: 'rgba(245,220,188,0.30)',
+    serverGlow: '247,175,130', serverRing: '217,119,87', serverCore: '#FFE6CC',
+    peerOn: '#CFEFD8', peerOnGlow: '120,220,170', peerOff: '#6B5D4D',
+    label: 'rgba(248,235,216,', labelOff: 'rgba(154,139,120,',
+    rx: '247,175,130', tx: '120,220,170', hs: '200,180,255', ka: '230,210,150',
+  },
+  light: {
+    bg0: '#F6F1E6', bg1: '#E7DECB',
+    star: 'rgba(150,130,100,',
+    ring: 'rgba(90,60,30,0.26)', ringLabel: 'rgba(90,60,30,0.55)',
+    spoke: 'rgba(90,60,30,0.12)', spokeHot: 'rgba(90,60,30,0.34)',
+    serverGlow: '217,119,87', serverRing: '180,80,40', serverCore: '#B7521F',
+    peerOn: '#2E7A4E', peerOnGlow: '60,160,110', peerOff: '#B5A893',
+    label: 'rgba(42,37,32,', labelOff: 'rgba(122,110,94,',
+    rx: '193,90,45', tx: '40,130,80', hs: '120,90,200', ka: '150,110,40',
   }
-  return out;
+};
+
+function pingToNorm(ping) {
+  if (ping == null) return 1.18;
+  return 0.30 + Math.sqrt(Math.min(ping, 260) / 260) * 0.78;
 }
-function rgba(c, a) { return `rgba(${c[0]|0}, ${c[1]|0}, ${c[2]|0}, ${a})`; }
+
+function buildOrderedPeers(peers) {
+  const withOrig = peers.map((p, i) => ({ ...p, origIdx: i }));
+  withOrig.sort((a, b) => (a.pingMs ?? 9999) - (b.pingMs ?? 9999));
+  return withOrig.map((p, idx) => ({
+    ...p,
+    angle: idx * 2.39996323 + (p.origIdx % 2 ? 0.18 : -0.18),
+    norm: pingToNorm(p.pingMs),
+    connected: p.status === 'connected',
+    phase: (p.origIdx * 137.5) % (Math.PI * 2),
+  }));
+}
+
+function orbitalPeerPos(p, rotation, zoom, W, H) {
+  const cx = W / 2;
+  const cy = H / 2 + 10;
+  const R = Math.min(W, H) * 0.40 * zoom;
+  const a = p.angle + rotation;
+  return { x: cx + Math.cos(a) * R * p.norm, y: cy + Math.sin(a) * R * p.norm * 0.62 };
+}
 
 function TrafficMode({ peers, theme, onClose }) {
   const canvasRef = React.useRef(null);
   const rafRef = React.useRef(null);
-  const eventsRef = React.useRef([]);
-  const rotRef = React.useRef({ y: 0, x: 0, ty: 0, tx: 0, vy: 0.0006, manualUntil: 0 });
-  const dragRef = React.useRef({ active: false, lastX: 0, lastY: 0 });
+  const rotRef = React.useRef(0);
   const zoomRef = React.useRef(1);
-  const pinchRef = React.useRef(null);
-  const [zoom, setZoom] = React.useState(1);
-  const [dragging, setDragging] = React.useState(false);
-  const [countryLines, setCountryLines] = React.useState(null);
-  const [logCollapsed, setLogCollapsed] = React.useState(false);
-  const [peersCollapsed, setPeersCollapsed] = React.useState(false);
-  const themeMixRef = React.useRef(theme === 'light' ? 1 : 0);
-  const themeTargetRef = React.useRef(theme === 'light' ? 1 : 0);
-  const [events, setEvents] = React.useState([]);
-  const [stats, setStats] = React.useState({ pings: 0, bytes: 0, started: Date.now() });
-  const [paused, setPaused] = React.useState(false);
+  const draggingRef = React.useRef(false);
+  const dragXRef = React.useRef(0);
+  const hoverPeerRef = React.useRef(null);
+  const particlesRef = React.useRef([]);
+  const orderedRef = React.useRef([]);
+  const themeRef = React.useRef(theme);
   const pausedRef = React.useRef(false);
+  const statsRef = React.useRef({ events: 0, bytes: 0 });
+
+  const [paused, setPaused] = React.useState(false);
+  const [logOpen, setLogOpen] = React.useState(false);
+  const [events, setEvents] = React.useState([]);
+  const [stats, setStats] = React.useState({ events: 0, bytes: 0 });
+
   React.useEffect(() => { pausedRef.current = paused; }, [paused]);
+  React.useEffect(() => { themeRef.current = theme; }, [theme]);
+  React.useEffect(() => { orderedRef.current = buildOrderedPeers(peers); }, [peers]);
 
-  // Cluster expansion state — ref mirrors state so tick loop always reads current value
-  const [expandedCluster, setExpandedCluster] = React.useState(null); // { peers: [] }
-  const expandedClusterRef = React.useRef(null);
-  React.useEffect(() => { expandedClusterRef.current = expandedCluster; }, [expandedCluster]);
-
-  // Last-frame cluster hit areas for click detection (canvas-px coords)
-  const clustersLastFrameRef = React.useRef([]);
-
-  // Smooth zoom — target is animated toward in the tick loop
-  const zoomTargetRef = React.useRef(1);
-
+  // Particle emission — restarts whenever connected peer set changes
   React.useEffect(() => {
-    themeTargetRef.current = theme === 'light' ? 1 : 0;
-  }, [theme]);
+    const fire = (p) => {
+      if (pausedRef.current) return;
+      const roll = Math.random();
+      let kind, label, size;
+      if (roll < 0.46)      { kind = 'rx'; label = 'rx';        size = Math.random() * 4200 + 600; }
+      else if (roll < 0.66) { kind = 'rx'; label = 'rx';        size = Math.random() * 900  + 120; }
+      else if (roll < 0.88) { kind = 'tx'; label = 'tx';        size = Math.random() * 1600 + 90;  }
+      else if (roll < 0.95) { kind = 'hs'; label = 'handshake'; size = 0; }
+      else                   { kind = 'ka'; label = 'keepalive'; size = 0; }
+      const dir = kind === 'tx' ? 1 : kind === 'rx' ? -1 : (Math.random() < 0.5 ? 1 : -1);
+      particlesRef.current.push({ peer: p, kind, dir, size, t0: performance.now(), dur: 900 + Math.random() * 700 });
+      p.lastHit = performance.now();
+      statsRef.current = { events: statsRef.current.events + 1, bytes: statsRef.current.bytes + size * 1024 };
+      setStats({ ...statsRef.current });
+      setEvents(prev => [{ ts: Date.now(), peer: p.name, kind, label, size }, ...prev].slice(0, 20));
+    };
 
-  React.useEffect(() => {
-    const v = latLngToVec(TM_SERVER.lat, TM_SERVER.lng);
-    const y0 = Math.atan2(-v[0], v[2]);
-    const x0 = Math.atan2(v[1], Math.hypot(v[0], v[2])) * 0.7;
-    rotRef.current.y = y0; rotRef.current.ty = y0;
-    rotRef.current.x = x0; rotRef.current.tx = x0;
-  }, []);
-
-  React.useEffect(() => {
-    let alive = true;
-    fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json')
-      .then(r => r.json())
-      .then(topo => {
-        if (!alive || !window.topojson) return;
-        const mesh = window.topojson.mesh(topo, topo.objects.countries);
-        const lines = mesh.coordinates.map(line =>
-          line.map(([lng, lat]) => latLngToVec(lat, lng))
-        );
-        setCountryLines(lines);
-      })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, []);
-
-  const sphereDots = React.useMemo(() => {
-    const n = 1600;
-    const pts = [];
-    const golden = Math.PI * (3 - Math.sqrt(5));
-    for (let i = 0; i < n; i++) {
-      const y = 1 - (i / (n - 1)) * 2;
-      const r = Math.sqrt(1 - y * y);
-      const th = golden * i;
-      pts.push([Math.cos(th) * r, y, Math.sin(th) * r]);
-    }
-    return pts;
-  }, []);
-
-  const wireLines = React.useMemo(() => {
-    const lines = [];
-    for (let lat = -60; lat <= 60; lat += 30) {
-      const ring = [];
-      for (let lng = 0; lng <= 360; lng += 6) ring.push(latLngToVec(lat, lng));
-      lines.push(ring);
-    }
-    for (let lng = 0; lng < 360; lng += 30) {
-      const meridian = [];
-      for (let lat = -90; lat <= 90; lat += 6) meridian.push(latLngToVec(lat, lng));
-      lines.push(meridian);
-    }
-    return lines;
-  }, []);
-
-  const landDots = React.useMemo(() => buildLandDots(), []);
-
-  React.useEffect(() => {
-    const connected = peers.filter(p => p.status === 'connected');
-    if (connected.length === 0) return;
     const emit = () => {
       if (pausedRef.current) return;
-      const peer = connected[Math.floor(Math.random() * connected.length)];
-      const kinds = [
-        { k: 'rx', label: 'rx', size: Math.random() * 800 + 80 },
-        { k: 'rx', label: 'rx', size: Math.random() * 1500 + 200 },
-        { k: 'tx', label: 'tx', size: Math.random() * 400 + 40 },
-        { k: 'hs', label: 'handshake', size: 0 },
-        { k: 'ka', label: 'keepalive', size: 0 },
-      ];
-      const kind = kinds[Math.floor(Math.random() * kinds.length)];
-      const ev = {
-        id: 'e' + Date.now() + Math.random(),
-        from: latLngToVec(TM_SERVER.lat, TM_SERVER.lng),
-        to: latLngToVec(peer.lat != null ? peer.lat : 0, peer.lng != null ? peer.lng : 0),
-        peer, kind: kind.k, label: kind.label, sizeKB: kind.size,
-        t0: performance.now(), dur: 1400 + Math.random() * 600,
-      };
-      eventsRef.current.push(ev);
-      setEvents(prev => [{ ts: Date.now(), peer: peer.name, kind: kind.k, label: kind.label, size: kind.size }, ...prev].slice(0, 8));
-      setStats(s => ({ ...s, pings: s.pings + 1, bytes: s.bytes + kind.size * 1024 }));
+      const conn = orderedRef.current.filter(p => p.connected);
+      if (!conn.length) return;
+      const burst = 2 + Math.floor(Math.random() * 3);
+      const shuffled = [...conn].sort(() => Math.random() - 0.5);
+      for (let i = 0; i < burst; i++) {
+        const p = shuffled[i % shuffled.length];
+        setTimeout(() => fire(p), i * 90 + Math.random() * 80);
+      }
     };
-    setTimeout(emit, 400);
-    setTimeout(emit, 900);
-    const interval = setInterval(emit, 1100 + Math.random() * 500);
-    return () => clearInterval(interval);
+
+    const t1 = setTimeout(emit, 300);
+    const t2 = setTimeout(emit, 650);
+    const id = setInterval(emit, 540);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearInterval(id); };
   }, [peers]);
 
+  // Render loop — runs once; reads all state via refs
   React.useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    let dpr = window.devicePixelRatio || 1;
+    let dpr = 1, W = 0, H = 0, lastTime = performance.now();
 
     const resize = () => {
       dpr = window.devicePixelRatio || 1;
       const r = canvas.getBoundingClientRect();
-      canvas.width = r.width * dpr;
-      canvas.height = r.height * dpr;
+      W = r.width; H = r.height;
+      canvas.width = W * dpr;
+      canvas.height = H * dpr;
     };
     resize();
     window.addEventListener('resize', resize);
 
-    const tick = () => {
-      const w = canvas.width;
-      const h = canvas.height;
-      const cx = w / 2;
-      const cy = h / 2;
-      const R = Math.min(w, h) * 0.38 * zoomRef.current;
+    const tick = (now) => {
+      const dt = Math.min(50, now - lastTime);
+      lastTime = now;
+      if (!pausedRef.current) rotRef.current += dt * 0.00004;
 
-      if (!pausedRef.current) {
-        const r = rotRef.current;
-        if (!dragRef.current.active && performance.now() > r.manualUntil) {
-          const dY = wrapAngle(r.ty - r.y);
-          const dX = r.tx - r.x;
-          r.y += dY * 0.03 + r.vy;
-          r.x += dX * 0.05;
-        }
-        r.x = Math.max(-Math.PI * 0.45, Math.min(Math.PI * 0.45, r.x));
+      const P = ORBITAL_THEMES[themeRef.current === 'light' ? 'light' : 'dark'];
+      const ordered = orderedRef.current;
+      const cx = W / 2, cy = H / 2 + 10;
+      const R = Math.min(W, H) * 0.40 * zoomRef.current;
+
+      // Background + star field
+      ctx.save();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, H) * 0.85);
+      bg.addColorStop(0, P.bg0); bg.addColorStop(1, P.bg1);
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
+      for (let i = 0; i < 120; i++) {
+        const s = (i * 2654435761) >>> 0;
+        const sx = (s % 10000) / 10000 * W;
+        const sy = ((s >> 8) % 10000) / 10000 * H;
+        const a = 0.06 + ((s >> 16) % 100) / 100 * 0.12;
+        ctx.fillStyle = P.star + a + ')';
+        ctx.fillRect(sx, sy, 1.1, 1.1);
       }
+      ctx.restore();
 
-      // Smooth zoom animation toward target
-      {
-        const zCur = zoomRef.current;
-        const zTgt = zoomTargetRef.current;
-        const zDiff = zTgt - zCur;
-        if (Math.abs(zDiff) > 0.005) {
-          zoomRef.current = zCur + zDiff * 0.12;
-          setZoom(zoomRef.current);
-        }
+      // Latency rings
+      ctx.save(); ctx.scale(dpr, dpr);
+      RING_MS.forEach(ms => {
+        const rr = pingToNorm(ms) * R;
+        ctx.beginPath(); ctx.setLineDash([2, 6]);
+        ctx.strokeStyle = P.ring; ctx.lineWidth = 1;
+        ctx.ellipse(cx, cy, rr, rr * 0.62, 0, 0, Math.PI * 2);
+        ctx.stroke(); ctx.setLineDash([]);
+        ctx.font = `500 9.5px 'JetBrains Mono', ui-monospace, monospace`;
+        ctx.fillStyle = P.ringLabel;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(ms + 'ms', cx, cy - rr * 0.62 - 2);
+      });
+      ctx.restore();
+
+      // Spokes from server to each peer
+      ctx.save(); ctx.scale(dpr, dpr);
+      ordered.forEach(p => {
+        const pos = orbitalPeerPos(p, rotRef.current, zoomRef.current, W, H);
+        const hot = hoverPeerRef.current === p;
+        ctx.strokeStyle = hot ? P.spokeHot : P.spoke;
+        ctx.lineWidth = hot ? 1.4 : (p.connected ? 1 : 0.7);
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(pos.x, pos.y); ctx.stroke();
+      });
+      ctx.restore();
+
+      // Animated traffic particles
+      ctx.save(); ctx.scale(dpr, dpr); ctx.lineCap = 'round';
+      for (let i = particlesRef.current.length - 1; i >= 0; i--) {
+        const pr = particlesRef.current[i];
+        const t = (now - pr.t0) / pr.dur;
+        if (t >= 1) { particlesRef.current.splice(i, 1); continue; }
+        const pos = orbitalPeerPos(pr.peer, rotRef.current, zoomRef.current, W, H);
+        const u = pr.dir > 0 ? t : 1 - t;
+        const trail = 0.16;
+        const u2 = pr.dir > 0 ? Math.max(0, u - trail) : Math.min(1, u + trail);
+        const hx = cx + (pos.x - cx) * u, hy = cy + (pos.y - cy) * u;
+        const tx2 = cx + (pos.x - cx) * u2, ty2 = cy + (pos.y - cy) * u2;
+        const col = P[pr.kind] || P.rx;
+        const grad = ctx.createLinearGradient(tx2, ty2, hx, hy);
+        grad.addColorStop(0, `rgba(${col}, 0)`);
+        grad.addColorStop(1, `rgba(${col}, 0.85)`);
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = pr.size > 2000 ? 2.6 : pr.size > 600 ? 1.9 : 1.4;
+        ctx.beginPath(); ctx.moveTo(tx2, ty2); ctx.lineTo(hx, hy); ctx.stroke();
+        const gr = pr.size > 2000 ? 8 : 5.5;
+        const g = ctx.createRadialGradient(hx, hy, 0, hx, hy, gr);
+        g.addColorStop(0, `rgba(${col}, 0.95)`); g.addColorStop(1, `rgba(${col}, 0)`);
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(hx, hy, gr, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = themeRef.current === 'dark' ? 'rgba(255,255,255,0.95)' : `rgba(${col},1)`;
+        ctx.beginPath(); ctx.arc(hx, hy, 1.6, 0, Math.PI * 2); ctx.fill();
       }
+      ctx.restore();
 
-      const target = themeTargetRef.current;
-      const cur = themeMixRef.current;
-      const diff = target - cur;
-      themeMixRef.current = Math.abs(diff) < 0.001 ? target : cur + diff * 0.08;
-      const t = themeMixRef.current;
-      const P = tmBlendPalette(t);
-      const isLight = t > 0.5;
+      // Server origin marker
+      ctx.save(); ctx.scale(dpr, dpr);
+      const ptA = (now / 1500) % 1;
+      ctx.strokeStyle = `rgba(${P.serverRing}, ${(1 - ptA) * 0.5})`; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.arc(cx, cy, 7 + ptA * 26, 0, Math.PI * 2); ctx.stroke();
+      const ptB = ((now / 1500) + 0.5) % 1;
+      ctx.strokeStyle = `rgba(${P.serverRing}, ${(1 - ptB) * 0.32})`;
+      ctx.beginPath(); ctx.arc(cx, cy, 7 + ptB * 26, 0, Math.PI * 2); ctx.stroke();
+      const sg = ctx.createRadialGradient(cx, cy, 0, cx, cy, 26);
+      sg.addColorStop(0, `rgba(${P.serverGlow}, 0.55)`); sg.addColorStop(1, `rgba(${P.serverGlow}, 0)`);
+      ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(cx, cy, 26, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = P.serverCore; ctx.strokeStyle = `rgba(${P.serverRing}, 0.9)`; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.font = `600 12px 'Inter', system-ui, sans-serif`;
+      ctx.fillStyle = P.label + '0.95)'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillText(TM_SERVER.name, cx, cy + 14);
+      ctx.font = `9.5px 'JetBrains Mono', ui-monospace, monospace`;
+      ctx.fillStyle = P.label + '0.45)';
+      ctx.fillText(TM_SERVER.country.toUpperCase(), cx, cy + 30);
+      ctx.restore();
 
-      ctx.fillStyle = rgba(P.bg, 1);
-      ctx.fillRect(0, 0, w, h);
-
-      drawStars(ctx, w, h, P, t);
-
-      // ── Glow layers (drawn back-to-front before the sphere) ──
-      if (!isLight) {
-        // 1. Deep-space void: large, restrained cool ambient
-        const spaceAmb = ctx.createRadialGradient(cx, cy, R * 0.6, cx, cy, R * 2.8);
-        spaceAmb.addColorStop(0,   rgba([34, 28, 23], 0));
-        spaceAmb.addColorStop(0.45, rgba([34, 28, 23], 0.14));
-        spaceAmb.addColorStop(1,   rgba([18, 15, 13],  0));
-        ctx.fillStyle = spaceAmb;
-        ctx.beginPath(); ctx.arc(cx, cy, R * 2.8, 0, Math.PI * 2); ctx.fill();
-      }
-
-      // 2. Tight atmospheric rim
-      const atmAlpha = isLight ? 0.05 : 0.16;
-      const atm = ctx.createRadialGradient(cx, cy, R * 0.88, cx, cy, R * 1.20);
-      atm.addColorStop(0,    rgba(P.haloCore, 0));
-      atm.addColorStop(0.45, rgba(P.haloCore, atmAlpha));
-      atm.addColorStop(0.80, rgba(P.haloCore, atmAlpha * 0.25));
-      atm.addColorStop(1,    rgba(P.haloCore, 0));
-      ctx.fillStyle = atm;
-      ctx.beginPath(); ctx.arc(cx, cy, R * 1.20, 0, Math.PI * 2); ctx.fill();
-
-      // 3. Soft outer corona — barely visible in dark mode
-      const coronaAlpha = isLight ? 0.02 : 0.03;
-      const corona = ctx.createRadialGradient(cx, cy, R * 1.0, cx, cy, R * 1.75);
-      corona.addColorStop(0, rgba(P.haloCore, coronaAlpha));
-      corona.addColorStop(1, rgba(P.haloCore, 0));
-      ctx.fillStyle = corona;
-      ctx.beginPath(); ctx.arc(cx, cy, R * 1.75, 0, Math.PI * 2); ctx.fill();
-
-      // ── Globe sphere ──────────────────────────────────────────
-      const sphere = ctx.createRadialGradient(cx - R * 0.3, cy - R * 0.4, 0, cx, cy, R);
-      sphere.addColorStop(0,   rgba(P.sphereLight, isLight ? 0.95 : 0.88));
-      sphere.addColorStop(0.7, rgba(P.sphereMid,   0.94));
-      sphere.addColorStop(1,   rgba(P.sphereDark,  1.00));
-      ctx.fillStyle = sphere;
-      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
-
-      // Crisp rim stroke
-      ctx.strokeStyle = rgba(P.rim, P.rimAlpha);
-      ctx.lineWidth = (isLight ? 1.0 : 1.5) * dpr;
-      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
-
-      // Dark mode: second, slightly wider softer rim
-      if (!isLight) {
-        ctx.strokeStyle = rgba(P.haloCore, 0.06);
-        ctx.lineWidth = 3 * dpr;
-        ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
-      }
-
-      const ry = rotRef.current.y;
-      const rx = rotRef.current.x;
-
-      ctx.lineWidth = 0.5 * dpr;
-      wireLines.forEach(line => {
-        ctx.beginPath();
-        let drawing = false;
-        line.forEach(v => {
-          const [x, y, z] = applyRot(v, ry, rx);
-          const sx = cx + x * R;
-          const sy = cy - y * R;
-          if (z > -0.05) {
-            const baseA = Math.max(0.05, Math.min(0.22, z * 0.3 + 0.12));
-            ctx.strokeStyle = rgba(P.wire, baseA * P.wireAlpha);
-            if (!drawing) { ctx.moveTo(sx, sy); drawing = true; }
-            else ctx.lineTo(sx, sy);
-          } else {
-            if (drawing) { ctx.stroke(); ctx.beginPath(); drawing = false; }
-          }
-        });
-        if (drawing) ctx.stroke();
-      });
-
-      sphereDots.forEach(v => {
-        const [x, y, z] = applyRot(v, ry, rx);
-        if (z < 0) return;
-        const sx = cx + x * R;
-        const sy = cy - y * R;
-        const a = Math.pow(z, 1.5) * (isLight ? 0.22 : 0.18);
-        ctx.fillStyle = rgba(P.surfaceDot, a);
-        ctx.fillRect(sx - 0.5 * dpr, sy - 0.5 * dpr, 1 * dpr, 1 * dpr);
-      });
-
-      const landDotMul = countryLines ? 0.35 : 1;
-      landDots.forEach(v => {
-        const [x, y, z] = applyRot(v, ry, rx);
-        if (z < 0) return;
-        const sx = cx + x * R;
-        const sy = cy - y * R;
-        const a = Math.pow(z, 1.2) * (isLight ? 0.85 : 0.7) * landDotMul;
-        ctx.fillStyle = rgba(P.landDot, a);
-        ctx.beginPath();
-        ctx.arc(sx, sy, 1.2 * dpr, 0, Math.PI * 2);
-        ctx.fill();
-      });
-
-      if (countryLines) {
-        ctx.lineWidth = 0.7 * dpr;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        for (let li = 0; li < countryLines.length; li++) {
-          const line = countryLines[li];
-          let prev = null;
-          let prevZ = -1;
-          for (let pi = 0; pi < line.length; pi++) {
-            const v = applyRot(line[pi], ry, rx);
-            const z = v[2];
-            if (prev && (prevZ > -0.02 || z > -0.02)) {
-              const mz = (prevZ + z) * 0.5;
-              if (mz > -0.02) {
-                const a = Math.max(0.05, Math.min(0.95, mz * 0.9 + 0.15)) * P.countryAlpha;
-                ctx.strokeStyle = rgba(P.country, a);
-                ctx.beginPath();
-                ctx.moveTo(cx + prev[0] * R, cy - prev[1] * R);
-                ctx.lineTo(cx + v[0] * R, cy - v[1] * R);
-                ctx.stroke();
-              }
-            }
-            prev = v;
-            prevZ = z;
-          }
-        }
-      }
-
-      const serverVec = latLngToVec(TM_SERVER.lat, TM_SERVER.lng);
-      drawServerMarker(ctx, serverVec, ry, rx, cx, cy, R, dpr, performance.now(), P);
-
-      // ── Cluster-aware peer rendering ──────────────────────────
-      const CLUSTER_PX = 28 * dpr;
-      const now2 = performance.now();
-
-      // 1. Compute screen positions for all geolocated peers
-      const peerItems = [];
-      peers.forEach(p => {
-        if (p.lat == null || p.lng == null) return;
-        const vec = latLngToVec(p.lat, p.lng);
-        const [vx, vy, vz] = applyRot(vec, ry, rx);
-        peerItems.push({ peer: p, vec, sx: cx + vx * R, sy: cy - vy * R, z: vz });
-      });
-
-      // 2. Greedy cluster pass (screen-space proximity)
-      const assigned = new Set();
-      const clusters = [];
-      peerItems.forEach((item, i) => {
-        if (assigned.has(i)) return;
-        const grp = [item];
-        assigned.add(i);
-        peerItems.forEach((other, j) => {
-          if (i === j || assigned.has(j)) return;
-          if (Math.hypot(other.sx - item.sx, other.sy - item.sy) < CLUSTER_PX) {
-            grp.push(other); assigned.add(j);
-          }
-        });
-        const avgSx = grp.reduce((s, c) => s + c.sx, 0) / grp.length;
-        const avgSy = grp.reduce((s, c) => s + c.sy, 0) / grp.length;
-        const avgZ  = grp.reduce((s, c) => s + c.z,  0) / grp.length;
-        clusters.push({ items: grp, sx: avgSx, sy: avgSy, z: avgZ });
-      });
-      clustersLastFrameRef.current = clusters;
-
-      // 3. Draw each cluster
-      const expanded = expandedClusterRef.current;
-      const expandedIds = expanded ? new Set(expanded.peers.map(p => p.id)) : null;
-
-      clusters.forEach(cluster => {
-        const n = cluster.items.length;
-        if (n === 1) {
-          // Single peer — normal marker
-          const { vec, peer, z } = cluster.items[0];
-          drawPeerMarker(ctx, vec, ry, rx, cx, cy, R, dpr, peer, now2, P);
+      // Peer nodes + labels
+      ctx.save(); ctx.scale(dpr, dpr);
+      ordered.forEach(p => {
+        const pos = orbitalPeerPos(p, rotRef.current, zoomRef.current, W, H);
+        const hot = hoverPeerRef.current === p;
+        if (p.connected) {
+          const recent = p.lastHit ? Math.max(0, 1 - (now - p.lastHit) / 600) : 0;
+          const pulseT = ((now + p.phase * 300) / 1900) % 1;
+          ctx.strokeStyle = `rgba(${P.peerOnGlow}, ${(1 - pulseT) * 0.4})`; ctx.lineWidth = 1.1;
+          ctx.beginPath(); ctx.arc(pos.x, pos.y, 3 + pulseT * 15, 0, Math.PI * 2); ctx.stroke();
+          const gr2 = 11 + recent * 7;
+          const g2 = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, gr2);
+          g2.addColorStop(0, `rgba(${P.peerOnGlow}, ${0.5 + recent * 0.3})`);
+          g2.addColorStop(1, `rgba(${P.peerOnGlow}, 0)`);
+          ctx.fillStyle = g2; ctx.beginPath(); ctx.arc(pos.x, pos.y, gr2, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = P.peerOn;
+          ctx.beginPath(); ctx.arc(pos.x, pos.y, hot ? 4.4 : 3.4 + recent * 1.2, 0, Math.PI * 2); ctx.fill();
         } else {
-          // Multi-peer cluster
-          const isExpanded = expandedIds && cluster.items.every(item => expandedIds.has(item.peer.id));
-          if (isExpanded) {
-            // Spread peers in screen space around cluster center
-            const { sx: csx, sy: csy } = cluster;
-            const spreadPx = 70 * dpr;
-            cluster.items.forEach((item, i) => {
-              const angle = n === 2
-                ? (i === 0 ? Math.PI : 0)        // left / right for 2 peers
-                : (i / n) * Math.PI * 2 - Math.PI / 2;
-              const ox = Math.cos(angle) * spreadPx * (n === 2 ? 1 : 0.9);
-              const oy = Math.sin(angle) * spreadPx * (n === 2 ? 0.3 : 0.9);
-              drawPeerMarker(ctx, item.vec, ry, rx, cx, cy, R, dpr, item.peer, now2, P, ox, oy);
-            });
-            // Distance line + label between first two
-            if (n >= 2) {
-              const aItem = cluster.items[0], bItem = cluster.items[1];
-              const ax = csx - spreadPx,  ay = csy;
-              const bx = csx + spreadPx, by = csy;
-              const padding = 12 * dpr;
-              ctx.save();
-              ctx.setLineDash([4 * dpr, 4 * dpr]);
-              ctx.strokeStyle = rgba(P.wire, 0.45);
-              ctx.lineWidth = 1 * dpr;
-              ctx.beginPath();
-              ctx.moveTo(ax + padding, ay);
-              ctx.lineTo(bx - padding, by);
-              ctx.stroke();
-              ctx.restore();
-
-              const distKm = haversineKm(aItem.peer.lat, aItem.peer.lng, bItem.peer.lat, bItem.peer.lng);
-              if (distKm >= 0.05) {
-                const distLabel = distKm < 1
-                  ? `${(distKm * 1000).toFixed(0)} m apart`
-                  : `${distKm.toFixed(1)} km apart`;
-                ctx.font = `${9 * dpr}px ui-monospace, SF Mono, JetBrains Mono, monospace`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'bottom';
-                ctx.fillStyle = rgba(P.wire, 0.7);
-                ctx.fillText(distLabel, (ax + bx) / 2, ay - 6 * dpr);
-              }
-            }
-          } else {
-            drawClusterBadge(ctx, cluster.sx, cluster.sy, cluster.z, dpr, n, now2, P);
+          ctx.fillStyle = P.peerOff;
+          ctx.beginPath(); ctx.arc(pos.x, pos.y, 2.6, 0, Math.PI * 2); ctx.fill();
+        }
+        if (hot || p.connected) {
+          const onRight = pos.x >= cx;
+          ctx.font = `${hot ? '600 ' : '500 '}11px 'Inter', system-ui, sans-serif`;
+          ctx.textAlign = onRight ? 'left' : 'right'; ctx.textBaseline = 'middle';
+          const lx = pos.x + (onRight ? 9 : -9);
+          ctx.fillStyle = (p.connected ? P.label : P.labelOff) + (hot ? '1)' : '0.88)');
+          ctx.fillText(p.name, lx, pos.y - (hot ? 6 : 0));
+          if (hot) {
+            ctx.font = `9.5px 'JetBrains Mono', ui-monospace, monospace`;
+            ctx.fillStyle = P.label + '0.5)';
+            const sub = p.connected
+              ? `${p.pingMs != null ? p.pingMs + 'ms' : '—'} · ${p.country || p.addr}`
+              : `offline · ${p.country || p.addr}`;
+            ctx.fillText(sub, lx, pos.y + 7);
           }
         }
       });
-
-      const now = performance.now();
-      eventsRef.current = eventsRef.current.filter(ev => now - ev.t0 < ev.dur + 600);
-      eventsRef.current.forEach(ev => drawArc(ctx, ev, ry, rx, cx, cy, R, dpr, now, P));
+      ctx.restore();
 
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
-
     return () => {
       cancelAnimationFrame(rafRef.current);
       window.removeEventListener('resize', resize);
     };
-  }, [peers, sphereDots, wireLines, landDots, countryLines]);
+  }, []);
 
+  // Mouse / touch / wheel interaction
   React.useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const SENS = 0.005;
-    const getPt = (e) => e.touches && e.touches[0] ? e.touches[0] : e;
-    const onDown = (e) => {
-      const pt = getPt(e);
-      dragRef.current.active = true;
-      dragRef.current.lastX = pt.clientX;
-      dragRef.current.lastY = pt.clientY;
-      dragRef.current.downX = pt.clientX;
-      dragRef.current.downY = pt.clientY;
-      rotRef.current.manualUntil = Number.POSITIVE_INFINITY;
-      setDragging(true);
-      if (e.preventDefault && e.touches) e.preventDefault();
-      if (canvas.setPointerCapture && e.pointerId != null) {
-        try { canvas.setPointerCapture(e.pointerId); } catch {}
-      }
-    };
-    const onMove = (e) => {
-      if (!dragRef.current.active) return;
-      const pt = getPt(e);
-      const dx = pt.clientX - dragRef.current.lastX;
-      const dy = pt.clientY - dragRef.current.lastY;
-      dragRef.current.lastX = pt.clientX;
-      dragRef.current.lastY = pt.clientY;
-      const r = rotRef.current;
-      r.y += dx * SENS;
-      r.x += dy * SENS;
-      r.x = Math.max(-Math.PI * 0.45, Math.min(Math.PI * 0.45, r.x));
-      r.ty = r.y; r.tx = r.x;
-      if (e.preventDefault && e.touches) e.preventDefault();
-    };
-    const onUp = () => {
-      if (!dragRef.current.active) return;
-      dragRef.current.active = false;
-      rotRef.current.manualUntil = performance.now() + 6000;
-      setDragging(false);
-    };
-    const onClick = (e) => {
-      // Ignore if the pointer actually dragged
-      const moved = Math.hypot(
-        e.clientX - (dragRef.current.downX || e.clientX),
-        e.clientY - (dragRef.current.downY || e.clientY)
-      );
-      if (moved > 8) return;
+    let W = 0, H = 0;
+    const updateSize = () => { const r = canvas.getBoundingClientRect(); W = r.width; H = r.height; };
+    updateSize();
+    window.addEventListener('resize', updateSize);
 
-      const dpr = window.devicePixelRatio || 1;
+    const onMouseMove = (e) => {
       const rect = canvas.getBoundingClientRect();
-      const cx = (e.clientX - rect.left) * dpr;
-      const cy = (e.clientY - rect.top) * dpr;
-      const clusters = clustersLastFrameRef.current;
-      const hit = clusters.find(c => c.items.length >= 2 && Math.hypot(cx - c.sx, cy - c.sy) < 32 * dpr);
-      if (!hit) return;
-
-      const curExpanded = expandedClusterRef.current;
-      const hitIds = new Set(hit.items.map(i => i.peer.id));
-      const isSame = curExpanded && curExpanded.peers.length === hit.items.length &&
-        curExpanded.peers.every(p => hitIds.has(p.id));
-
-      if (isSame) {
-        setExpandedCluster(null);
-        zoomTargetRef.current = 1;
-        rotRef.current.manualUntil = 0;
-      } else {
-        setExpandedCluster({ peers: hit.items.map(i => i.peer) });
-        zoomTargetRef.current = 22;
-
-        const vecs = hit.items.map(i => i.vec);
-        const raw = vecs.reduce(([ax, ay, az], v) => [ax + v[0], ay + v[1], az + v[2]], [0, 0, 0]);
-        const mag = Math.hypot(...raw) || 1;
-        const cv = raw.map(v => v / mag);
-        const targetY = Math.atan2(-cv[0], cv[2]);
-        const targetX = Math.atan2(cv[1], Math.hypot(cv[0], cv[2]));
-        rotRef.current.y = targetY; rotRef.current.ty = targetY;
-        rotRef.current.x = targetX; rotRef.current.tx = targetX;
-        rotRef.current.manualUntil = Number.POSITIVE_INFINITY;
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      if (draggingRef.current) {
+        rotRef.current += (mx - dragXRef.current) * 0.005;
+        dragXRef.current = mx;
+        return;
       }
+      let best = null, bestD = 26 * 26;
+      orderedRef.current.forEach(p => {
+        const pos = orbitalPeerPos(p, rotRef.current, zoomRef.current, W, H);
+        const d = (pos.x - mx) ** 2 + (pos.y - my) ** 2;
+        if (d < bestD) { bestD = d; best = p; }
+      });
+      hoverPeerRef.current = best;
+      canvas.style.cursor = best ? 'pointer' : 'crosshair';
     };
-    canvas.addEventListener('pointerdown', onDown);
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
-    canvas.addEventListener('touchstart', onDown, { passive: false });
-    window.addEventListener('touchmove', onMove, { passive: false });
-    window.addEventListener('touchend', onUp);
-    canvas.addEventListener('click', onClick);
-    const onDblClick = () => {
-      setExpandedCluster(null);
-      zoomTargetRef.current = 1;
-      const v = latLngToVec(TM_SERVER.lat, TM_SERVER.lng);
-      const y0 = Math.atan2(-v[0], v[2]);
-      const x0 = Math.atan2(v[1], Math.hypot(v[0], v[2])) * 0.7;
-      rotRef.current.y = y0; rotRef.current.ty = y0;
-      rotRef.current.x = x0; rotRef.current.tx = x0;
-      rotRef.current.manualUntil = 0;
+    const onMouseLeave = () => { hoverPeerRef.current = null; };
+    const onMouseDown = (e) => {
+      draggingRef.current = true;
+      dragXRef.current = e.clientX - canvas.getBoundingClientRect().left;
+      canvas.style.cursor = 'grabbing';
     };
-    canvas.addEventListener('dblclick', onDblClick);
-
-    const ZOOM_MIN = 0.5, ZOOM_MAX = 30;
+    const onMouseUp = () => { draggingRef.current = false; canvas.style.cursor = 'crosshair'; };
     const onWheel = (e) => {
       e.preventDefault();
-      const factor = Math.exp(-e.deltaY * 0.0015);
-      const next = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoomTargetRef.current * factor));
-      zoomTargetRef.current = next;
-      // Also collapse expanded cluster when manually zooming out
-      if (next < 8 && expandedClusterRef.current) {
-        setExpandedCluster(null);
-      }
+      zoomRef.current = Math.max(0.5, Math.min(2.0, zoomRef.current * Math.exp(-e.deltaY * 0.0012)));
     };
-    canvas.addEventListener('wheel', onWheel, { passive: false });
-
-    const onTouchStart = (e) => {
-      if (e.touches.length === 2) {
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        pinchRef.current = { dist: Math.hypot(dx, dy), zoom: zoomTargetRef.current };
-        dragRef.current.active = false;
-        e.preventDefault();
-      }
-    };
+    const onTouchStart = (e) => { draggingRef.current = true; dragXRef.current = e.touches[0].clientX; };
     const onTouchMove = (e) => {
-      if (e.touches.length === 2 && pinchRef.current) {
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        const dist = Math.hypot(dx, dy);
-        const next = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, pinchRef.current.zoom * dist / pinchRef.current.dist));
-        zoomTargetRef.current = next;
-        rotRef.current.manualUntil = Number.POSITIVE_INFINITY;
-        e.preventDefault();
-      }
+      if (!draggingRef.current) return;
+      rotRef.current += (e.touches[0].clientX - dragXRef.current) * 0.005;
+      dragXRef.current = e.touches[0].clientX;
     };
-    const onTouchEnd = (e) => {
-      if (pinchRef.current && e.touches.length < 2) {
-        pinchRef.current = null;
-        rotRef.current.manualUntil = performance.now() + 6000;
-      }
-    };
-    canvas.addEventListener('touchstart', onTouchStart, { passive: false });
-    canvas.addEventListener('touchmove', onTouchMove, { passive: false });
-    canvas.addEventListener('touchend', onTouchEnd);
+    const onTouchEnd = () => { draggingRef.current = false; };
 
+    canvas.addEventListener('mousemove', onMouseMove);
+    canvas.addEventListener('mouseleave', onMouseLeave);
+    canvas.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('mouseup', onMouseUp);
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+    canvas.addEventListener('touchstart', onTouchStart, { passive: true });
+    canvas.addEventListener('touchmove', onTouchMove, { passive: true });
+    canvas.addEventListener('touchend', onTouchEnd);
     return () => {
-      canvas.removeEventListener('pointerdown', onDown);
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
-      canvas.removeEventListener('touchstart', onDown);
-      window.removeEventListener('touchmove', onMove);
-      window.removeEventListener('touchend', onUp);
+      canvas.removeEventListener('mousemove', onMouseMove);
+      canvas.removeEventListener('mouseleave', onMouseLeave);
+      canvas.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('mouseup', onMouseUp);
       canvas.removeEventListener('wheel', onWheel);
-      canvas.removeEventListener('click', onClick);
-      canvas.removeEventListener('dblclick', onDblClick);
       canvas.removeEventListener('touchstart', onTouchStart);
       canvas.removeEventListener('touchmove', onTouchMove);
       canvas.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('resize', updateSize);
     };
   }, []);
 
+  // Keyboard shortcuts
   React.useEffect(() => {
     const onKey = (e) => {
-      if (e.key === 'Escape') {
-        if (expandedClusterRef.current) {
-          setExpandedCluster(null);
-          zoomTargetRef.current = 1;
-          rotRef.current.manualUntil = 0;
-        } else {
-          onClose();
-        }
-      }
+      if (e.key === 'Escape') onClose();
       if (e.key === ' ') { e.preventDefault(); setPaused(p => !p); }
     };
     window.addEventListener('keydown', onKey);
@@ -668,23 +362,31 @@ function TrafficMode({ peers, theme, onClose }) {
 
   return (
     <div className={'tm-root' + lightClass}>
-      <canvas ref={canvasRef} className={'tm-canvas' + (dragging ? ' tm-grabbing' : '')} />
+      <canvas ref={canvasRef} className="tm-canvas tm-canvas-orbital" />
 
       <div className="tm-top">
         <div className="tm-top-left">
           <div className="tm-brand">
             <div className="tm-brand-dot" />
             <div>
-              <div className="tm-brand-name">Traffic Mode</div>
-              <div className="tm-brand-sub">wg0 · live access · {TM_SERVER.country}</div>
+              <div className="tm-brand-name">Traffic View</div>
             </div>
           </div>
         </div>
         <div className="tm-top-center">
-          <div className="tm-toptag"><span className="tm-tag-dot" /> {connected.length} peer{connected.length === 1 ? '' : 's'} streaming</div>
-          <div className="tm-toptag tm-toptag-mono">{stats.pings} events · {formatTmBytes(stats.bytes)} since {formatTmClock(stats.started)}</div>
+          <div className="tm-toptag"><span className="tm-tag-dot" /> {connected.length} peer{connected.length === 1 ? '' : 's'} active</div>
+          <div className="tm-toptag tm-toptag-mono">{stats.events} events · {formatTmBytes(stats.bytes)}</div>
         </div>
         <div className="tm-top-right">
+          <button
+            className={'tm-iconbtn tm-log-btn' + (logOpen ? ' tm-log-btn-active' : '')}
+            onClick={() => setLogOpen(o => !o)}
+            title="Toggle access log"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M4 6h16M4 12h16M4 18h10"/>
+            </svg>
+          </button>
           <button className="tm-iconbtn" onClick={() => setPaused(p => !p)} title="Pause (space)">
             {paused ? (
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l14 8-14 8V4z"/></svg>
@@ -693,30 +395,30 @@ function TrafficMode({ peers, theme, onClose }) {
             )}
           </button>
           <button className="tm-iconbtn" onClick={onClose} title="Close (esc)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M6 6l12 12M18 6L6 18"/>
+            </svg>
           </button>
         </div>
       </div>
 
-      <div className={'tm-log' + (logCollapsed ? ' tm-collapsed' : '')}>
+      {/* Log drawer — slides in from the right */}
+      <div className={'tm-orbital-log' + (logOpen ? ' tm-orbital-log-open' : '')}>
         <div className="tm-log-head">
           <span className="tm-log-title">LIVE ACCESS LOG</span>
           <div className="tm-head-right">
             <span className="tm-log-meta"><span className="tm-livedot" /> streaming</span>
-            <button
-              className="tm-collapse-btn"
-              onClick={() => setLogCollapsed(c => !c)}
-              title={logCollapsed ? 'Show log' : 'Hide log'}
-              aria-label={logCollapsed ? 'Show log' : 'Hide log'}
-            >
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M2 4l3 3 3-3"/></svg>
+            <button className="tm-iconbtn tm-log-close-btn" onClick={() => setLogOpen(false)} title="Close log">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M6 6l12 12M18 6L6 18"/>
+              </svg>
             </button>
           </div>
         </div>
-        <div className="tm-log-body">
+        <div className="tm-log-body tm-orbital-log-scroll">
           {events.length === 0 && <div className="tm-log-empty">Waiting for traffic…</div>}
           {events.map((e, i) => (
-            <div key={i} className={`tm-log-row tm-log-${e.kind}`} style={{ opacity: 1 - i * 0.08 }}>
+            <div key={i} className={`tm-log-row tm-log-${e.kind}`} style={{ opacity: Math.max(0.25, 1 - i * 0.04) }}>
               <span className="tm-log-time">{formatTmClock(e.ts)}</span>
               <span className={`tm-log-kind tm-log-kind-${e.kind}`}>{e.label}</span>
               <span className="tm-log-peer">{e.peer}</span>
@@ -724,360 +426,26 @@ function TrafficMode({ peers, theme, onClose }) {
             </div>
           ))}
         </div>
-      </div>
-
-      <div className={'tm-peers' + (peersCollapsed ? ' tm-collapsed' : '')}>
-        <div className="tm-peers-head">
-          <span className="tm-log-title">PEERS</span>
-          <div className="tm-head-right">
-            <span className="tm-log-meta tm-mono">{connected.length}/{peers.length}</span>
-            <button
-              className="tm-collapse-btn"
-              onClick={() => setPeersCollapsed(c => !c)}
-              title={peersCollapsed ? 'Show peers' : 'Hide peers'}
-              aria-label={peersCollapsed ? 'Show peers' : 'Hide peers'}
-            >
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M2 4l3 3 3-3"/></svg>
-            </button>
+        <div className="tm-orbital-legend">
+          <div className="tm-leg-row">
+            <span className="tm-leg-swatch" style={{ color: 'var(--tm-accent)' }} />
+            inbound · rx
+          </div>
+          <div className="tm-leg-row">
+            <span className="tm-leg-swatch" style={{ color: 'var(--tm-green)' }} />
+            outbound · tx
+          </div>
+          <div className="tm-leg-divider" />
+          <div className="tm-leg-note">
+            Rings map round-trip latency, not geography.<br/>
+            inner → outer: <b>25 · 75 · 150 · 250 ms</b>
           </div>
         </div>
-        <div className="tm-peers-body">
-          <div className="tm-peer-row tm-peer-server">
-            <span className="tm-pin tm-pin-server" />
-            <div className="tm-peer-info">
-              <div className="tm-peer-name">{TM_SERVER.name}</div>
-              <div className="tm-peer-loc">{TM_SERVER.country} · {TM_SERVER.lat.toFixed(2)}, {TM_SERVER.lng.toFixed(2)}</div>
-            </div>
-            <span className="tm-peer-status">origin</span>
-          </div>
-          {peers.map(p => (
-            <div key={p.id} className={`tm-peer-row ${p.status === 'connected' ? 'tm-peer-on' : 'tm-peer-off'}`}>
-              <span className={`tm-pin ${p.status === 'connected' ? 'tm-pin-on' : 'tm-pin-off'}`} />
-              <div className="tm-peer-info">
-                <div className="tm-peer-name">{p.name}</div>
-                <div className="tm-peer-loc">{p.country || (p.lat != null ? `${p.lat.toFixed(2)}, ${p.lng.toFixed(2)}` : p.addr)}</div>
-              </div>
-              <span className="tm-peer-status">{p.status === 'connected' ? `${p.pingMs != null ? p.pingMs + 'ms' : '—'}` : 'offline'}</span>
-            </div>
-          ))}
-        </div>
       </div>
 
-      <TmScaleBar zoom={zoom} />
+      <div className="tm-orbital-hint">drag to rotate · scroll to zoom · hover a node</div>
     </div>
   );
-}
-
-function TmScaleBar({ zoom }) {
-  const [vp, setVp] = React.useState({ w: window.innerWidth, h: window.innerHeight });
-  React.useEffect(() => {
-    const on = () => setVp({ w: window.innerWidth, h: window.innerHeight });
-    window.addEventListener('resize', on);
-    return () => window.removeEventListener('resize', on);
-  }, []);
-  const R = Math.min(vp.w, vp.h) * 0.38 * zoom;
-  const EARTH_R_KM = 6378;
-  const pxPerKm = R / EARTH_R_KM;
-  const targetPx = 130;
-  const targetKm = targetPx / pxPerKm;
-  const pow = Math.pow(10, Math.floor(Math.log10(targetKm)));
-  const mantissa = targetKm / pow;
-  const nice = mantissa < 1.5 ? 1 : mantissa < 3 ? 2 : mantissa < 4 ? 2.5 : mantissa < 7 ? 5 : 10;
-  const km = nice * pow;
-  const barWidth = Math.max(40, Math.min(220, km * pxPerKm));
-  const label = km >= 1000
-    ? `${(km / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })} × 1000 KM`
-    : `${km.toLocaleString()} KM`;
-  return (
-    <div className="tm-scale">
-      <div className="tm-scale-bar" style={{ width: barWidth + 'px' }} />
-      <div>
-        <span className="tm-scale-label">{label} at equator</span>
-        <span className="tm-scale-zoom">· {zoom.toFixed(2)}× zoom</span>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================
-// Geometry helpers
-// ============================================================
-function latLngToVec(lat, lng) {
-  const phi = (90 - lat) * Math.PI / 180;
-  const theta = (lng + 180) * Math.PI / 180;
-  return [-Math.sin(phi) * Math.cos(theta), Math.cos(phi), Math.sin(phi) * Math.sin(theta)];
-}
-function rotateY([x, y, z], ang) {
-  const c = Math.cos(ang), s = Math.sin(ang);
-  return [c * x + s * z, y, -s * x + c * z];
-}
-function rotateX([x, y, z], ang) {
-  const c = Math.cos(ang), s = Math.sin(ang);
-  return [x, c * y - s * z, s * y + c * z];
-}
-function applyRot(v, ry, rx) {
-  return rotateX(rotateY(v, ry), rx);
-}
-function wrapAngle(a) {
-  while (a > Math.PI) a -= Math.PI * 2;
-  while (a < -Math.PI) a += Math.PI * 2;
-  return a;
-}
-function slerp(a, b, t) {
-  const dot = Math.max(-1, Math.min(1, a[0]*b[0]+a[1]*b[1]+a[2]*b[2]));
-  const omega = Math.acos(dot);
-  if (omega < 0.0001) return a;
-  const so = Math.sin(omega);
-  const k0 = Math.sin((1 - t) * omega) / so;
-  const k1 = Math.sin(t * omega) / so;
-  return [a[0]*k0 + b[0]*k1, a[1]*k0 + b[1]*k1, a[2]*k0 + b[2]*k1];
-}
-
-function drawStars(ctx, w, h, P, mix) {
-  const baseAlpha = 1 - mix * 0.7;
-  ctx.save();
-  for (let i = 0; i < 220; i++) {
-    const s = ((i * 2654435761) >>> 0);
-    const x = (s % 10000) / 10000 * w;
-    const y = (((s >> 8) % 10000) / 10000) * h;
-    const a = (0.15 + ((s >> 16) % 100) / 100 * 0.35) * baseAlpha;
-    const r = ((s >> 24) % 10) > 7 ? 1.2 : 0.6;
-    ctx.fillStyle = rgba(P.star, a);
-    ctx.fillRect(x, y, r, r);
-  }
-  ctx.restore();
-}
-
-function drawServerMarker(ctx, vec, ry, rx, cx, cy, R, dpr, t, P) {
-  const [x, y, z] = applyRot(vec, ry, rx);
-  const sx = cx + x * R;
-  const sy = cy - y * R;
-  if (z <= -0.1) return;
-  const dim = z < 0 ? 0.3 : 1;
-
-  const pulseT = (t / 1400) % 1;
-  const pulseR = 6 * dpr + pulseT * 24 * dpr;
-  ctx.strokeStyle = rgba(P.serverRing, (1 - pulseT) * 0.28 * dim);
-  ctx.lineWidth = 1.5 * dpr;
-  ctx.beginPath();
-  ctx.arc(sx, sy, pulseR, 0, Math.PI * 2);
-  ctx.stroke();
-
-  const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, 18 * dpr);
-  glow.addColorStop(0, rgba(P.serverGlow, 0.26 * dim));
-  glow.addColorStop(1, rgba(P.serverGlow, 0));
-  ctx.fillStyle = glow;
-  ctx.beginPath();
-  ctx.arc(sx, sy, 18 * dpr, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = rgba(P.serverCore, dim);
-  ctx.strokeStyle = rgba(P.serverCoreStroke, dim);
-  ctx.lineWidth = 1.5 * dpr;
-  ctx.beginPath();
-  ctx.arc(sx, sy, 4.5 * dpr, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-}
-
-function haversineKm(lat1, lng1, lat2, lng2) {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(a));
-}
-
-function drawClusterBadge(ctx, sx, sy, z, dpr, count, t, P) {
-  if (z < -0.15) return;
-  const dim = z > 0 ? 1 : 0.25;
-  const size = 9 * dpr;
-
-  // Subtle pulse ring
-  const pulseT = (t / 2200) % 1;
-  const pulseR = size + pulseT * 8 * dpr;
-  ctx.strokeStyle = rgba(P.peerOnRing, (1 - pulseT) * 0.24 * dim);
-  ctx.lineWidth = 1 * dpr;
-  ctx.beginPath();
-  ctx.arc(sx, sy, pulseR, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // Badge fill
-  ctx.fillStyle = rgba(P.peerOnGlow, 0.24 * dim);
-  ctx.beginPath();
-  ctx.arc(sx, sy, size, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.strokeStyle = rgba(P.peerOnRing, 0.85 * dim);
-  ctx.lineWidth = 1.2 * dpr;
-  ctx.beginPath();
-  ctx.arc(sx, sy, size, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // Count text e.g. "2×"
-  ctx.font = `bold ${8 * dpr}px ui-monospace, SF Mono, JetBrains Mono, monospace`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = rgba(P.peerOnCore, dim);
-  ctx.fillText(`${count}×`, sx, sy);
-}
-
-function drawPeerMarker(ctx, vec, ry, rx, cx, cy, R, dpr, peer, t, P, offSx = 0, offSy = 0) {
-  const [x, y, z] = applyRot(vec, ry, rx);
-  const sx = cx + x * R + offSx;
-  const sy = cy - y * R + offSy;
-  if (z < -0.15) return;
-  const visible = z > 0;
-  const dim = visible ? 1 : 0.25;
-  const on = peer.status === 'connected';
-
-  if (on) {
-    const pulseT = ((t + peer.id.charCodeAt(0) * 100) / 1800) % 1;
-    const pulseR = 3 * dpr + pulseT * 18 * dpr;
-    ctx.strokeStyle = rgba(P.peerOnRing, (1 - pulseT) * 0.26 * dim);
-    ctx.lineWidth = 1.2 * dpr;
-    ctx.beginPath();
-    ctx.arc(sx, sy, pulseR, 0, Math.PI * 2);
-    ctx.stroke();
-
-    const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, 12 * dpr);
-    glow.addColorStop(0, rgba(P.peerOnGlow, 0.28 * dim));
-    glow.addColorStop(1, rgba(P.peerOnGlow, 0));
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(sx, sy, 12 * dpr, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = rgba(P.peerOnCore, dim);
-    ctx.strokeStyle = rgba(P.peerOnCoreStroke, dim);
-    ctx.lineWidth = 1.2 * dpr;
-    ctx.beginPath();
-    ctx.arc(sx, sy, 3.2 * dpr, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-  } else {
-    ctx.fillStyle = rgba(P.peerOff, 0.5 * dim);
-    ctx.beginPath();
-    ctx.arc(sx, sy, 2.4 * dpr, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  if (visible) {
-    ctx.font = `${10 * dpr}px ui-monospace, SF Mono, JetBrains Mono, monospace`;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = on ? rgba(P.label, 0.92) : rgba(P.labelOff, 0.6);
-    ctx.fillText(peer.name, sx + 8 * dpr, sy - 8 * dpr);
-  }
-}
-
-function drawArc(ctx, ev, ry, rx, cx, cy, R, dpr, now, P) {
-  const t = (now - ev.t0) / ev.dur;
-  if (t < 0 || t > 1.3) return;
-  const SAMPLES = 50;
-  const lift = 0.18;
-  const pts = [];
-  for (let i = 0; i <= SAMPLES; i++) {
-    const u = i / SAMPLES;
-    const s = slerp(ev.from, ev.to, u);
-    const liftFactor = 1 + lift * Math.sin(u * Math.PI);
-    pts.push([s[0] * liftFactor, s[1] * liftFactor, s[2] * liftFactor]);
-  }
-
-  const isLight = (P.bg[0] + P.bg[1] + P.bg[2]) > 380;
-  let color;
-  if (ev.kind === 'tx')      color = isLight ? [40, 140, 90]  : [119, 202, 154];
-  else if (ev.kind === 'rx') color = isLight ? [200, 95, 50]  : [208, 126, 86];
-  else if (ev.kind === 'hs') color = isLight ? [120, 90, 200] : [173, 148, 122];
-  else                       color = isLight ? [165, 130, 50] : [196, 168, 122];
-
-  const headU = Math.min(1, t);
-  const tailU = Math.max(0, t - 0.45);
-  const fade = t > 1 ? Math.max(0, 1 - (t - 1) / 0.3) : 1;
-
-  ctx.lineCap = 'round';
-  ctx.lineWidth = 1.4 * dpr;
-
-  for (let i = 0; i < SAMPLES; i++) {
-    const u0 = i / SAMPLES;
-    const u1 = (i + 1) / SAMPLES;
-    if (u1 < tailU || u0 > headU) continue;
-    const [x0, y0, z0] = applyRot(pts[i], ry, rx);
-    const [x1, y1, z1] = applyRot(pts[i + 1], ry, rx);
-    if (z0 < -0.05 && z1 < -0.05) continue;
-    const sx0 = cx + x0 * R, sy0 = cy - y0 * R;
-    const sx1 = cx + x1 * R, sy1 = cy - y1 * R;
-    const distFromHead = Math.max(0, headU - u1);
-    const alpha = Math.max(0, 1 - distFromHead / 0.45) * fade * (isLight ? 0.9 : 0.62);
-    ctx.strokeStyle = rgba(color, alpha);
-    ctx.beginPath();
-    ctx.moveTo(sx0, sy0);
-    ctx.lineTo(sx1, sy1);
-    ctx.stroke();
-  }
-
-  if (t <= 1) {
-    const headIdx = Math.floor(headU * SAMPLES);
-    const headPt = pts[Math.min(SAMPLES, headIdx)];
-    const [hx, hy, hz] = applyRot(headPt, ry, rx);
-    if (hz > -0.05) {
-      const sx = cx + hx * R, sy = cy - hy * R;
-      const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, 10 * dpr);
-      glow.addColorStop(0, rgba(color, (isLight ? 0.9 : 0.4) * fade));
-      glow.addColorStop(1, rgba(color, 0));
-      ctx.fillStyle = glow;
-      ctx.beginPath();
-      ctx.arc(sx, sy, 10 * dpr, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = rgba(P.arcTrailWhite, fade);
-      ctx.beginPath();
-      ctx.arc(sx, sy, 2 * dpr, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-}
-
-function buildLandDots() {
-  const regions = [
-    { lats: [25, 70],  lngs: [-160, -55], density: 0.18 },
-    { lats: [-55, 15], lngs: [-82, -35],  density: 0.16 },
-    { lats: [36, 70],  lngs: [-10, 40],   density: 0.30 },
-    { lats: [-35, 36], lngs: [-18, 52],   density: 0.22 },
-    { lats: [12, 75],  lngs: [40, 180],   density: 0.18 },
-    { lats: [-10, 35], lngs: [70, 145],   density: 0.22 },
-    { lats: [-40, -10],lngs: [110, 155],  density: 0.20 },
-    { lats: [30, 45],  lngs: [125, 145],  density: 0.30 },
-    { lats: [50, 60],  lngs: [-10, 2],    density: 0.40 },
-    { lats: [-10, 18], lngs: [95, 135],   density: 0.25 },
-  ];
-  const holes = [
-    { lats: [20, 60],  lngs: [-50, -15] },
-    { lats: [-30, 20], lngs: [-25, 10] },
-    { lats: [-30, 30], lngs: [50, 95] },
-    { lats: [-40, 30], lngs: [-180, -90] },
-    { lats: [-40, 30], lngs: [145, 180] },
-    { lats: [10, 40],  lngs: [10, 30] },
-    { lats: [50, 70],  lngs: [10, 40] },
-    { lats: [60, 80],  lngs: [-100, -50] },
-  ];
-  const out = [];
-  let seed = 7;
-  const rand = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
-  regions.forEach(r => {
-    const stepLat = 2.5, stepLng = 4;
-    for (let lat = r.lats[0]; lat <= r.lats[1]; lat += stepLat) {
-      for (let lng = r.lngs[0]; lng <= r.lngs[1]; lng += stepLng) {
-        if (rand() > r.density) continue;
-        const inHole = holes.some(h => lat >= h.lats[0] && lat <= h.lats[1] && lng >= h.lngs[0] && lng <= h.lngs[1]);
-        if (inHole && rand() > 0.05) continue;
-        const jl = lat + (rand() - 0.5) * stepLat * 0.6;
-        const jg = lng + (rand() - 0.5) * stepLng * 0.6;
-        out.push(latLngToVec(jl, jg));
-      }
-    }
-  });
-  return out;
 }
 
 function formatTmBytes(b) {

@@ -1725,11 +1725,37 @@ def _remote_version() -> str:
     except Exception:
         return ""
 
+def _version_key(version: str):
+    value = (version or "").strip()
+    if value.startswith(("v", "V")):
+        value = value[1:]
+    match = re.match(r"^(\d+(?:\.\d+)*)(?:[-+].*)?$", value)
+    if not match:
+        return None
+    return tuple(int(part) for part in match.group(1).split("."))
+
+def _compare_versions(current: str, candidate: str):
+    current_key = _version_key(current)
+    candidate_key = _version_key(candidate)
+    if current_key is None or candidate_key is None:
+        return None
+
+    width = max(len(current_key), len(candidate_key))
+    current_key = current_key + (0,) * (width - len(current_key))
+    candidate_key = candidate_key + (0,) * (width - len(candidate_key))
+    return (candidate_key > current_key) - (candidate_key < current_key)
+
 @app.route("/api/update/check")
 def api_update_check():
     local = _local_version()
     remote = _remote_version()
-    return jsonify({"local": local, "remote": remote, "available": bool(remote and remote != local)})
+    comparison = _compare_versions(local, remote)
+    return jsonify({
+        "local": local,
+        "remote": remote,
+        "available": comparison == 1,
+        "comparison": comparison,
+    })
 
 @app.route("/api/update/apply", methods=["POST"])
 def api_update_apply():
@@ -1738,6 +1764,19 @@ def api_update_apply():
 
     def _stream():
         try:
+            local = _local_version()
+            remote = _remote_version()
+            comparison = _compare_versions(local, remote)
+            if comparison != 1:
+                detail = "remote version is not newer"
+                if not remote:
+                    detail = "remote version unavailable"
+                elif comparison is None:
+                    detail = "could not compare local and remote versions"
+                yield _sse({"event": "done", "version": local, "remote": remote,
+                            "detail": detail, "progress": 100})
+                return
+
             yield _sse({"event": "stage", "id": "fetch", "label": "Fetching updates",
                         "detail": "checking origin/main", "progress": 5})
             out, rc = _run(f"git -C {shlex.quote(BASE_DIR)} fetch origin {REPO_BRANCH} 2>&1")

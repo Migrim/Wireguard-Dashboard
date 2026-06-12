@@ -1397,11 +1397,108 @@ html.theme-switching .theme-toggle-icon {
 }
 .tm-scale-zoom { font-size: 9px; color: var(--tm-muted); opacity: 0.55; }
 
+/* ===== Orbital traffic view ===== */
+.tm-canvas-orbital { cursor: crosshair; }
+
+.tm-log-btn.tm-log-btn-active {
+  background: rgba(255,255,255,0.14);
+  border-color: var(--tm-border);
+}
+.tm-light .tm-log-btn.tm-log-btn-active { background: rgba(0,0,0,0.12); }
+
+.tm-log-close-btn { width: 24px; height: 24px; }
+
+/* Log drawer — slides in from the right within the traffic overlay */
+.tm-orbital-log {
+  position: absolute;
+  top: 53px;
+  right: -300px;
+  bottom: 0;
+  width: 284px;
+  background: var(--tm-glass);
+  border-left: 1px solid var(--tm-border);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+.tm-orbital-log-open { right: 0; }
+
+/* Override the default .tm-log-body max-height inside the drawer */
+.tm-orbital-log-scroll {
+  flex: 1;
+  max-height: none !important;
+  overflow-y: auto;
+}
+
+/* Legend section at the bottom of the log drawer */
+.tm-orbital-legend {
+  padding: 12px 14px 16px;
+  border-top: 1px solid var(--tm-border);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--tm-ink);
+  flex-shrink: 0;
+}
+.tm-leg-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 5px 0;
+}
+.tm-leg-swatch {
+  width: 22px;
+  height: 0;
+  border-top: 2px solid currentColor;
+  position: relative;
+  flex-shrink: 0;
+}
+.tm-leg-swatch::after {
+  content: '';
+  position: absolute;
+  right: -1px; top: -3px;
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.tm-leg-divider {
+  height: 1px;
+  background: var(--tm-border);
+  margin: 10px 0;
+}
+.tm-leg-note {
+  font-size: 9.5px;
+  color: var(--tm-muted);
+  line-height: 1.55;
+}
+.tm-leg-note b { color: var(--tm-ink); font-weight: 500; }
+
+/* Bottom hint label */
+.tm-orbital-hint {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--tm-muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
 @media (max-width: 720px) {
   .tm-log { width: calc(50vw - 24px); left: 12px; bottom: 50px; }
   .tm-peers { width: calc(50vw - 24px); right: 12px; bottom: 50px; }
   .tm-top { grid-template-columns: 1fr auto; }
   .tm-top-center { display: none; }
+  .tm-orbital-log { width: 260px; right: -270px; }
 }
 
 /* Speed Test Drawer */
