@@ -1668,6 +1668,116 @@ def download_conf(name: str):
         f.write(txt)
     return send_file(p,as_attachment=True,download_name=f"{name}.conf")
 
+# ── System info API ────────────────────────────────────────────────────────────
+def _read_os_release() -> dict:
+    fields = {}
+    try:
+        with open("/etc/os-release") as f:
+            for line in f:
+                line = line.strip()
+                if "=" in line:
+                    k, _, v = line.partition("=")
+                    fields[k] = v.strip('"')
+    except Exception:
+        pass
+    return fields
+
+@app.route("/api/system/info")
+def api_system_info():
+    os_rel = _read_os_release()
+    platform_name = os_rel.get("PRETTY_NAME") or os_rel.get("NAME", "Linux")
+    kernel_out, _ = _run("uname -r")
+    uptime_out, _ = _run("uptime -p")
+    uptime = uptime_out.replace("up ", "", 1) if uptime_out.startswith("up ") else uptime_out
+    port_out, _ = _run(f"grep -m1 'ListenPort' {WG_CONF} 2>/dev/null || echo '{WG_PORT}'")
+    try:
+        wg_port = int(port_out.split("=")[-1].strip()) if "=" in port_out else int(port_out.strip())
+    except Exception:
+        wg_port = WG_PORT
+    iface = WG_IFACE
+    return jsonify({
+        "platform": platform_name,
+        "kernel": kernel_out or "unknown",
+        "uptime": uptime or "unknown",
+        "interface": f"{iface} · UDP {wg_port}",
+        "service": UNIT,
+        "service_enabled": service_enabled(),
+        "version": _local_version(),
+    })
+
+# ── Update API ─────────────────────────────────────────────────────────────────
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_BRANCH = os.environ.get("REPO_BRANCH", "main")
+_GITHUB_RAW_VERSION = f"https://raw.githubusercontent.com/Migrim/Wireguard-Dashboard/{REPO_BRANCH}/.version"
+
+def _local_version() -> str:
+    try:
+        with open(os.path.join(BASE_DIR, ".version")) as f:
+            return f.read().strip()
+    except Exception:
+        return "unknown"
+
+def _remote_version() -> str:
+    try:
+        req = urllib.request.urlopen(_GITHUB_RAW_VERSION, timeout=6)
+        return req.read().decode().strip()
+    except Exception:
+        return ""
+
+@app.route("/api/update/check")
+def api_update_check():
+    local = _local_version()
+    remote = _remote_version()
+    return jsonify({"local": local, "remote": remote, "available": bool(remote and remote != local)})
+
+@app.route("/api/update/apply", methods=["POST"])
+def api_update_apply():
+    def _sse(obj: dict) -> str:
+        return "data: " + json.dumps(obj) + "\n\n"
+
+    def _stream():
+        try:
+            yield _sse({"event": "stage", "id": "fetch", "label": "Fetching updates",
+                        "detail": "checking origin/main", "progress": 5})
+            out, rc = _run(f"git -C {shlex.quote(BASE_DIR)} fetch origin {REPO_BRANCH} 2>&1")
+            if rc != 0:
+                yield _sse({"event": "error", "detail": out[:300]}); return
+
+            ahead_out, _ = _run(f"git -C {shlex.quote(BASE_DIR)} rev-list HEAD..origin/{REPO_BRANCH} --count 2>&1")
+            if ahead_out.strip() == "0":
+                yield _sse({"event": "done", "version": _local_version(),
+                            "detail": "already up to date", "progress": 100}); return
+
+            yield _sse({"event": "stage", "id": "pull", "label": "Pulling changes",
+                        "detail": "merging commits", "progress": 30})
+            out, rc = _run(f"git -C {shlex.quote(BASE_DIR)} pull origin {REPO_BRANCH} 2>&1")
+            if rc != 0:
+                yield _sse({"event": "error", "detail": out[:300]}); return
+
+            first_line = next((l for l in out.splitlines() if l.strip()), out[:80])
+            yield _sse({"event": "stage", "id": "pull", "label": "Pulling changes",
+                        "detail": first_line[:80], "progress": 65})
+
+            yield _sse({"event": "stage", "id": "restart", "label": "Restarting service",
+                        "detail": "wg-dashboard", "progress": 88})
+
+            def _delayed_restart():
+                time.sleep(2)
+                _run(f"{SUDO_BIN} systemctl restart wg-dashboard 2>&1")
+
+            threading.Thread(target=_delayed_restart, daemon=True).start()
+
+            yield _sse({"event": "done", "version": _local_version(), "progress": 100})
+        except Exception as e:
+            yield _sse({"event": "error", "detail": str(e)})
+
+    resp = Response(stream_with_context(_stream()), content_type="text/event-stream")
+    resp.headers["X-Accel-Buffering"] = "no"
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+# ───────────────────────────────────────────────────────────────────────────────
+
 def create_app():
     return app
 

@@ -12,9 +12,12 @@ function App({ tweaks, setTweaks, onLogout }) {
   const [portCheckOpen, setPortCheckOpen] = uS(false);
   const [logsDrawerOpen, setLogsDrawerOpen] = uS(false);
   const [addOpen, setAddOpen] = uS(false);
+  const [settingsOpen, setSettingsOpen] = uS(false);
   const [dataBudget, setDataBudget] = uS(50);
   const [budgetAlerts, setBudgetAlerts] = uS(true);
   const [resetTime, setResetTime] = uS('00:00');
+  const [peerBudgets, setPeerBudgets] = uS({});
+  const setPeerBudget = uC((id, val) => setPeerBudgets(prev => ({ ...prev, [id]: val })), []);
   const [budgetUsage, setBudgetUsage] = uS({ total: 0, peers: [], pct: 0, period_start_iso: '' });
   const [filter, setFilter] = uS('');
   const [statusFilter, setStatusFilter] = uS('all');
@@ -389,9 +392,10 @@ function App({ tweaks, setTweaks, onLogout }) {
           connectedCount={connectedCount}
           totalCount={peers.length}
           doService={doService}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
         <KPIThroughput currentRx={currentRx} currentTx={currentTx} dataIn={chartTraffic.rx} dataOut={chartTraffic.tx} />
-        <KPIDataToday total={totalToday} budget={dataBudget} onClick={() => setDataDrawerOpen(true)} />
+        <KPIDataToday total={totalToday} budget={dataBudget} peerBudgets={peerBudgets} onClick={() => setDataDrawerOpen(true)} />
         <KPIActiveSessions connectedCount={connectedCount} totalCount={peers.length} avgPingHistory={avgPingHistory} />
       </section>
 
@@ -429,7 +433,10 @@ function App({ tweaks, setTweaks, onLogout }) {
         </div>
 
         <div className="logs-card-shell">
-          <LogsPanel logs={logs} alerts={alerts} onExpand={() => setLogsDrawerOpen(true)} onDismiss={dismissAlert} />
+          <LogsPanel logs={logs} notifications={[
+            ...alerts,
+            { level: 'info', title: 'Update available', desc: 'wireguard-tools 1.0.20251201 is ready to install' },
+          ]} onExpand={() => setLogsDrawerOpen(true)} />
         </div>
       </section>
 
@@ -473,7 +480,6 @@ function App({ tweaks, setTweaks, onLogout }) {
         <PeerDrawer
           peer={peers.find(p => p.id === selectedPeer)}
           onClose={() => setSelectedPeer(null)}
-          sparklines={sparks}
           throughputBuffers={peerThr}
           onRevoke={() => {
             // Re-fetch peers after revoke
@@ -494,6 +500,8 @@ function App({ tweaks, setTweaks, onLogout }) {
           resetTime={resetTime}
           setResetTime={setResetTime}
           peers={peers}
+          peerBudgets={peerBudgets}
+          setPeerBudget={setPeerBudget}
           budgetUsage={budgetUsage}
           updateBudgetSettings={updateBudgetSettings}
           onClose={() => setDataDrawerOpen(false)}
@@ -507,6 +515,7 @@ function App({ tweaks, setTweaks, onLogout }) {
           onClose={() => setTrafficModeOpen(false)}
         />
       )}
+      {settingsOpen && <SettingsDrawer tweaks={tweaks} setTweaks={setTweaks} connectedCount={connectedCount} totalPeers={peers.length} onClose={() => setSettingsOpen(false)} />}
       {tweaks._tweaksOpen && <TweaksPanel tweaks={tweaks} setTweaks={setTweaks} />}
       {portCheckOpen && <PortCheckDrawer peers={peers} onClose={() => setPortCheckOpen(false)} />}
       {logsDrawerOpen && <LogsDrawer alerts={alerts} onClose={() => setLogsDrawerOpen(false)} verbose={logsVerbose} setVerbose={setLogsVerbose} onDismiss={dismissAlert} />}
@@ -529,7 +538,7 @@ function App({ tweaks, setTweaks, onLogout }) {
 // ============================================================
 // KPI tiles
 // ============================================================
-function KPIServiceControl({ serviceActive, serviceEnabled, unit, startedAt, connectedCount, totalCount, doService }) {
+function KPIServiceControl({ serviceActive, serviceEnabled, unit, startedAt, connectedCount, totalCount, doService, onOpenSettings }) {
   const uptimeMs = Date.now() - startedAt;
   const mins = Math.floor(uptimeMs / 60000);
   const hrs = Math.floor(mins / 60);
@@ -572,8 +581,12 @@ function KPIServiceControl({ serviceActive, serviceEnabled, unit, startedAt, con
           <div className="svc-stat-val mono">{connectedCount}/{totalCount}</div>
         </div>
       </div>
-      <div className="kpi-foot">
-        <span className="mono">{unit} · {serviceEnabled ? 'enabled' : 'disabled'}</span>
+      <div className="kpi-foot kpi-foot-center">
+        <button className="svc-settings-btn" onClick={onOpenSettings}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+          Dashboard settings
+          <svg className="svc-settings-chev" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
       </div>
     </div>
   );
@@ -604,27 +617,32 @@ function KPIThroughput({ currentRx, currentTx, dataIn, dataOut }) {
   );
 }
 
-function KPIDataToday({ total, budget = 50, onClick }) {
-  const cap = budget * 1024 * 1024 * 1024;
-  const pct = (total / cap) * 100;
+function KPIDataToday({ total, budget = 50, peerBudgets = {}, onClick }) {
+  const entries = Object.values(peerBudgets);
+  const budgetGB = entries.reduce((s, b) => s + (b === 'inf' || b == null ? 0 : b), 0);
+  const allInfinite = entries.length > 0 && budgetGB === 0;
+  const effectiveGB = budgetGB > 0 ? budgetGB : budget;
+  const cap = allInfinite ? Math.max(total, 1) : effectiveGB * 1024 * 1024 * 1024;
+  const pct = allInfinite ? 0 : (total / cap) * 100;
   return (
     <div className="kpi-tile kpi-clickable" onClick={onClick} role="button" tabIndex={0}>
       <div className="kpi-head">
         <span className="section-label">DATA TODAY</span>
-        <span className="kpi-badge">of {budget} GB</span>
+        <span className="kpi-badge">{allInfinite ? '∞ no limit' : `of ${effectiveGB} GB`}</span>
       </div>
       <div className="kpi-body kpi-body-radial">
         <RadialGauge
           value={total}
           max={cap}
+          unlimited={allInfinite}
           width={110}
-          color={pct > 90 ? 'var(--danger)' : pct > 70 ? 'var(--warn)' : 'var(--accent)'}
+          color={allInfinite ? 'var(--accent)' : pct > 90 ? 'var(--danger)' : pct > 70 ? 'var(--warn)' : 'var(--accent)'}
           label={window.WG.formatBytes(total).split(' ')[0]}
           sublabel={window.WG.formatBytes(total).split(' ')[1]}
         />
       </div>
       <div className="kpi-foot">
-        <span className="mono">{pct.toFixed(1)}% of budget</span>
+        <span className="mono">{allInfinite ? 'used today' : `${pct.toFixed(1)}% of budget`}</span>
         <span className="mono kpi-link">configure →</span>
       </div>
     </div>
@@ -1107,4 +1125,4 @@ function AuthWrapper({ tweaks, setTweaks }) {
   return <App tweaks={tweaks} setTweaks={setTweaks} onLogout={handleLogout} />;
 }
 
-Object.assign(window, { App, AuthWrapper, LoginScreen, PeerRow, TweaksPanel, KPIServiceControl, KPIThroughput, KPIDataToday, KPIActiveSessions, AddPeerModal });
+Object.assign(window, { App, AuthWrapper, LoginScreen, PeerRow, TweaksPanel, KPIServiceControl, KPIThroughput, KPIDataToday, KPIActiveSessions, AddPeerModal, OfflinePlaceholder });

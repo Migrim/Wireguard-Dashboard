@@ -5,7 +5,7 @@ const { useState: _useState, useEffect: _useEffect, useRef: _useRef, useMemo: _u
 // ============================================================
 // PeerDrawer — slide-out detail with charts + controls
 // ============================================================
-function PeerDrawer({ peer, onClose, sparklines, throughputBuffers, onRevoke, onPeerUpdated }) {
+function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated }) {
   const [copied, setCopied] = _useState('');
   const [downloading, setDownloading] = _useState(false);
   const [revoking, setRevoking] = _useState(false);
@@ -106,7 +106,6 @@ function PeerDrawer({ peer, onClose, sparklines, throughputBuffers, onRevoke, on
 
   if (!peer) return null;
 
-  const spark = sparklines[peer.id] || [];
   const thr = throughputBuffers[peer.id] || { rx: [], tx: [] };
   const pingLabel = diag.loading ? 'checking' : (diag.pingMs != null ? `${diag.pingMs} ms` : (diag.pingStatus || 'timeout'));
   const locationLabel = (diag.location && diag.location.label) || peer.country || '—';
@@ -428,56 +427,90 @@ function PeerDrawer({ peer, onClose, sparklines, throughputBuffers, onRevoke, on
 // ============================================================
 // LogsPanel — live streaming logs with alerts callout
 // ============================================================
-function LogsPanel({ logs, alerts, onExpand, onDismiss }) {
+function NotifIcon({ level }) {
+  if (level === 'error') return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg>;
+  if (level === 'warn') return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0zM12 9v4M12 17h.01"/></svg>;
+  if (level === 'success') return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><path d="M8 12l2.5 2.5L16 9"/></svg>;
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 11v5M12 8h.01"/></svg>;
+}
+
+function LogsPanel({ logs, notifications = [], onExpand }) {
   const scrollRef = _useRef(null);
+  const [dismissed, setDismissed] = _useState([]);
+  const [idx, setIdx] = _useState(0);
+  const [leaving, setLeaving] = _useState(false);
 
   _useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [logs.length]);
+
+  const visible = notifications.filter(n => !dismissed.includes(n.title));
+  const safeIdx = visible.length ? idx % visible.length : 0;
+  const current = visible[safeIdx];
+
+  _useEffect(() => {
+    if (visible.length <= 1) return;
+    let swapT;
+    const id = setInterval(() => {
+      setLeaving(true);
+      swapT = setTimeout(() => {
+        setIdx(i => (i + 1) % visible.length);
+        setLeaving(false);
+      }, 550);
+    }, 7000);
+    return () => { clearInterval(id); clearTimeout(swapT); };
+  }, [visible.length]);
 
   return (
     <div className="logs-card logs-card-clickable" onClick={onExpand} role="button" tabIndex={0}>
-      {alerts.length > 0 && (
-        <div className="alerts-block">
-          {alerts.map((a, i) => (
-            <div key={i} className={`alert alert-${a.level}`}>
-              <span className="alert-icon">
-                {a.level === 'error' ? (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg>
-                ) : (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0zM12 9v4M12 17h.01"/></svg>
-                )}
-              </span>
-              <div className="alert-body">
-                <div className="alert-title">{a.title}</div>
-                <div className="alert-desc">{a.desc}</div>
-              </div>
-              {onDismiss && (
-                <button className="alert-dismiss" onClick={e => { e.stopPropagation(); onDismiss(a.key); }} aria-label="Dismiss">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="logs-head">
-        <span className="section-label">LIVE LOGS</span>
-        <div className="log-meta">
-          <span className="pulse-dot" /> wg0
-          <span className="log-expand-hint">expand →</span>
-        </div>
-      </div>
-      <div className="logs-stream" ref={scrollRef}>
-        {logs.map((l, i) => (
-          <div key={i} className={`log-line log-${l.level}`}>
-            <span className="log-time">{new Date(l.t).toTimeString().slice(0, 8)}</span>
-            <span className="log-level">{l.level}</span>
-            <span className="log-msg">{l.msg}</span>
+      <div className="logs-split">
+        <div className="notif-col" onClick={e => e.stopPropagation()}>
+          <div className="notif-head">
+            <span className="section-label">NOTIFICATIONS</span>
+            {visible.length > 0 && <span className="notif-count">{visible.length}</span>}
           </div>
-        ))}
+          <div className="notif-body">
+            {current ? (
+              <div className={`notif-item notif-${current.level}${leaving ? ' is-leaving' : ''}`}>
+                <span className="notif-icon"><NotifIcon level={current.level} /></span>
+                <div className="notif-text">
+                  <div className="notif-title">{current.title}</div>
+                  <div className="notif-desc">{current.desc}</div>
+                </div>
+                <button
+                  className="notif-dismiss"
+                  aria-label="Dismiss notification"
+                  onClick={e => { e.stopPropagation(); setDismissed(d => [...d, current.title]); }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+              </div>
+            ) : (
+              <div className="notif-empty">No notifications</div>
+            )}
+          </div>
+        </div>
+
+        <div className="logs-sep" />
+
+        <div className="logs-col">
+          <div className="logs-head">
+            <span className="section-label">LIVE LOGS</span>
+            <div className="log-meta">
+              <span className="pulse-dot" /> wg0
+              <span className="log-expand-hint">expand →</span>
+            </div>
+          </div>
+          <div className="logs-stream" ref={scrollRef}>
+            {logs.map((l, i) => (
+              <div key={i} className={`log-line log-${l.level}`}>
+                <span className="log-time">{new Date(l.t).toTimeString().slice(0, 8)}</span>
+                <span className="log-level">{l.level}</span>
+                <span className="log-msg">{l.msg}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -486,7 +519,7 @@ function LogsPanel({ logs, alerts, onExpand, onDismiss }) {
 // ============================================================
 // DataBudgetDrawer
 // ============================================================
-function DataBudgetDrawer({ total, budget, setBudget, alerts, setAlerts, resetTime, setResetTime, peers, budgetUsage, updateBudgetSettings, onClose }) {
+function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets = {}, setPeerBudget, budgetUsage, updateBudgetSettings, onClose }) {
   const [saving, setSaving] = _useState(false);
   const [msg, setMsg] = _useState('');
 
@@ -599,18 +632,53 @@ function DataBudgetDrawer({ total, budget, setBudget, alerts, setAlerts, resetTi
 
           <section className="drawer-section">
             <div className="section-head">
-              <span className="section-label">USAGE BY PEER</span>
+              <span className="section-label">BUDGET BY PEER</span>
+              <span className="section-meta">{peerBreakdown.length} peers · daily</span>
             </div>
-            <div className="peer-usage-list">
-              {peerBreakdown.map(p => (
-                <div key={p.id} className="peer-usage-row">
-                  <div className="peer-usage-name">{p.name}</div>
-                  <div className="peer-usage-bar">
-                    <div className="peer-usage-fill" style={{ width: `${(p.total / maxPeerTotal) * 100}%`, background: p.status === 'connected' ? 'var(--accent)' : 'var(--muted)' }} />
+            <div className="peer-budget-list">
+              {peerBreakdown.map(p => {
+                const b = peerBudgets[p.id] != null ? peerBudgets[p.id] : 'inf';
+                const isInf = b === 'inf';
+                const pcap = isInf ? 0 : b * 1024 * 1024 * 1024;
+                const ppct = isInf ? 0 : Math.min(100, (p.total / pcap) * 100);
+                const over = !isInf && p.total > pcap;
+                const fillColor = over ? 'var(--danger)' : ppct > 80 ? 'var(--warn)' : 'var(--accent)';
+                return (
+                  <div key={p.id} className={`pb-row${isInf ? ' is-inf' : ''}`}>
+                    <div className="pb-top">
+                      <div className="pb-id">
+                        <span className="pb-name">{p.name}</span>
+                        <span className="pb-device">{p.device || ''}</span>
+                      </div>
+                      <div className="pb-ctrl">
+                        {!isInf && (
+                          <div className="stepper stepper-sm">
+                            <button onClick={() => setPeerBudget(p.id, Math.max(1, b - 1))}>−</button>
+                            <span className="mono">{b} GB</span>
+                            <button onClick={() => setPeerBudget(p.id, b + 1)}>+</button>
+                          </div>
+                        )}
+                        <button
+                          className={`pb-inf-btn${isInf ? ' on' : ''}`}
+                          onClick={() => setPeerBudget(p.id, isInf ? 5 : 'inf')}
+                          title={isInf ? 'Set a daily limit' : 'Remove limit'}
+                        >∞</button>
+                      </div>
+                    </div>
+                    <div className={`pb-bar${isInf ? ' inf' : ''}`}>
+                      {isInf
+                        ? <div className="pb-bar-fill" style={{ width: `${(p.total / maxPeerTotal) * 100}%`, background: 'var(--muted)' }} />
+                        : <div className="pb-bar-fill" style={{ width: `${ppct}%`, background: fillColor }} />}
+                    </div>
+                    <div className="pb-foot">
+                      <span className="pb-used mono">{window.WG.formatBytes(p.total)} <span className="pb-used-lbl">today</span></span>
+                      {isInf
+                        ? <span className="pb-status mono pb-status-inf">∞ no limit</span>
+                        : <span className={`pb-status mono${over ? ' pb-status-over' : ''}`}>{over ? `over by ${window.WG.formatBytes(p.total - pcap)}` : `${ppct.toFixed(0)}% of ${b} GB`}</span>}
+                    </div>
                   </div>
-                  <div className="peer-usage-val mono">{window.WG.formatBytes(p.total)}</div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
 
@@ -1166,4 +1234,309 @@ function PortCheckDrawer({ peers, onClose }) {
 }
 
 // ============================================================
-Object.assign(window, { PeerDrawer, LogsPanel, DataBudgetDrawer, LogsDrawer, PortCheckDrawer });
+// SettingsDrawer — accent color, server info, software update
+// ============================================================
+const UPDATE_STAGES = [
+  { id: 'fetch',   label: 'Fetching updates',  detail: 'checking origin/main' },
+  { id: 'pull',    label: 'Pulling changes',    detail: 'merging commits' },
+  { id: 'restart', label: 'Restarting service', detail: 'wg-dashboard' },
+];
+
+function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose }) {
+  const accent = tweaks.accent || 'terracotta';
+  const [version, setVersion] = _useState('…');
+  const [newVersion, setNewVersion] = _useState('');
+  const [phase, setPhase] = _useState('loading');
+  const [sysInfo, setSysInfo] = _useState(null);
+  const [stageIdx, setStageIdx] = _useState(-1);
+  const [stageDetails, setStageDetails] = _useState({});
+  const [updateError, setUpdateError] = _useState('');
+  const rafRef = _useRef(null);
+  const fillRef = _useRef(null);
+  const glowRef = _useRef(null);
+  const pctRef = _useRef(null);
+  const progressRef = _useRef(0);
+
+  const paint = (p) => {
+    progressRef.current = p;
+    if (fillRef.current) fillRef.current.style.width = p + '%';
+    if (glowRef.current) glowRef.current.style.left = p + '%';
+    if (pctRef.current) pctRef.current.textContent = Math.round(p) + '%';
+  };
+
+  const animateTo = (target, dur, onDone) => {
+    dur = dur || 500;
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    const from = progressRef.current;
+    const start = performance.now();
+    const step = (now) => {
+      const t = Math.min(1, (now - start) / dur);
+      const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      paint(from + (target - from) * eased);
+      if (t < 1) {
+        rafRef.current = requestAnimationFrame(step);
+      } else if (onDone) {
+        onDone();
+      }
+    };
+    rafRef.current = requestAnimationFrame(step);
+  };
+
+  _useEffect(() => {
+    Promise.all([
+      fetch('/api/update/check').then(r => r.json()),
+      fetch('/api/system/info').then(r => r.json()),
+    ]).then(([upd, sys]) => {
+      setVersion(upd.local || 'unknown');
+      setNewVersion(upd.remote || '');
+      setPhase(upd.available ? 'available' : 'idle');
+      setSysInfo(sys);
+    }).catch(() => { setVersion('unknown'); setPhase('idle'); });
+  }, []);
+
+  _useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape' && phase !== 'updating') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose, phase]);
+
+  _useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); }, []);
+
+  const setAccent = (id) => {
+    setTweaks({ ...tweaks, accent: id });
+  };
+
+  const runUpdate = () => {
+    setPhase('updating');
+    setStageIdx(0);
+    setStageDetails({});
+    setUpdateError('');
+    paint(0);
+
+    fetch('/api/update/apply', { method: 'POST' })
+      .then(res => {
+        if (!res.ok || !res.body) throw new Error('Request failed');
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        const read = () => reader.read().then(({ done, value }) => {
+          if (done) return;
+          buf += decoder.decode(value, { stream: true });
+          const parts = buf.split('\n\n');
+          buf = parts.pop();
+          parts.forEach(part => {
+            const line = part.trim();
+            if (!line.startsWith('data: ')) return;
+            try {
+              const evt = JSON.parse(line.slice(6));
+              if (evt.event === 'stage') {
+                const idx = UPDATE_STAGES.findIndex(s => s.id === evt.id);
+                if (idx >= 0) setStageIdx(idx);
+                if (evt.detail) setStageDetails(prev => ({ ...prev, [evt.id]: evt.detail }));
+                animateTo(evt.progress || 0);
+              } else if (evt.event === 'done') {
+                animateTo(100, 600, () => {
+                  setStageIdx(UPDATE_STAGES.length);
+                  if (evt.version) setVersion(evt.version);
+                  setPhase('done');
+                });
+              } else if (evt.event === 'error') {
+                setUpdateError(evt.detail || 'Unknown error');
+                setPhase('error');
+              }
+            } catch (_) {}
+          });
+          read();
+        }).catch(err => {
+          setUpdateError('Stream error: ' + (err.message || 'closed'));
+          setPhase('error');
+        });
+        read();
+      })
+      .catch(err => {
+        setUpdateError('Connection failed: ' + (err.message || ''));
+        setPhase('error');
+      });
+  };
+
+  const SI = sysInfo || {};
+  const stats = [
+    { label: 'Version',      value: version,                                         mono: true,  highlight: phase === 'done' },
+    { label: 'Platform',     value: SI.platform   || '…',                            mono: false },
+    { label: 'Kernel',       value: SI.kernel     || '…',                            mono: true  },
+    { label: 'Uptime',       value: SI.uptime     || '…',                            mono: false },
+    { label: 'Interface',    value: SI.interface  || '…',                            mono: true  },
+    { label: 'Service',      value: SI.service    || '…',                            mono: true  },
+    { label: 'Status',       value: SI.service_enabled != null ? (SI.service_enabled ? 'enabled' : 'disabled') : '…', mono: true },
+    { label: 'Peers online', value: `${connectedCount} / ${totalPeers}`,             mono: true  },
+  ];
+
+  const accents = [
+    { id: 'terracotta', c: 'oklch(62% 0.14 45)',  name: 'Terracotta' },
+    { id: 'forest',     c: 'oklch(55% 0.11 150)', name: 'Forest' },
+    { id: 'amber',      c: 'oklch(70% 0.15 75)',  name: 'Amber' },
+    { id: 'plum',       c: 'oklch(48% 0.12 330)', name: 'Plum' },
+    { id: 'ink',        c: 'oklch(55% 0.19 27)',  name: 'Ember' },
+  ];
+
+  return (
+    <>
+      <div className="drawer-scrim" onClick={() => phase !== 'updating' && onClose()} />
+      <aside className="drawer" role="dialog" aria-label="Dashboard settings">
+        <header className="drawer-head">
+          <div className="drawer-head-left">
+            <div className="peer-avatar" style={{ background: 'var(--accent-soft)' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            </div>
+            <div>
+              <h2 className="drawer-title">Dashboard settings</h2>
+              <div className="drawer-sub">
+                <span className="pulse-dot" /> {SI.service || '…'} · {SI.service_enabled != null ? (SI.service_enabled ? 'enabled' : 'disabled') : '…'}
+              </div>
+            </div>
+          </div>
+          <button className="icon-btn" onClick={onClose} aria-label="Close" disabled={phase === 'updating'}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </header>
+
+        <div className="drawer-body">
+          <section className="drawer-section">
+            <div className="section-head"><span className="section-label">ACCENT COLOR</span></div>
+            <div className="set-accent-grid">
+              {accents.map(a => (
+                <button key={a.id} className={`set-accent ${accent === a.id ? 'on' : ''}`} onClick={() => setAccent(a.id)}>
+                  <span className="set-accent-dot" style={{ background: a.c }}>
+                    {accent === a.id && (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2"><path d="M5 12l5 5L20 7"/></svg>
+                    )}
+                  </span>
+                  <span className="set-accent-name">{a.name}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="drawer-section">
+            <div className="section-head"><span className="section-label">SERVER</span></div>
+            <div className="set-stats">
+              {stats.map(s => (
+                <div className="set-stat" key={s.label}>
+                  <div className="set-stat-label">{s.label}</div>
+                  <div className={`set-stat-val ${s.mono ? 'mono' : ''} ${s.highlight ? 'is-new' : ''}`}>{s.value}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="drawer-section">
+            <div className="section-head"><span className="section-label">SOFTWARE UPDATE</span></div>
+
+            {phase === 'loading' && (
+              <div className="upd-card" style={{display:'flex',alignItems:'center',gap:'8px',color:'var(--text-2)',fontSize:'13px'}}>
+                <span className="pc-spinner" style={{width:'14px',height:'14px',flexShrink:0}} />
+                Checking for updates…
+              </div>
+            )}
+
+            {phase === 'idle' && (
+              <div className="upd-card" style={{display:'flex',alignItems:'center',gap:'10px'}}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.2"><path d="M5 12l5 5L20 7"/></svg>
+                <span style={{color:'var(--text-2)',fontSize:'13px'}}>Up to date · <span className="mono">{version}</span></span>
+              </div>
+            )}
+
+            {phase === 'available' && (
+              <div className="upd-card upd-available">
+                <div className="upd-badge-row">
+                  <span className="upd-pill">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
+                    Update available
+                  </span>
+                </div>
+                <div className="upd-ver-flow">
+                  <span className="upd-ver upd-ver-old mono">{version}</span>
+                  <svg className="upd-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14m-6-6l6 6-6 6"/></svg>
+                  <span className="upd-ver upd-ver-new mono">{newVersion}</span>
+                </div>
+                <div className="upd-notes">New version available on GitHub. Pulls latest commits and restarts the service.</div>
+                <button className="btn btn-primary upd-btn" onClick={runUpdate}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 12a9 9 0 11-9-9c2.5 0 4.7 1 6.4 2.6L21 3v6h-6"/></svg>
+                  Install update
+                </button>
+              </div>
+            )}
+
+            {phase === 'updating' && (
+              <div className="upd-card">
+                <div className="upd-progress-head">
+                  <span className="upd-stage-name">{UPDATE_STAGES[Math.min(stageIdx, UPDATE_STAGES.length - 1)]?.label}<span className="pc-typing">…</span></span>
+                  <span className="upd-pct mono" ref={pctRef}>0%</span>
+                </div>
+                <div className="upd-progress">
+                  <div className="upd-progress-fill" ref={fillRef} />
+                  <div className="upd-progress-glow" ref={glowRef} />
+                </div>
+                <div className="upd-steplist">
+                  {UPDATE_STAGES.map((s, i) => {
+                    const done = i < stageIdx;
+                    const active = i === stageIdx;
+                    const detail = stageDetails[s.id] || s.detail;
+                    return (
+                      <div key={s.id} className={`upd-step ${done ? 'done' : ''} ${active ? 'active' : ''}`}>
+                        <span className="upd-step-marker">
+                          {done ? (
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M5 12l5 5L20 7"/></svg>
+                          ) : active ? (
+                            <span className="pc-spinner" />
+                          ) : (
+                            <span className="pc-idle-dot" />
+                          )}
+                        </span>
+                        <span className="upd-step-label">{s.label}</span>
+                        <span className="upd-step-detail mono">{detail}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {phase === 'error' && (
+              <div className="upd-card" style={{borderColor:'oklch(72% 0.16 25)',background:'oklch(99% 0.01 25)'}}>
+                <div style={{display:'flex',gap:'8px',alignItems:'flex-start'}}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="oklch(55% 0.18 25)" strokeWidth="2" style={{marginTop:'1px',flexShrink:0}}><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+                  <div>
+                    <div style={{fontWeight:'600',fontSize:'13px',color:'oklch(45% 0.15 25)'}}>Update failed</div>
+                    <div style={{fontSize:'12px',color:'var(--text-2)',marginTop:'3px',fontFamily:'var(--font-mono)',wordBreak:'break-all'}}>{updateError}</div>
+                  </div>
+                </div>
+                <button className="btn btn-primary upd-btn" onClick={runUpdate} style={{marginTop:'12px'}}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 12a9 9 0 11-9-9c2.5 0 4.7 1 6.4 2.6L21 3v6h-6"/></svg>
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {phase === 'done' && (
+              <div className="upd-card upd-done">
+                <div className="upd-done-check">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6"><path d="M5 12l5 5L20 7"/></svg>
+                </div>
+                <div className="upd-done-title">Update installed</div>
+                <div className="upd-done-desc">Now running <span className="mono">{version}</span>. Reload the dashboard to apply the changes.</div>
+                <button className="btn btn-primary upd-refresh-btn" onClick={() => window.location.reload()}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M21 12a9 9 0 11-9-9c2.5 0 4.7 1 6.4 2.6L21 3v6h-6"/></svg>
+                  Refresh dashboard
+                </button>
+              </div>
+            )}
+          </section>
+        </div>
+      </aside>
+    </>
+  );
+}
+
+// ============================================================
+Object.assign(window, { PeerDrawer, LogsPanel, DataBudgetDrawer, LogsDrawer, PortCheckDrawer, SettingsDrawer, NotifIcon });
