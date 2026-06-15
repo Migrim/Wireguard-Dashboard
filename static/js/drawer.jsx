@@ -1288,6 +1288,7 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
 
   const [checking, setChecking] = _useState(false);
   const [onCooldown, setOnCooldown] = _useState(false);
+  const [advancedOpen, setAdvancedOpen] = _useState(false);
   const cooldownRef = _useRef(null);
   const devUpdatesRef = _useRef(tweaks.devUpdates);
   devUpdatesRef.current = tweaks.devUpdates;
@@ -1469,24 +1470,6 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
           <section className="drawer-section">
             <div className="section-head"><span className="section-label">SOFTWARE UPDATE</span></div>
 
-            <div className="settings-list">
-              <div className="setting-row">
-                <div>
-                  <div className="setting-title">Dev updates</div>
-                  <div className="setting-desc">Opt in to pre-release builds — may contain simulated or incorrect data</div>
-                </div>
-                <div className="setting-control">
-                  <button
-                    className={`toggle ${tweaks.devUpdates ? 'on' : ''}`}
-                    onClick={() => setTweaks({ ...tweaks, devUpdates: !tweaks.devUpdates })}
-                    aria-pressed={tweaks.devUpdates}
-                  >
-                    <span className="toggle-knob" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
             {phase === 'loading' && (
               <div className="upd-card" style={{display:'flex',alignItems:'center',gap:'8px',color:'var(--text-2)',fontSize:'13px'}}>
                 <span className="pc-spinner" style={{width:'14px',height:'14px',flexShrink:0}} />
@@ -1600,6 +1583,34 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
                 </button>
               </div>
             )}
+
+            <div className="settings-list" style={{ marginTop: '10px' }}>
+              <button
+                className="setting-row"
+                onClick={() => setAdvancedOpen(v => !v)}
+                style={{ width: '100%', textAlign: 'left', cursor: 'pointer', background: 'none', border: 'none', color: 'inherit' }}
+              >
+                <span style={{ fontSize: '12px', color: 'var(--muted)', fontWeight: '500' }}>Advanced settings</span>
+                <svg style={{ transform: advancedOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', color: 'var(--muted)', flexShrink: 0 }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
+              </button>
+              {advancedOpen && (
+                <div className="setting-row">
+                  <div>
+                    <div className="setting-title">Dev updates</div>
+                    <div className="setting-desc">Opt in to pre-release builds — may contain simulated or incorrect data</div>
+                  </div>
+                  <div className="setting-control">
+                    <button
+                      className={`toggle ${tweaks.devUpdates ? 'on' : ''}`}
+                      onClick={() => setTweaks({ ...tweaks, devUpdates: !tweaks.devUpdates })}
+                      aria-pressed={tweaks.devUpdates}
+                    >
+                      <span className="toggle-knob" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </section>
         </div>
       </aside>
