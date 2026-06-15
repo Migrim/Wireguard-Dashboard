@@ -550,14 +550,9 @@ html.theme-switching .theme-toggle-icon {
 .upd-idle-card { position: relative; overflow: hidden; }
 .upd-idle-content { display: flex; align-items: center; gap: 10px; width: 100%; transition: filter 0.35s ease, opacity 0.35s ease; }
 .upd-idle-content.is-blurring { filter: blur(3px); opacity: 0.15; pointer-events: none; }
-.upd-fetch-overlay { position: absolute; inset: 0; background: var(--bg-2); display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: var(--text-2); font-style: italic; border-radius: 11px; opacity: 0; pointer-events: none; transition: opacity 0.35s ease; }
+.upd-fetch-overlay { position: absolute; inset: 0; background: var(--bg-2); display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: var(--text-2); border-radius: 11px; opacity: 0; pointer-events: none; transition: opacity 0.35s ease; }
 .upd-fetch-overlay.is-active { opacity: 1; }
 .upd-fetch-text { line-height: 1; }
-.upd-fetch-dots { display: inline-flex; align-items: center; gap: 2px; margin-left: -5px; transform: translateY(1px); }
-.upd-fetch-dots span { width: 2.5px; height: 2.5px; border-radius: 50%; background: currentColor; opacity: 0.35; transform: translateY(0); animation: updFetchDot 1.05s ease-in-out infinite; }
-.upd-fetch-dots span:nth-child(2) { animation-delay: 0.14s; }
-.upd-fetch-dots span:nth-child(3) { animation-delay: 0.28s; }
-@keyframes updFetchDot { 0%, 80%, 100% { opacity: 0.35; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
 
 /* Budget drawer */
 .budget-hero { display: flex; flex-direction: column; gap: 18px; padding: 18px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; }
