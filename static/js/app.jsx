@@ -537,6 +537,7 @@ function App({ tweaks, setTweaks, onLogout }) {
         <TrafficMode
           peers={peers.map(p => ({ ...p, ...(peerGeo[p.name] || {}), pingMs: peerPings[p.name] ?? p.pingMs }))}
           theme={tweaks.theme}
+          serverName={unit.replace('wg-quick@', '')}
           onClose={() => setTrafficModeOpen(false)}
         />
       )}

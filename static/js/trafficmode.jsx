@@ -2,7 +2,6 @@
 // Peers arranged radially by ping latency on concentric rings.
 // Log is in a slide-in drawer toggled by the log button.
 
-const TM_SERVER = { name: 'wg0 · DE-FRA-01', country: 'Frankfurt' };
 const RING_MS = [25, 75, 150, 250];
 
 const ORBITAL_THEMES = {
@@ -54,7 +53,7 @@ function orbitalPeerPos(p, rotation, zoom, W, H, norm) {
   return { x: cx + Math.cos(a) * R * n, y: cy + Math.sin(a) * R * n * 0.62 };
 }
 
-function TrafficMode({ peers, theme, onClose }) {
+function TrafficMode({ peers, theme, onClose, serverName }) {
   const canvasRef = React.useRef(null);
   const rafRef = React.useRef(null);
   const rotRef = React.useRef(0);
@@ -73,6 +72,9 @@ function TrafficMode({ peers, theme, onClose }) {
   const hoverSpeedRef = React.useRef(1);
   // Animated norm values per peer name — lerp toward target norm each frame
   const normAnimRef = React.useRef({});
+  const serverNameRef = React.useRef(serverName);
+  // Tracks previous cumulative bytes and last handshake per peer between prop updates
+  const prevPeerDataRef = React.useRef({});
 
   const [paused, setPaused] = React.useState(false);
   const [logOpen, setLogOpen] = React.useState(false);
@@ -81,43 +83,71 @@ function TrafficMode({ peers, theme, onClose }) {
 
   React.useEffect(() => { pausedRef.current = paused; }, [paused]);
   React.useEffect(() => { themeRef.current = theme; }, [theme]);
+  React.useEffect(() => { serverNameRef.current = serverName; }, [serverName]);
   React.useEffect(() => { orderedRef.current = buildOrderedPeers(peers); }, [peers]);
 
-  // Particle emission — restarts whenever connected peer set changes
+  // Particle emission — driven by real byte deltas from the parent's /api/status poll (every ~3s)
   React.useEffect(() => {
-    const fire = (p) => {
-      if (pausedRef.current) return;
-      const roll = Math.random();
-      let kind, label, size;
-      if (roll < 0.46)      { kind = 'rx'; label = 'rx';        size = Math.random() * 4200 + 600; }
-      else if (roll < 0.66) { kind = 'rx'; label = 'rx';        size = Math.random() * 900  + 120; }
-      else if (roll < 0.88) { kind = 'tx'; label = 'tx';        size = Math.random() * 1600 + 90;  }
-      else if (roll < 0.95) { kind = 'hs'; label = 'handshake'; size = 0; }
-      else                   { kind = 'ka'; label = 'keepalive'; size = 0; }
-      const dir = kind === 'tx' ? 1 : kind === 'rx' ? -1 : (Math.random() < 0.5 ? 1 : -1);
-      particlesRef.current.push({ peer: p, kind, dir, size, t0: performance.now(), dur: 900 + Math.random() * 700 });
-      p.lastHit = performance.now();
-      statsRef.current = { events: statsRef.current.events + 1, bytes: statsRef.current.bytes + size * 1024 };
-      setStats({ ...statsRef.current });
-      setEvents(prev => [{ ts: Date.now(), peer: p.name, kind, label, size }, ...prev].slice(0, 50));
-    };
+    if (!peers.length) return;
+    const prev = prevPeerDataRef.current;
+    const next = {};
+    const timeouts = [];
 
-    const emit = () => {
-      if (pausedRef.current) return;
-      const conn = orderedRef.current.filter(p => p.connected);
-      if (!conn.length) return;
-      const burst = 2 + Math.floor(Math.random() * 3);
-      const shuffled = [...conn].sort(() => Math.random() - 0.5);
-      for (let i = 0; i < burst; i++) {
-        const p = shuffled[i % shuffled.length];
-        setTimeout(() => fire(p), i * 90 + Math.random() * 80);
+    peers.forEach(p => {
+      const key = p.name;
+      const bytesIn  = p.bytesIn  || 0;
+      const bytesOut = p.bytesOut || 0;
+      next[key] = { bytesIn, bytesOut, lastHs: p.lastHs };
+      const old = prev[key];
+      if (!old || p.status !== 'connected') return;
+
+      const rxDelta = Math.max(0, bytesIn  - old.bytesIn);
+      const txDelta = Math.max(0, bytesOut - old.bytesOut);
+      const hsChanged = p.lastHs && p.lastHs !== old.lastHs;
+
+      const fire = (kind, sizeKb, delay) => {
+        const t = setTimeout(() => {
+          if (pausedRef.current) return;
+          const target = orderedRef.current.find(op => op.name === key);
+          if (!target || !target.connected) return;
+          particlesRef.current.push({
+            peer: target, kind, dir: kind === 'tx' ? 1 : -1, size: sizeKb,
+            t0: performance.now(), dur: 900 + Math.random() * 700,
+          });
+          target.lastHit = performance.now();
+          statsRef.current = {
+            events: statsRef.current.events + 1,
+            bytes:  statsRef.current.bytes  + sizeKb * 1024,
+          };
+          setStats({ ...statsRef.current });
+          setEvents(ev => [{
+            ts: Date.now(), peer: key, kind,
+            label: kind === 'hs' ? 'handshake' : kind,
+            size: sizeKb,
+          }, ...ev].slice(0, 50));
+        }, delay);
+        timeouts.push(t);
+      };
+
+      if (hsChanged) fire('hs', 0, Math.random() * 400);
+
+      if (rxDelta > 0) {
+        const count = Math.min(5, Math.max(1, Math.round(rxDelta / 20000)));
+        const kb = rxDelta / 1024 / count;
+        for (let i = 0; i < count; i++)
+          fire('rx', kb, 80 + i * (2600 / count) + Math.random() * 150);
       }
-    };
 
-    const t1 = setTimeout(emit, 300);
-    const t2 = setTimeout(emit, 650);
-    const id = setInterval(emit, 540);
-    return () => { clearTimeout(t1); clearTimeout(t2); clearInterval(id); };
+      if (txDelta > 0) {
+        const count = Math.min(5, Math.max(1, Math.round(txDelta / 20000)));
+        const kb = txDelta / 1024 / count;
+        for (let i = 0; i < count; i++)
+          fire('tx', kb, 160 + i * (2600 / count) + Math.random() * 150);
+      }
+    });
+
+    prevPeerDataRef.current = next;
+    return () => timeouts.forEach(clearTimeout);
   }, [peers]);
 
   // Render loop — runs once; reads all state via refs
@@ -244,10 +274,7 @@ function TrafficMode({ peers, theme, onClose }) {
       ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.font = `600 12px 'Inter', system-ui, sans-serif`;
       ctx.fillStyle = P.label + '0.95)'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      ctx.fillText(TM_SERVER.name, cx, cy + 14);
-      ctx.font = `9.5px 'JetBrains Mono', ui-monospace, monospace`;
-      ctx.fillStyle = P.label + '0.45)';
-      ctx.fillText(TM_SERVER.country.toUpperCase(), cx, cy + 30);
+      ctx.fillText(serverNameRef.current || 'wg0', cx, cy + 14);
       ctx.restore();
 
       // Peer nodes + labels
