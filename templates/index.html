@@ -2333,10 +2333,11 @@ html.theme-switching .theme-toggle-icon {
 <script type="text/babel">
   const THEME_KEY = 'WG_THEME';
   const DEV_UPDATES_KEY = 'WG_DEV_UPDATES';
+  const ACCENT_KEY = 'WG_ACCENT';
   const TWEAKS_DEFAULTS = {
     theme: localStorage.getItem(THEME_KEY) || 'light',
     density: 'compact',
-    accent: 'terracotta',
+    accent: localStorage.getItem(ACCENT_KEY) || 'terracotta',
     devUpdates: localStorage.getItem(DEV_UPDATES_KEY) === 'true',
     _tweaksOpen: false,
   };
@@ -2367,6 +2368,10 @@ html.theme-switching .theme-toggle-icon {
     React.useEffect(() => {
       localStorage.setItem(DEV_UPDATES_KEY, tweaks.devUpdates ? 'true' : 'false');
     }, [tweaks.devUpdates]);
+
+    React.useEffect(() => {
+      if (tweaks.accent) localStorage.setItem(ACCENT_KEY, tweaks.accent);
+    }, [tweaks.accent]);
 
     React.useEffect(() => {
       return () => window.clearTimeout(themeTimer.current);
