@@ -1778,8 +1778,13 @@ def _write_local_version(version: str) -> bool:
         app.logger.warning("failed to update local version metadata: %s", e)
         return False
 
+def _is_dev_version(version: str) -> bool:
+    return (version or "").strip().lower().startswith("dev ")
+
 def _version_key(version: str):
     value = (version or "").strip()
+    if value.lower().startswith("dev "):
+        value = value[4:].strip()
     if value.startswith(("v", "V")):
         value = value[1:]
     match = re.match(r"^(\d+(?:\.\d+)*)(?:[-+].*)?$", value)
@@ -1800,18 +1805,24 @@ def _compare_versions(current: str, candidate: str):
 
 @app.route("/api/update/check")
 def api_update_check():
+    dev_opt_in = request.args.get("dev", "0") == "1"
     local = _local_version()
     remote = _remote_version()
     comparison = _compare_versions(local, remote)
+    remote_is_dev = _is_dev_version(remote)
+    available = comparison == 1 and (not remote_is_dev or dev_opt_in)
     return jsonify({
         "local": local,
         "remote": remote,
-        "available": comparison == 1,
+        "available": available,
         "comparison": comparison,
+        "remote_is_dev": remote_is_dev,
     })
 
 @app.route("/api/update/apply", methods=["POST"])
 def api_update_apply():
+    dev_opt_in = request.args.get("dev", "0") == "1"
+
     def _sse(obj: dict) -> str:
         return "data: " + json.dumps(obj) + "\n\n"
 
@@ -1820,12 +1831,15 @@ def api_update_apply():
             local = _local_version()
             remote = _remote_version()
             comparison = _compare_versions(local, remote)
-            if comparison != 1:
+            remote_is_dev = _is_dev_version(remote)
+            if comparison != 1 or (remote_is_dev and not dev_opt_in):
                 detail = "remote version is not newer"
                 if not remote:
                     detail = "remote version unavailable"
                 elif comparison is None:
                     detail = "could not compare local and remote versions"
+                elif remote_is_dev and not dev_opt_in:
+                    detail = "dev updates not enabled"
                 yield _sse({"event": "done", "version": local, "remote": remote,
                             "detail": detail, "progress": 100})
                 return

@@ -1289,11 +1289,15 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
   const [checking, setChecking] = _useState(false);
   const [onCooldown, setOnCooldown] = _useState(false);
   const cooldownRef = _useRef(null);
+  const devUpdatesRef = _useRef(tweaks.devUpdates);
+  devUpdatesRef.current = tweaks.devUpdates;
+  const prevDevUpdatesRef = _useRef(tweaks.devUpdates);
 
   const checkForUpdates = (manual) => {
+    const devParam = devUpdatesRef.current ? '?dev=1' : '';
     if (manual) setChecking(true);
     Promise.all([
-      fetch('/api/update/check').then(r => r.json()),
+      fetch(`/api/update/check${devParam}`).then(r => r.json()),
       fetch('/api/system/info').then(r => r.json()),
       manual ? new Promise(r => setTimeout(r, 2000)) : Promise.resolve(),
     ]).then(([upd, sys]) => {
@@ -1319,6 +1323,12 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
   }, []);
 
   _useEffect(() => {
+    if (prevDevUpdatesRef.current === tweaks.devUpdates) return;
+    prevDevUpdatesRef.current = tweaks.devUpdates;
+    checkForUpdates(false);
+  }, [tweaks.devUpdates]);
+
+  _useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape' && phase !== 'updating') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -1340,7 +1350,7 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
     setUpdateError('');
     paint(0);
 
-    fetch('/api/update/apply', { method: 'POST' })
+    fetch(`/api/update/apply${tweaks.devUpdates ? '?dev=1' : ''}`, { method: 'POST' })
       .then(res => {
         if (!res.ok || !res.body) throw new Error('Request failed');
         const reader = res.body.getReader();
@@ -1458,6 +1468,24 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
 
           <section className="drawer-section">
             <div className="section-head"><span className="section-label">SOFTWARE UPDATE</span></div>
+
+            <div className="settings-list">
+              <div className="setting-row">
+                <div>
+                  <div className="setting-title">Dev updates</div>
+                  <div className="setting-desc">Opt in to pre-release builds — may contain simulated or incorrect data</div>
+                </div>
+                <div className="setting-control">
+                  <button
+                    className={`toggle ${tweaks.devUpdates ? 'on' : ''}`}
+                    onClick={() => setTweaks({ ...tweaks, devUpdates: !tweaks.devUpdates })}
+                    aria-pressed={tweaks.devUpdates}
+                  >
+                    <span className="toggle-knob" />
+                  </button>
+                </div>
+              </div>
+            </div>
 
             {phase === 'loading' && (
               <div className="upd-card" style={{display:'flex',alignItems:'center',gap:'8px',color:'var(--text-2)',fontSize:'13px'}}>
