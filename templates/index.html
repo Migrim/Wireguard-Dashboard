@@ -1317,6 +1317,141 @@ html:not([data-theme="dark"]) .coll.open .ap2-textarea { background: var(--card-
 html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--card-raised); }
 
 /* ============================================================
+   Peer drawer — tabs + PeerSettings
+============================================================ */
+.drawer-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  padding: 0 22px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.drawer-tab {
+  position: relative;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.14s, border-color 0.14s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.drawer-tab:hover { color: var(--ink-2); }
+.drawer-tab.on { color: var(--ink); border-bottom-color: var(--accent); }
+.drawer-tab-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+/* In-sync / re-provision banner */
+.ps-insync {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+}
+.ps-reprov {
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  background: var(--warn-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+}
+.ps-reprov-main { display: flex; gap: 12px; align-items: flex-start; }
+.ps-reprov-icon {
+  width: 28px; height: 28px;
+  border-radius: 7px;
+  background: var(--warn);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.ps-reprov-title { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 3px; }
+.ps-reprov-desc { font-family: var(--mono); font-size: 11px; color: var(--ink-2); line-height: 1.55; }
+.ps-reprov-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.ps-reprov-chip {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: var(--warn);
+  color: #fff;
+  font-weight: 500;
+}
+.ps-reprov-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.ps-reprov-preview {
+  border-top: 1px solid color-mix(in oklab, var(--warn) 30%, var(--border));
+  padding-top: 10px;
+  margin-top: 2px;
+}
+
+/* Settings groups */
+.ps-body { display: flex; flex-direction: column; gap: 20px; }
+.ps-group { display: flex; flex-direction: column; gap: 8px; }
+.ps-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 22px;
+}
+.ps-group-head-left { display: flex; align-items: center; gap: 8px; }
+.ps-group-kicker {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ps-group-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.ps-badge-live { color: var(--success); }
+.ps-badge-config { color: var(--warn); }
+.ps-stack { display: flex; flex-direction: column; gap: 6px; }
+.ps-saved {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--success);
+}
+.ps-save-msg {
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+
+/* ============================================================
    Traffic Mode — fullscreen globe overlay
 ============================================================ */
 @keyframes tm-open {
@@ -2512,6 +2647,7 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
 <script type="text/babel" src="{{ url_for('static', filename='js/drawer.jsx') }}?v={{ app_version }}"></script>
 <script type="text/babel" src="{{ url_for('static', filename='js/trafficmode.jsx') }}?v={{ app_version }}"></script>
 <script type="text/babel" src="{{ url_for('static', filename='js/addpeer.jsx') }}?v={{ app_version }}"></script>
+<script type="text/babel" src="{{ url_for('static', filename='js/peersettings.jsx') }}?v={{ app_version }}"></script>
 <script type="text/babel" src="{{ url_for('static', filename='js/app.jsx') }}?v={{ app_version }}"></script>
 
 <script type="text/babel">

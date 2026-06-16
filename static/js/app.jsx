@@ -512,6 +512,11 @@ function App({ tweaks, setTweaks, onLogout }) {
               setPeers(window.WG.mapApiPeers(j.clients.issued, j.clients.live));
             }).catch(() => {});
           }}
+          onPeerUpdated={() => {
+            window.WG.apiCall('/api/status').then(j => {
+              setPeers(window.WG.mapApiPeers(j.clients.issued, j.clients.live));
+            }).catch(() => {});
+          }}
         />
       )}
 

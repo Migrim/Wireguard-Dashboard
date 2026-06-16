@@ -9,6 +9,8 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated 
   const [copied, setCopied] = _useState('');
   const [downloading, setDownloading] = _useState(false);
   const [revoking, setRevoking] = _useState(false);
+  const [tab, setTab] = _useState('overview');
+  const [settingsDirty, setSettingsDirty] = _useState(false);
   const [diag, setDiag] = _useState({ loading: true, pingMs: null, pingStatus: '', location: null, endpointIp: '', pingIp: '' });
 
   // Settings edit state
@@ -181,6 +183,19 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated 
           </button>
         </header>
 
+        <div className="drawer-tabs">
+          <button className={`drawer-tab ${tab === 'overview' ? 'on' : ''}`} onClick={() => setTab('overview')}>Overview</button>
+          <button className={`drawer-tab ${tab === 'settings' ? 'on' : ''}`} onClick={() => setTab('settings')}>
+            Settings
+            {settingsDirty && <span className="drawer-tab-dot" title="Unsaved config changes" />}
+          </button>
+        </div>
+
+        {tab === 'settings' ? (
+          <div className="drawer-body">
+            <window.PeerSettings peer={peer} onDirtyChange={setSettingsDirty} onPeerUpdated={onPeerUpdated} />
+          </div>
+        ) : (
         <div className="drawer-body">
           <section className="drawer-section">
             <div className="section-head">
@@ -419,6 +434,7 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated 
             </div>
           </section>
         </div>
+        )}
       </aside>
     </>
   );
