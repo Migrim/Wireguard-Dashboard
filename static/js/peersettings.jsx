@@ -609,7 +609,9 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="ps-reprov-title">New config required</div>
-              <div className="ps-reprov-desc">Re-import on device before next connection.</div>
+              <div className="ps-reprov-desc">
+                <span className="mono" style={{ color: 'var(--ink)' }}>{peer.name}</span> keeps running on its current config until the device re-imports the updated one.
+              </div>
               <div className="ps-reprov-chips">
                 {changedLabels.map((c) => <span key={c} className="ps-reprov-chip">{c}</span>)}
               </div>
