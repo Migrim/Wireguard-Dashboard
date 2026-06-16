@@ -104,14 +104,17 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
   }
   const [saved, setSaved] = pS(() => snapshotConfig(seeds));
 
-  // Reset all state when switching peers
+  // Reset all state when switching peers — restore any saved draft
   pE(() => {
-    setRoutingPreset(seeds.routingPreset); setAllowedIps(seeds.allowedIps);
-    setDns(seeds.dns); setSearchDomains(''); setBlockAds(false);
-    setEndpoint(seeds.endpoint); setMtu('1420'); setKeepalive(seeds.keepalive); setListenPort('');
-    setTable('auto'); setFwmark(''); setPreUp(''); setPostUp(''); setPreDown(''); setPostDown('');
-    setUsePsk(false); setRekeyed(false);
-    setKeys({ privateKey: window.randKey(), publicKey: peer.pubKey || window.randKey(), presharedKey: window.randKey() });
+    let draft = null;
+    try { draft = JSON.parse(localStorage.getItem('WG_PEER_DRAFT_' + peer.name) || 'null'); } catch (_) {}
+    const base = draft || seeds;
+    setRoutingPreset(base.routingPreset ?? seeds.routingPreset); setAllowedIps(base.allowedIps ?? seeds.allowedIps);
+    setDns(base.dns ?? seeds.dns); setSearchDomains(base.searchDomains || ''); setBlockAds(base.blockAds || false);
+    setEndpoint(base.endpoint ?? seeds.endpoint); setMtu(base.mtu || '1420'); setKeepalive(base.keepalive ?? seeds.keepalive); setListenPort(base.listenPort || '');
+    setTable(base.table || 'auto'); setFwmark(base.fwmark || ''); setPreUp(base.preUp || ''); setPostUp(base.postUp || ''); setPreDown(base.preDown || ''); setPostDown(base.postDown || '');
+    setUsePsk(base.usePsk || false); setRekeyed(base.rekeyed || false);
+    setKeys(draft?.keys || { privateKey: window.randKey(), publicKey: peer.pubKey || window.randKey(), presharedKey: window.randKey() });
     setNote(seeds.note); setOwner(seeds.owner); setLongNote(seeds.longNote);
     setExpiry('never'); setDisableIdle(false); setIdleDays('30');
     setDataCap(''); setRateDown(''); setRateUp('');
@@ -152,6 +155,12 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
   const dirty = changedLabels.length > 0;
 
   pE(() => { onDirtyChange?.(dirty); }, [dirty]);
+
+  pE(() => {
+    const key = 'WG_PEER_DRAFT_' + peer.name;
+    if (!dirty) { localStorage.removeItem(key); return; }
+    try { localStorage.setItem(key, JSON.stringify({ ...current, keys })); } catch (_) {}
+  }, [dirty, routingPreset, allowedIps, dns, searchDomains, blockAds, endpoint, mtu, keepalive, listenPort, table, fwmark, preUp, postUp, preDown, postDown, usePsk, rekeyed, keys]);
 
   // Instant-save flash
   const [flash, setFlash] = pS(false);
@@ -262,6 +271,7 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
         });
         if (onPeerUpdated) onPeerUpdated();
       }
+      localStorage.removeItem('WG_PEER_DRAFT_' + peer.name);
       setSaved(snapshotConfig(current));
       setShowPreview(false);
     } catch (e) {
@@ -273,13 +283,14 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
   };
 
   const revert = () => {
+    localStorage.removeItem('WG_PEER_DRAFT_' + peer.name);
     setRoutingPreset(saved.routingPreset); setAllowedIps(saved.allowedIps);
     setDns(saved.dns); setSearchDomains(saved.searchDomains); setBlockAds(saved.blockAds);
     setEndpoint(saved.endpoint); setMtu(saved.mtu); setKeepalive(saved.keepalive); setListenPort(saved.listenPort);
     setTable(saved.table); setFwmark(saved.fwmark);
     setPreUp(saved.preUp); setPostUp(saved.postUp); setPreDown(saved.preDown); setPostDown(saved.postDown);
     setUsePsk(saved.usePsk); setRekeyed(saved.rekeyed);
-    setShowPreview(false);
+    setShowPreview(false); setShowQr(false);
   };
 
   const rekey = () => {
@@ -621,7 +632,7 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
             </button>
             <span style={{ flex: 1 }} />
             <button className="btn btn-danger" onClick={revert}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-5.06L1 10"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 10h10a4 4 0 0 1 0 8H9"/><polyline points="7 6 3 10 7 14"/></svg>
               Revert
             </button>
             <button className="btn btn-primary" onClick={markReprovisioned} disabled={saving}>
