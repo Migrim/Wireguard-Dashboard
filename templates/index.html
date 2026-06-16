@@ -614,6 +614,8 @@ html.theme-switching .theme-toggle-icon {
 .pc-idle-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); opacity: 0.5; }
 .pc-spinner { width: 12px; height: 12px; border: 2px solid color-mix(in oklab, var(--accent) 25%, transparent); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pingFadeBlur { from { opacity: 0; filter: blur(8px); } to { opacity: 1; filter: blur(0); } }
+.ping-val-in { display: inline-block; animation: pingFadeBlur 0.45s ease-out forwards; }
 .pc-step-body { padding-top: 4px; min-width: 0; }
 .pc-tip { margin-top: 4px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; display: flex; gap: 12px; align-items: flex-start; }
 .pc-tip-icon { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; background: color-mix(in oklab, var(--warn) 18%, var(--card)); color: var(--warn); display: grid; place-items: center; }
@@ -1415,6 +1417,11 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
   border-top: 1px solid color-mix(in oklab, var(--warn) 30%, var(--border));
   padding-top: 10px;
   margin-top: 2px;
+}
+.ps-reprov-qr {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  border-top: 1px solid color-mix(in oklab, var(--warn) 30%, var(--border));
+  padding-top: 14px; margin-top: 2px;
 }
 
 /* Settings groups */

@@ -159,6 +159,9 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
   const [saving, setSaving] = pS(false);
   const [saveMsg, setSaveMsg] = pS('');
 
+  const [showQr, setShowQr] = pS(false);
+  const [qrUrl, setQrUrl] = pS('');
+
   const instantSave = async (patch) => {
     setSaving(true);
     setSaveMsg('');
@@ -195,6 +198,14 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
 
   const [showPreview, setShowPreview] = pS(false);
   const [provisioning, setProvisioning] = pS(false);
+
+  pE(() => {
+    if (!showQr || !previewConfig || !window.QRious) { if (!showQr) setQrUrl(''); return; }
+    try {
+      const qr = new window.QRious({ value: previewConfig, size: 200, level: 'L' });
+      setQrUrl(qr.toDataURL());
+    } catch (_) {}
+  }, [showQr, previewConfig]);
 
   // Build the API patch for config-group fields that have server support
   function buildConfigPatch() {
@@ -604,11 +615,15 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
               {provisioning ? 'Downloading…' : 'Download .conf'}
             </button>
-            <button className="btn" onClick={() => copy(previewConfig, 'conf')}>
-              {copied === 'conf' ? '✓ Copied' : 'Copy config'}
+            <button className="btn" onClick={() => setShowQr((v) => !v)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3M21 14v3M14 17v4h3M17 21h4"/></svg>
+              {showQr ? 'Hide QR' : 'Show QR'}
             </button>
             <span style={{ flex: 1 }} />
-            <button className="btn btn-ghost" onClick={revert}>Revert</button>
+            <button className="btn btn-danger" onClick={revert}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 7v6h6"/><path d="M3 13A9 9 0 1 0 5.7 5.7L3 8"/></svg>
+              Revert
+            </button>
             <button className="btn btn-primary" onClick={markReprovisioned} disabled={saving}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12l5 5L20 7"/></svg>
               {saving ? 'Saving…' : 'Mark re-provisioned'}
@@ -617,6 +632,14 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
           {showPreview && (
             <div className="ps-reprov-preview">
               <pre className="ap-config-block" style={{ margin: 0, maxHeight: 260, overflow: 'auto' }}>{previewConfig}</pre>
+            </div>
+          )}
+          {showQr && (
+            <div className="ps-reprov-qr">
+              {qrUrl
+                ? <img src={qrUrl} width={200} height={200} alt="Config QR code" className="ap-qr-img" />
+                : <div style={{ width: 200, height: 200, display: 'grid', placeItems: 'center', color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 11 }}>Generating…</div>}
+              <span className="ap-qr-hint">Scan with WireGuard mobile to import</span>
             </div>
           )}
         </div>

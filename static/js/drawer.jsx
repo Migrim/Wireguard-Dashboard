@@ -159,8 +159,8 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated 
                 <div className="stat-label">PING</div>
                 <div className="stat-val">
                   {diag.loading
-                    ? <span className="pc-spinner" style={{ width: 16, height: 16, marginTop: 6, display: 'block' }} />
-                    : pingLabel}
+                    ? <span className="pc-spinner" style={{ width: 16, height: 16, display: 'block', margin: '5px auto 0' }} />
+                    : <span className="ping-val-in">{pingLabel}</span>}
                 </div>
               </div>
               <div className="stat-cell">
