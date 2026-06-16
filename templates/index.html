@@ -1357,9 +1357,16 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
 .drawer-tab-dot {
   width: 6px; height: 6px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--warn);
   flex-shrink: 0;
-  box-shadow: 0 0 0 2px var(--accent-soft);
+  box-shadow: 0 0 0 2px var(--warn-soft);
+}
+.peer-name { display: flex; align-items: center; gap: 5px; }
+.peer-draft-dot {
+  width: 6px; height: 6px; flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--warn);
+  box-shadow: 0 0 0 2px var(--warn-soft);
 }
 
 /* In-sync / re-provision banner */

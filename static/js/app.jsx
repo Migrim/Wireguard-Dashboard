@@ -722,6 +722,8 @@ function OfflinePlaceholder({ width = 110, height = 30 }) {
 function PeerRow({ peer, spark, onClick }) {
   const statusColor = peer.status === 'connected' ? 'var(--success)' : 'var(--muted)';
   const isOnline = peer.status === 'connected';
+  let hasDraft = false;
+  try { hasDraft = !!localStorage.getItem('WG_PEER_DRAFT_' + peer.name); } catch (_) {}
 
   return (
     <div className={`peers-row data-row ${!isOnline ? 'row-offline' : ''}`} onClick={onClick}>
@@ -735,7 +737,10 @@ function PeerRow({ peer, spark, onClick }) {
           {peer.name.split('-').map(s => s[0]).join('').slice(0, 2).toUpperCase()}
         </div>
         <div>
-          <div className="peer-name">{peer.name}</div>
+          <div className="peer-name">
+            {peer.name}
+            {hasDraft && <span className="peer-draft-dot" title="Unsaved config changes" />}
+          </div>
           <div className="peer-device">{peer.device}</div>
         </div>
       </div>

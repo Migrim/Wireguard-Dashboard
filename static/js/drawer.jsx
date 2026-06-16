@@ -10,7 +10,9 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated 
   const [downloading, setDownloading] = _useState(false);
   const [revoking, setRevoking] = _useState(false);
   const [tab, setTab] = _useState('overview');
-  const [settingsDirty, setSettingsDirty] = _useState(false);
+  const [settingsDirty, setSettingsDirty] = _useState(() => {
+    try { return !!localStorage.getItem('WG_PEER_DRAFT_' + peer?.name); } catch { return false; }
+  });
   const [diag, setDiag] = _useState({ loading: true, pingMs: null, pingStatus: '', location: null, endpointIp: '', pingIp: '' });
 
   _useEffect(() => {
