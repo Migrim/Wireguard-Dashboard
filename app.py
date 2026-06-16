@@ -967,6 +967,8 @@ def list_clients() -> List[Dict[str, Any]]:
             "public_key": meta.get("public_key", ""),
             "ip": meta.get("address", ""),
             "note": meta.get("note", ""),
+            "owner": meta.get("owner", ""),
+            "long_note": meta.get("long_note", ""),
             "dns": meta.get("dns", ""),
             "client_allowed_ips": meta.get("client_allowed_ips", ""),
             "keepalive": meta.get("keepalive", "25"),
@@ -1225,6 +1227,12 @@ def api_users_settings(name: str):
 
     if "note" in data:
         meta["note"] = str(data["note"])[:200].strip()
+
+    if "owner" in data:
+        meta["owner"] = str(data["owner"])[:200].strip()
+
+    if "long_note" in data:
+        meta["long_note"] = str(data["long_note"])[:2000].strip()
 
     if "dns" in data:
         dns_val = str(data["dns"]).strip()

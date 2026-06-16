@@ -9,9 +9,9 @@ const { useState: pS, useEffect: pE, useMemo: pM, useRef: pR } = React;
 const PS_ICONS = {
   tag:    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M20.6 14.6l-7 7a2 2 0 01-2.8 0L3 13.8V3h10.8l7.8 7.8a2 2 0 010 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>,
   clock:  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>,
-  gauge:  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 20h9M4.2 20H3m1.6-3.8L3 14.6M20.4 9.6l1.4-1.4M8.4 4.6 7 3.2M12 4V2m6.4 5.6L20 6.2"/><path d="M12 20a8 8 0 000-16c-2.4 0-4.5 1-6 2.6"/><path d="M12 12l4-4"/><circle cx="12" cy="12" r="1.5"/></svg>,
+  gauge:  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M17 3l4 4-4 4M21 7H8"/><path d="M7 21l-4-4 4-4M3 17h13"/></svg>,
   dns:    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 12c0 1.7 4 3 9 3s9-1.3 9-3"/></svg>,
-  tune:   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 20v-6M12 10V4M6 20v-2M6 14v-4M6 6V4M18 20v-4M18 12V4"/><rect x="3" y="10" width="6" height="4" rx="1"/><rect x="9" y="14" width="6" height="6" rx="1"/><rect x="15" y="6" width="6" height="6" rx="1"/></svg>,
+  tune:   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg>,
   key:    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="7.5" cy="15.5" r="5.5"/><path d="M21 2l-9.6 9.6M15.5 7.5l3 3"/></svg>,
   script: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>,
   route:  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/><path d="M8 17.5 16 6.5M6 16.5V12a4 4 0 0 1 4-4h4"/></svg>,
@@ -43,6 +43,8 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
     usePsk: false,
     rekeyed: false,
     note: peer.note || '',
+    owner: peer.owner || '',
+    longNote: peer.longNote || '',
   }), [peer.name]);
 
   // Config-group state (lives in the .conf — needs re-import)
@@ -71,14 +73,14 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
 
   // Server-side / instant state
   const [note, setNote] = pS(seeds.note);
+  const [owner, setOwner] = pS(seeds.owner);
+  const [longNote, setLongNote] = pS(seeds.longNote);
   const [expiry, setExpiry] = pS('never');
   const [disableIdle, setDisableIdle] = pS(false);
   const [idleDays, setIdleDays] = pS('30');
   const [dataCap, setDataCap] = pS('');
   const [rateDown, setRateDown] = pS('');
   const [rateUp, setRateUp] = pS('');
-  const [owner, setOwner] = pS('');
-  const [notes, setNotes] = pS('');
 
   // Saved baseline for dirty detection
   function snapshotConfig(src) {
@@ -110,10 +112,9 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
     setTable('auto'); setFwmark(''); setPreUp(''); setPostUp(''); setPreDown(''); setPostDown('');
     setUsePsk(false); setRekeyed(false);
     setKeys({ privateKey: window.randKey(), publicKey: peer.pubKey || window.randKey(), presharedKey: window.randKey() });
-    setNote(seeds.note);
+    setNote(seeds.note); setOwner(seeds.owner); setLongNote(seeds.longNote);
     setExpiry('never'); setDisableIdle(false); setIdleDays('30');
     setDataCap(''); setRateDown(''); setRateUp('');
-    setOwner(''); setNotes('');
     setSaved(snapshotConfig(seeds));
   }, [peer.name]);
 
@@ -457,14 +458,16 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
         <div className="ap2-field">
           <label className="ap-label">Owner <span className="ap-label-opt">email or name</span></label>
           <input type="text" className="ap-input" value={owner} onChange={(e) => setOwner(e.target.value)}
-            placeholder="alex@example.com" />
+            onBlur={() => instantSave({ owner })} placeholder="alex@example.com" />
         </div>
         <div className="ap2-field">
           <label className="ap-label">Notes <span className="ap-label-opt">optional</span></label>
           <textarea className="ap2-textarea" style={{ fontFamily: 'var(--sans)', fontSize: '12.5px' }}
-            value={notes} onChange={(e) => setNotes(e.target.value)}
+            value={longNote} onChange={(e) => setLongNote(e.target.value)}
+            onBlur={() => instantSave({ long_note: longNote })}
             placeholder="Anything future-you should know about this peer…" />
         </div>
+        <div className="ap2-help">All fields saved when you leave them.</div>
       </>
     );
     if (id === 'life') return (
@@ -525,7 +528,7 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
     {
       id: 'meta', icon: ICN.tag, title: 'Tags & metadata',
       summary: (note ? `"${note.slice(0, 22)}${note.length > 22 ? '…' : ''}"` : 'no note') + (owner ? ` · ${owner}` : ''),
-      modified: !!(note !== seeds.note || owner || notes),
+      modified: note !== seeds.note || owner !== seeds.owner || longNote !== seeds.longNote,
     },
     {
       id: 'life', icon: ICN.clock, title: 'Lifecycle & expiry',

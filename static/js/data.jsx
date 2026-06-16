@@ -53,6 +53,8 @@ function mapApiPeers(issued, live) {
       pingMs: null,
       handshakeInterval: null,
       note: iss.note || '',
+      owner: iss.owner || '',
+      longNote: iss.long_note || '',
       dns: iss.dns || '',
       clientAllowedIps: iss.client_allowed_ips || '',
       keepalive: iss.keepalive != null ? String(iss.keepalive) : '25',
