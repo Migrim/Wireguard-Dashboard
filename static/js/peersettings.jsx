@@ -637,19 +637,21 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
               {saving ? 'Saving…' : 'Mark re-provisioned'}
             </button>
           </div>
-          {showPreview && (
-            <div className="ps-reprov-preview">
+          <div className={`ps-reprov-panel${showPreview ? ' is-open' : ''}`}>
+            <div className="ps-reprov-panel-inner">
               <pre className="ap-config-block" style={{ margin: 0, maxHeight: 260, overflow: 'auto' }}>{previewConfig}</pre>
             </div>
-          )}
-          {showQr && (
-            <div className="ps-reprov-qr">
-              {qrUrl
-                ? <img src={qrUrl} width={200} height={200} alt="Config QR code" className="ap-qr-img" />
-                : <div style={{ width: 200, height: 200, display: 'grid', placeItems: 'center', color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 11 }}>Generating…</div>}
-              <span className="ap-qr-hint">Scan with WireGuard mobile to import</span>
+          </div>
+          <div className={`ps-reprov-panel${showQr ? ' is-open' : ''}`}>
+            <div className="ps-reprov-panel-inner">
+              <div className="ps-reprov-qr-inner">
+                {qrUrl
+                  ? <img src={qrUrl} width={200} height={200} alt="Config QR code" className="ap-qr-img" />
+                  : showQr ? <div style={{ width: 200, height: 200, display: 'grid', placeItems: 'center', color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 11 }}>Generating…</div> : null}
+                <span className="ap-qr-hint">Scan with WireGuard mobile to import</span>
+              </div>
             </div>
-          )}
+          </div>
         </div>
       ) : (
         <div className="ps-insync">

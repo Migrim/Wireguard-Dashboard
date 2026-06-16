@@ -1354,12 +1354,14 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
 }
 .drawer-tab:hover { color: var(--ink-2); }
 .drawer-tab.on { color: var(--ink); border-bottom-color: var(--accent); }
+@keyframes dotPop { 0% { opacity: 0; transform: scale(0.3); } 65% { transform: scale(1.25); } 100% { opacity: 1; transform: scale(1); } }
 .drawer-tab-dot {
   width: 6px; height: 6px;
   border-radius: 50%;
   background: var(--warn);
   flex-shrink: 0;
   box-shadow: 0 0 0 2px var(--warn-soft);
+  animation: dotPop 0.22s ease-out;
 }
 .peer-name { display: flex; align-items: center; gap: 5px; }
 .peer-draft-dot {
@@ -1367,6 +1369,7 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
   border-radius: 50%;
   background: var(--warn);
   box-shadow: 0 0 0 2px var(--warn-soft);
+  animation: dotPop 0.22s ease-out;
 }
 
 /* In-sync / re-provision banner */
@@ -1382,6 +1385,7 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
   border: 1px solid var(--border);
   background: var(--bg-2);
 }
+@keyframes reprovSlideIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 .ps-reprov {
   border: 1px solid var(--warn);
   border-radius: var(--radius);
@@ -1390,6 +1394,7 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
   flex-direction: column;
   gap: 10px;
   padding: 14px 16px;
+  animation: reprovSlideIn 0.22s ease-out;
 }
 .ps-reprov-main { display: flex; gap: 12px; align-items: flex-start; }
 .ps-reprov-icon {
@@ -1421,15 +1426,20 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
   align-items: center;
 }
 .ps-reprov-icon-btn { padding-left: 9px; padding-right: 9px; }
-.ps-reprov-preview {
+.ps-reprov-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.28s ease;
+}
+.ps-reprov-panel.is-open { grid-template-rows: 1fr; }
+.ps-reprov-panel-inner { overflow: hidden; }
+.ps-reprov-panel-inner > * {
   border-top: 1px solid color-mix(in oklab, var(--warn) 30%, var(--border));
-  padding-top: 10px;
+  padding-top: 12px;
   margin-top: 2px;
 }
-.ps-reprov-qr {
+.ps-reprov-qr-inner {
   display: flex; flex-direction: column; align-items: center; gap: 8px;
-  border-top: 1px solid color-mix(in oklab, var(--warn) 30%, var(--border));
-  padding-top: 14px; margin-top: 2px;
 }
 
 /* Settings groups */
