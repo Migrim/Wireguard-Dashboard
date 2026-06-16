@@ -621,7 +621,7 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
             </button>
             <span style={{ flex: 1 }} />
             <button className="btn btn-danger" onClick={revert}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 7v6h6"/><path d="M3 13A9 9 0 1 0 5.7 5.7L3 8"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-5.06L1 10"/></svg>
               Revert
             </button>
             <button className="btn btn-primary" onClick={markReprovisioned} disabled={saving}>
