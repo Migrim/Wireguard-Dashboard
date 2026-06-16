@@ -77,7 +77,9 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
           <stop offset="100%" stopColor={accent2} stopOpacity="0.01" />
         </linearGradient>
         <clipPath id="chartClip">
-          <rect x={pad.l} y={pad.t} width={w} height={h} />
+          <rect x={pad.l} y={pad.t} height={h}>
+            <animate attributeName="width" from="0" to={w} dur="0.8s" fill="freeze" />
+          </rect>
         </clipPath>
       </defs>
 
@@ -117,6 +119,7 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
 // Sparkline — tiny live chart for peer rows
 // ============================================================
 function Sparkline({ data, width = 120, height = 32, color = 'var(--accent)', active = true }) {
+  const uid = useRef(`sp-${Math.random().toString(36).slice(2)}`).current;
   const n = data.length;
   if (n < 2) return <svg style={{ width, height, display: 'block' }} />;
   const max = Math.max(...data, 0.01);
@@ -138,18 +141,25 @@ function Sparkline({ data, width = 120, height = 32, color = 'var(--accent)', ac
           <stop offset="0%" stopColor={color} stopOpacity="0.3" />
           <stop offset="100%" stopColor={color} stopOpacity="0" />
         </linearGradient>
+        <clipPath id={uid}>
+          <rect x="0" y="0" height={height}>
+            <animate attributeName="width" from="0" to={width} dur="0.6s" fill="freeze" />
+          </rect>
+        </clipPath>
       </defs>
-      <path d={area} fill={`url(#sg-${color.replace(/[^a-z0-9]/gi, '')})`} opacity={active ? 1 : 0.3} />
-      <path d={d} fill="none" stroke={color} strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" opacity={active ? 1 : 0.4} />
-      {active && (
-        <>
-          <circle cx={last[0]} cy={last[1]} r="3" fill={color} opacity="0.3">
-            <animate attributeName="r" values="2;5;2" dur="1.4s" repeatCount="indefinite" />
-            <animate attributeName="opacity" values="0.5;0;0.5" dur="1.4s" repeatCount="indefinite" />
-          </circle>
-          <circle cx={last[0]} cy={last[1]} r="1.8" fill={color} />
-        </>
-      )}
+      <g clipPath={`url(#${uid})`}>
+        <path d={area} fill={`url(#sg-${color.replace(/[^a-z0-9]/gi, '')})`} opacity={active ? 1 : 0.3} />
+        <path d={d} fill="none" stroke={color} strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" opacity={active ? 1 : 0.4} />
+        {active && (
+          <>
+            <circle cx={last[0]} cy={last[1]} r="3" fill={color} opacity="0.3">
+              <animate attributeName="r" values="2;5;2" dur="1.4s" repeatCount="indefinite" />
+              <animate attributeName="opacity" values="0.5;0;0.5" dur="1.4s" repeatCount="indefinite" />
+            </circle>
+            <circle cx={last[0]} cy={last[1]} r="1.8" fill={color} />
+          </>
+        )}
+      </g>
     </svg>
   );
 }
@@ -158,17 +168,28 @@ function Sparkline({ data, width = 120, height = 32, color = 'var(--accent)', ac
 // MiniBar — per-KPI live mini chart (bars)
 // ============================================================
 function MiniBars({ data, width = 140, height = 36, color = 'var(--accent)' }) {
+  const uid = useRef(`mb-${Math.random().toString(36).slice(2)}`).current;
   const n = data.length;
   const max = Math.max(...data, 0.01);
   const barW = (width - (n - 1) * 2) / n;
   return (
     <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height, display: 'block' }}>
-      {data.map((v, i) => {
-        const h = (v / max) * (height - 4);
-        const x = i * (barW + 2);
-        const y = height - h - 2;
-        return <rect key={i} x={x} y={y} width={barW} height={h} fill={color} opacity={0.3 + 0.7 * (i / n)} rx="1" />;
-      })}
+      <defs>
+        <clipPath id={uid}>
+          <rect x="0" width={width}>
+            <animate attributeName="y" from={height} to="0" dur="0.5s" fill="freeze" />
+            <animate attributeName="height" from="0" to={height} dur="0.5s" fill="freeze" />
+          </rect>
+        </clipPath>
+      </defs>
+      <g clipPath={`url(#${uid})`}>
+        {data.map((v, i) => {
+          const h = (v / max) * (height - 4);
+          const x = i * (barW + 2);
+          const y = height - h - 2;
+          return <rect key={i} x={x} y={y} width={barW} height={h} fill={color} opacity={0.3 + 0.7 * (i / n)} rx="1" />;
+        })}
+      </g>
     </svg>
   );
 }
@@ -182,7 +203,19 @@ function RadialGauge({ value, max, width = 120, color = 'var(--accent)', label, 
   const c = 2 * Math.PI * r;
   const pct = Math.min(1, value / max);
   const arc = c * 0.75;
-  const dash = arc * pct;
+
+  const [displayPct, setDisplayPct] = useState(0);
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      requestAnimationFrame(() => setDisplayPct(pct));
+    } else {
+      setDisplayPct(pct);
+    }
+  }, [pct]);
+
+  const dash = arc * displayPct;
   return (
     <svg viewBox={`0 0 ${width} ${width}`} style={{ width: '100%', height: width, display: 'block' }}>
       <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--border)" strokeWidth="6"
