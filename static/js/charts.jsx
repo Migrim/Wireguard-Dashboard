@@ -5,7 +5,7 @@ const { useState, useEffect, useRef, useMemo } = React;
 // ============================================================
 // ThroughputChart — hero live chart, area + line, scrolls left
 // ============================================================
-function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 'var(--accent)', accent2 = 'var(--accent-2)', range = '2m' }) {
+function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 'var(--accent)', accent2 = 'var(--accent-2)', range = '2m', spline = false }) {
   const n = Math.max(dataIn.length, dataOut.length);
   const pad = { l: 70, r: 16, t: 18, b: 28 };
   const w = width - pad.l - pad.r;
@@ -52,7 +52,28 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
     }
     return d;
   };
-  const areaFor = (data) => pathFor(data) + `L${xAt(n - 1).toFixed(1)},${(pad.t + h).toFixed(1)} L${xAt(0).toFixed(1)},${(pad.t + h).toFixed(1)} Z`;
+
+  const smoothPathFor = (data) => {
+    if (n < 2) return pathFor(data);
+    const px = (i) => xAt(i);
+    const py = (i) => yAt(data[i] || 0);
+    let d = `M${px(0).toFixed(1)},${py(0).toFixed(1)}`;
+    for (let i = 1; i < n; i++) {
+      const p0x = px(Math.max(0, i - 2)), p0y = py(Math.max(0, i - 2));
+      const p1x = px(i - 1),             p1y = py(i - 1);
+      const p2x = px(i),                 p2y = py(i);
+      const p3x = px(Math.min(n - 1, i + 1)), p3y = py(Math.min(n - 1, i + 1));
+      const cp1x = p1x + (p2x - p0x) / 6;
+      const cp1y = p1y + (p2y - p0y) / 6;
+      const cp2x = p2x - (p3x - p1x) / 6;
+      const cp2y = p2y - (p3y - p1y) / 6;
+      d += ` C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2x.toFixed(1)},${p2y.toFixed(1)}`;
+    }
+    return d;
+  };
+
+  const line = spline ? smoothPathFor : pathFor;
+  const areaFor = (data) => line(data) + `L${xAt(n - 1).toFixed(1)},${(pad.t + h).toFixed(1)} L${xAt(0).toFixed(1)},${(pad.t + h).toFixed(1)} Z`;
 
   const lastIn = dataIn[n - 1] || 0;
   const lastOut = dataOut[n - 1] || 0;
@@ -78,7 +99,7 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
         </linearGradient>
         <clipPath id="chartClip">
           <rect x={pad.l} y={pad.t} height={h}>
-            <animate attributeName="width" from="0" to={w} dur="0.8s" fill="freeze" />
+            <animate attributeName="width" from="0" to={w} dur="1.1s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />
           </rect>
         </clipPath>
       </defs>
@@ -97,16 +118,15 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
       <g clipPath="url(#chartClip)">
         <path d={areaFor(dataOut)} fill="url(#gOut)" />
         <path d={areaFor(dataIn)} fill="url(#gIn)" />
-        <path d={pathFor(dataOut)} fill="none" stroke={accent2} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" opacity="0.8" />
-        <path d={pathFor(dataIn)} fill="none" stroke={accent} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        <path d={line(dataOut)} fill="none" stroke={accent2} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" opacity="0.8" />
+        <path d={line(dataIn)} fill="none" stroke={accent} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        <circle cx={xAt(n - 1)} cy={yAt(lastIn)} r="3" fill={accent} opacity="0">
+          <animate attributeName="opacity" from="0" to="1" begin="0.9s" dur="0.3s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />
+        </circle>
+        <circle cx={xAt(n - 1)} cy={yAt(lastOut)} r="3" fill={accent2} opacity="0">
+          <animate attributeName="opacity" from="0" to="1" begin="0.9s" dur="0.3s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />
+        </circle>
       </g>
-
-      <circle cx={xAt(n - 1)} cy={yAt(lastIn)} r="4" fill={accent}>
-        <animate attributeName="r" values="4;7;4" dur="1.6s" repeatCount="indefinite" />
-        <animate attributeName="opacity" values="1;0.4;1" dur="1.6s" repeatCount="indefinite" />
-      </circle>
-      <circle cx={xAt(n - 1)} cy={yAt(lastIn)} r="2.5" fill={accent} />
-      <circle cx={xAt(n - 1)} cy={yAt(lastOut)} r="2" fill={accent2} />
 
       <text x={pad.l} y={height - 8} fontSize="10" fill="var(--muted)" fontFamily="var(--mono)">{labels[0]}</text>
       <text x={pad.l + w / 2} y={height - 8} fontSize="10" fill="var(--muted)" fontFamily="var(--mono)" textAnchor="middle">{labels[1]}</text>
@@ -143,23 +163,26 @@ function Sparkline({ data, width = 120, height = 32, color = 'var(--accent)', ac
         </linearGradient>
         <clipPath id={uid}>
           <rect x="0" y="0" height={height}>
-            <animate attributeName="width" from="0" to={width} dur="0.6s" fill="freeze" />
+            <animate attributeName="width" from="0" to={width} dur="0.8s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />
           </rect>
         </clipPath>
       </defs>
       <g clipPath={`url(#${uid})`}>
         <path d={area} fill={`url(#sg-${color.replace(/[^a-z0-9]/gi, '')})`} opacity={active ? 1 : 0.3} />
         <path d={d} fill="none" stroke={color} strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" opacity={active ? 1 : 0.4} />
-        {active && (
-          <>
-            <circle cx={last[0]} cy={last[1]} r="3" fill={color} opacity="0.3">
-              <animate attributeName="r" values="2;5;2" dur="1.4s" repeatCount="indefinite" />
-              <animate attributeName="opacity" values="0.5;0;0.5" dur="1.4s" repeatCount="indefinite" />
-            </circle>
-            <circle cx={last[0]} cy={last[1]} r="1.8" fill={color} />
-          </>
-        )}
       </g>
+      {active && (
+        <>
+          <circle cx={last[0]} cy={last[1]} r="3" fill={color} opacity="0">
+            <animate attributeName="opacity" from="0" to="0.5" begin="0.65s" dur="0.2s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />
+            <animate attributeName="r" values="2;5;2" dur="1.4s" repeatCount="indefinite" begin="0.85s" />
+            <animate attributeName="opacity" values="0.5;0;0.5" dur="1.4s" repeatCount="indefinite" begin="0.85s" />
+          </circle>
+          <circle cx={last[0]} cy={last[1]} r="1.8" fill={color} opacity="0">
+            <animate attributeName="opacity" from="0" to="1" begin="0.65s" dur="0.2s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />
+          </circle>
+        </>
+      )}
     </svg>
   );
 }
@@ -177,8 +200,8 @@ function MiniBars({ data, width = 140, height = 36, color = 'var(--accent)' }) {
       <defs>
         <clipPath id={uid}>
           <rect x="0" width={width}>
-            <animate attributeName="y" from={height} to="0" dur="0.5s" fill="freeze" />
-            <animate attributeName="height" from="0" to={height} dur="0.5s" fill="freeze" />
+            <animate attributeName="y" from={height} to="0" dur="0.7s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />
+            <animate attributeName="height" from="0" to={height} dur="0.7s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />
           </rect>
         </clipPath>
       </defs>
@@ -209,7 +232,7 @@ function RadialGauge({ value, max, width = 120, color = 'var(--accent)', label, 
   useEffect(() => {
     if (!mounted.current) {
       mounted.current = true;
-      requestAnimationFrame(() => setDisplayPct(pct));
+      setTimeout(() => setDisplayPct(pct), 50);
     } else {
       setDisplayPct(pct);
     }
@@ -224,7 +247,7 @@ function RadialGauge({ value, max, width = 120, color = 'var(--accent)', label, 
       <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth="6"
         strokeDasharray={`${dash} ${c}`} strokeLinecap="round"
         transform={`rotate(135 ${cx} ${cy})`}
-        style={{ transition: 'stroke-dasharray 0.6s ease' }} />
+        style={{ transition: 'stroke-dasharray 1s cubic-bezier(0, 0, 0.2, 1)' }} />
       <text x={cx} y={cy - 2} textAnchor="middle" fontSize="22" fontFamily="var(--serif)" fill="var(--ink)" fontWeight="400">{label}</text>
       <text x={cx} y={cy + 16} textAnchor="middle" fontSize="9.5" fill="var(--muted)" fontFamily="var(--mono)" letterSpacing="0.08em">{sublabel}</text>
     </svg>

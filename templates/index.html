@@ -2689,11 +2689,13 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
   const THEME_KEY = 'WG_THEME';
   const DEV_UPDATES_KEY = 'WG_DEV_UPDATES';
   const ACCENT_KEY = 'WG_ACCENT';
+  const SPLINE_CHART_KEY = 'WG_SPLINE_CHART';
   const TWEAKS_DEFAULTS = {
     theme: localStorage.getItem(THEME_KEY) || 'light',
     density: 'compact',
     accent: localStorage.getItem(ACCENT_KEY) || 'terracotta',
     devUpdates: localStorage.getItem(DEV_UPDATES_KEY) === 'true',
+    splineChart: localStorage.getItem(SPLINE_CHART_KEY) === 'true',
     _tweaksOpen: false,
   };
 
@@ -2727,6 +2729,10 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
     React.useEffect(() => {
       if (tweaks.accent) localStorage.setItem(ACCENT_KEY, tweaks.accent);
     }, [tweaks.accent]);
+
+    React.useEffect(() => {
+      localStorage.setItem(SPLINE_CHART_KEY, tweaks.splineChart ? 'true' : 'false');
+    }, [tweaks.splineChart]);
 
     React.useEffect(() => {
       return () => window.clearTimeout(themeTimer.current);

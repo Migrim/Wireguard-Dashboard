@@ -457,7 +457,7 @@ function App({ tweaks, setTweaks, onLogout }) {
               </div>
             </div>
           </div>
-          <ThroughputChart dataIn={chartTraffic.rx} dataOut={chartTraffic.tx} width={900} height={240} range={trafficRange} />
+          <ThroughputChart dataIn={chartTraffic.rx} dataOut={chartTraffic.tx} width={900} height={240} range={trafficRange} spline={tweaks.splineChart} />
         </div>
 
         <div className="logs-card-shell">

@@ -1299,6 +1299,27 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
           </section>
 
           <section className="drawer-section">
+            <div className="section-head"><span className="section-label">CHARTS</span></div>
+            <div className="settings-list">
+              <div className="setting-row">
+                <div>
+                  <div className="setting-title">Smooth lines</div>
+                  <div className="setting-desc">Use spline interpolation on the live throughput chart</div>
+                </div>
+                <div className="setting-control">
+                  <button
+                    className={`toggle ${tweaks.splineChart ? 'on' : ''}`}
+                    onClick={() => setTweaks({ ...tweaks, splineChart: !tweaks.splineChart })}
+                    aria-pressed={tweaks.splineChart}
+                  >
+                    <span className="toggle-knob" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="drawer-section">
             <div className="section-head"><span className="section-label">SERVER</span></div>
             <div className="set-stats">
               {stats.map(s => (
