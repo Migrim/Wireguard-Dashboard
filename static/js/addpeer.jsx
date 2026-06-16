@@ -802,10 +802,11 @@ function CreatedView({ name, address, endpoint, allowedIps, profile, copy, copie
   const [qrUrl, setQrUrl] = aS('');
 
   aE(() => {
-    if (!profile || !window.QRCode) return;
-    window.QRCode.toDataURL(profile, { errorCorrectionLevel: 'L', width: 220, margin: 2 })
-      .then((url) => setQrUrl(url))
-      .catch(() => {});
+    if (!profile || !window.QRious) return;
+    try {
+      const qr = new window.QRious({ value: profile, size: 220, level: 'L' });
+      setQrUrl(qr.toDataURL());
+    } catch (_) {}
   }, [profile]);
 
   const handleDownload = () => {
