@@ -47,7 +47,7 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated 
   if (!peer) return null;
 
   const thr = throughputBuffers[peer.id] || { rx: [], tx: [] };
-  const pingLabel = diag.loading ? 'checking' : (diag.pingMs != null ? `${diag.pingMs} ms` : (diag.pingStatus || 'timeout'));
+  const pingLabel = diag.pingMs != null ? `${diag.pingMs} ms` : (diag.pingStatus || 'timeout');
   const locationLabel = (diag.location && diag.location.label) || peer.country || '—';
 
   const copy = (val, key) => {
@@ -164,7 +164,11 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated 
               </div>
               <div className="stat-cell">
                 <div className="stat-label">PING</div>
-                <div className="stat-val">{pingLabel}</div>
+                <div className="stat-val">
+                  {diag.loading
+                    ? <span className="pc-spinner" style={{ width: 16, height: 16, marginTop: 6, display: 'block' }} />
+                    : pingLabel}
+                </div>
               </div>
               <div className="stat-cell">
                 <div className="stat-label">HANDSHAKE</div>
@@ -204,29 +208,46 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated 
 
           <section className="drawer-section">
             <div className="section-head">
+              <span className="section-label">NOTES</span>
+              <button className="mini-btn" onClick={() => setTab('settings')}>edit →</button>
+            </div>
+            <div className="notes-block">
+              {(peer.note || peer.longNote) ? (
+                <>
+                  {peer.note && <div className="notes-short">{peer.note}</div>}
+                  {peer.longNote && <div className="notes-long">{peer.longNote}</div>}
+                </>
+              ) : (
+                <span className="notes-empty">No notes</span>
+              )}
+            </div>
+          </section>
+
+          <section className="drawer-section">
+            <div className="section-head">
               <span className="section-label">CONFIG SNAPSHOT</span>
               <button className="mini-btn" onClick={() => setTab('settings')}>edit →</button>
             </div>
-            <dl className="kv">
-              <dt>Tunnel</dt>
-              <dd className="mono">{peer.clientAllowedIps || '0.0.0.0/0, ::/0'}</dd>
-              <dt>DNS</dt>
-              <dd className="mono">{peer.dns || 'server default'}</dd>
-              <dt>Keepalive</dt>
-              <dd className="mono">{(!peer.keepalive || peer.keepalive === '0') ? 'off' : `${peer.keepalive}s`}</dd>
-              {peer.note && (
-                <>
-                  <dt>Note</dt>
-                  <dd>{peer.note}</dd>
-                </>
-              )}
+            <div className="cs-grid">
+              <div className="cs-chip">
+                <span className="cs-chip-label">Tunnel</span>
+                <span className="cs-chip-val mono">{peer.clientAllowedIps || '0.0.0.0/0, ::/0'}</span>
+              </div>
+              <div className="cs-chip">
+                <span className="cs-chip-label">DNS</span>
+                <span className="cs-chip-val mono">{peer.dns || 'server default'}</span>
+              </div>
+              <div className="cs-chip">
+                <span className="cs-chip-label">Keepalive</span>
+                <span className="cs-chip-val mono">{(!peer.keepalive || peer.keepalive === '0') ? 'off' : `${peer.keepalive}s`}</span>
+              </div>
               {peer.owner && (
-                <>
-                  <dt>Owner</dt>
-                  <dd>{peer.owner}</dd>
-                </>
+                <div className="cs-chip">
+                  <span className="cs-chip-label">Owner</span>
+                  <span className="cs-chip-val">{peer.owner}</span>
+                </div>
               )}
-            </dl>
+            </div>
           </section>
 
           <section className="drawer-section">
