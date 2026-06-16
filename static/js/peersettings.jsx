@@ -6,12 +6,16 @@
 
 const { useState: pS, useEffect: pE, useMemo: pM, useRef: pR } = React;
 
-const PS_ROUTE_ICON = (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-    <circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/>
-    <path d="M8 17.5 16 6.5M6 16.5V12a4 4 0 0 1 4-4h4"/>
-  </svg>
-);
+const PS_ICONS = {
+  tag:    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M20.6 14.6l-7 7a2 2 0 01-2.8 0L3 13.8V3h10.8l7.8 7.8a2 2 0 010 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>,
+  clock:  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>,
+  gauge:  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 20h9M4.2 20H3m1.6-3.8L3 14.6M20.4 9.6l1.4-1.4M8.4 4.6 7 3.2M12 4V2m6.4 5.6L20 6.2"/><path d="M12 20a8 8 0 000-16c-2.4 0-4.5 1-6 2.6"/><path d="M12 12l4-4"/><circle cx="12" cy="12" r="1.5"/></svg>,
+  dns:    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 12c0 1.7 4 3 9 3s9-1.3 9-3"/></svg>,
+  tune:   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M12 20v-6M12 10V4M6 20v-2M6 14v-4M6 6V4M18 20v-4M18 12V4"/><rect x="3" y="10" width="6" height="4" rx="1"/><rect x="9" y="14" width="6" height="6" rx="1"/><rect x="15" y="6" width="6" height="6" rx="1"/></svg>,
+  key:    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="7.5" cy="15.5" r="5.5"/><path d="M21 2l-9.6 9.6M15.5 7.5l3 3"/></svg>,
+  script: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>,
+  route:  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/><path d="M8 17.5 16 6.5M6 16.5V12a4 4 0 0 1 4-4h4"/></svg>,
+};
 
 function routingPresetFromAllowedIps(clientAllowedIps) {
   if (!clientAllowedIps || clientAllowedIps === '0.0.0.0/0, ::/0' || clientAllowedIps === '0.0.0.0/0,::/0') return 'all';
@@ -271,7 +275,7 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
     setRekeyed(true);
   };
 
-  const ICN = window.AP_ICONS;
+  const ICN = PS_ICONS;
 
   // ---- Section bodies ----
   function renderSection(id) {
@@ -537,7 +541,7 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
 
   const configSections = [
     {
-      id: 'route', icon: PS_ROUTE_ICON, title: 'Tunnel routing',
+      id: 'route', icon: ICN.route, title: 'Tunnel routing',
       summary: routingPreset === 'all' ? 'full tunnel · 0.0.0.0/0' : (allowedIps || 'custom'),
       modified: routingPreset !== saved.routingPreset || allowedIps !== saved.allowedIps,
     },

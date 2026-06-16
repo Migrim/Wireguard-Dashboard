@@ -925,4 +925,4 @@ function CreatedView({ name, address, endpoint, allowedIps, profile, copy, copie
   );
 }
 
-Object.assign(window, { AddPeerDrawer });
+Object.assign(window, { AddPeerDrawer, Collapsible, buildConfig, randKey });
