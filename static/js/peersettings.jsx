@@ -609,26 +609,21 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="ps-reprov-title">New config required</div>
-              <div className="ps-reprov-desc">
-                <span className="mono" style={{ color: 'var(--ink)' }}>{peer.name}</span> keeps running on its current config until the device re-imports the updated one.
-              </div>
+              <div className="ps-reprov-desc">Re-import on device before next connection.</div>
               <div className="ps-reprov-chips">
                 {changedLabels.map((c) => <span key={c} className="ps-reprov-chip">{c}</span>)}
               </div>
             </div>
           </div>
           <div className="ps-reprov-actions">
-            <button className="btn" onClick={() => setShowPreview((v) => !v)}>
+            <button className="btn ps-reprov-icon-btn" title={showPreview ? 'Hide preview' : 'Preview config'} onClick={() => setShowPreview((v) => !v)}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              {showPreview ? 'Hide preview' : 'Show new config'}
             </button>
-            <button className="btn" onClick={downloadConfig} disabled={provisioning}>
+            <button className="btn ps-reprov-icon-btn" title={provisioning ? 'Downloading…' : 'Download .conf'} onClick={downloadConfig} disabled={provisioning}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
-              {provisioning ? 'Downloading…' : 'Download .conf'}
             </button>
-            <button className="btn" onClick={() => setShowQr((v) => !v)}>
+            <button className="btn ps-reprov-icon-btn" title={showQr ? 'Hide QR' : 'Show QR'} onClick={() => setShowQr((v) => !v)}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3M21 14v3M14 17v4h3M17 21h4"/></svg>
-              {showQr ? 'Hide QR' : 'Show QR'}
             </button>
             <span style={{ flex: 1 }} />
             <button className="btn btn-danger" onClick={revert}>
