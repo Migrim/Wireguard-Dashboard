@@ -1050,7 +1050,7 @@ def home():
         "logs":logs_tail(60)
     }
     iface,_,_=read_bytes()
-    return render_template("index.html",data=data,users=issued,iface=iface)
+    return render_template("index.html",data=data,users=issued,iface=iface,app_version=_local_version())
 
 @app.route("/action/<what>")
 def action(what: str):

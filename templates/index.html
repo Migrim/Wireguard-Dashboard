@@ -2501,18 +2501,18 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
 <body data-base="{{ request.script_root or '' }}">
 <div id="root"><div class="login-screen"><div class="login-checking-spinner"></div></div></div>
 
-<script src="{{ url_for('static', filename='js/qrcode.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/qrcode.min.js') }}?v={{ app_version }}"></script>
 <script src="https://unpkg.com/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 
-<script type="text/babel" src="{{ url_for('static', filename='js/data.jsx') }}"></script>
-<script type="text/babel" src="{{ url_for('static', filename='js/charts.jsx') }}"></script>
-<script type="text/babel" src="{{ url_for('static', filename='js/drawer.jsx') }}"></script>
-<script type="text/babel" src="{{ url_for('static', filename='js/trafficmode.jsx') }}"></script>
-<script type="text/babel" src="{{ url_for('static', filename='js/addpeer.jsx') }}"></script>
-<script type="text/babel" src="{{ url_for('static', filename='js/app.jsx') }}"></script>
+<script type="text/babel" src="{{ url_for('static', filename='js/data.jsx') }}?v={{ app_version }}"></script>
+<script type="text/babel" src="{{ url_for('static', filename='js/charts.jsx') }}?v={{ app_version }}"></script>
+<script type="text/babel" src="{{ url_for('static', filename='js/drawer.jsx') }}?v={{ app_version }}"></script>
+<script type="text/babel" src="{{ url_for('static', filename='js/trafficmode.jsx') }}?v={{ app_version }}"></script>
+<script type="text/babel" src="{{ url_for('static', filename='js/addpeer.jsx') }}?v={{ app_version }}"></script>
+<script type="text/babel" src="{{ url_for('static', filename='js/app.jsx') }}?v={{ app_version }}"></script>
 
 <script type="text/babel">
   const THEME_KEY = 'WG_THEME';
