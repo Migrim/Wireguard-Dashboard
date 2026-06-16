@@ -90,12 +90,6 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated 
     }
   };
 
-  const statusColor = {
-    connected: 'var(--success)',
-    offline: 'var(--muted)',
-    warning: 'var(--warn)',
-  }[peer.status] || 'var(--muted)';
-
   return (
     <>
       <div className="drawer-scrim" onClick={onClose} />
@@ -109,7 +103,6 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated 
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <h2 className="drawer-title">{peer.name}</h2>
                 <span className={`status-pill status-${peer.status}`}>
-                  <span className="status-dot" style={{ background: statusColor }} />
                   {peer.status}
                 </span>
               </div>
