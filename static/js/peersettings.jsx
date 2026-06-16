@@ -600,7 +600,7 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
     <div className="ps-body">
       {/* Re-provision banner */}
       {dirty ? (
-        <div className="ps-reprov">
+        <div className={`ps-reprov${(()=>{ try { return !!localStorage.getItem('WG_PEER_DRAFT_'+peer.name); } catch(_){return false;} })() ? ' no-anim' : ''}`}>
           <div className="ps-reprov-main">
             <div className="ps-reprov-icon">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
