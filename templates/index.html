@@ -2690,12 +2690,14 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
   const DEV_UPDATES_KEY = 'WG_DEV_UPDATES';
   const ACCENT_KEY = 'WG_ACCENT';
   const SPLINE_CHART_KEY = 'WG_SPLINE_CHART';
+  const REFRESH_INTERVAL_KEY = 'WG_REFRESH_INTERVAL';
   const TWEAKS_DEFAULTS = {
     theme: localStorage.getItem(THEME_KEY) || 'light',
     density: 'compact',
     accent: localStorage.getItem(ACCENT_KEY) || 'terracotta',
     devUpdates: localStorage.getItem(DEV_UPDATES_KEY) === 'true',
     splineChart: localStorage.getItem(SPLINE_CHART_KEY) === 'true',
+    refreshInterval: parseInt(localStorage.getItem(REFRESH_INTERVAL_KEY) || '1000', 10),
     _tweaksOpen: false,
   };
 
@@ -2733,6 +2735,10 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
     React.useEffect(() => {
       localStorage.setItem(SPLINE_CHART_KEY, tweaks.splineChart ? 'true' : 'false');
     }, [tweaks.splineChart]);
+
+    React.useEffect(() => {
+      localStorage.setItem(REFRESH_INTERVAL_KEY, String(tweaks.refreshInterval || 1000));
+    }, [tweaks.refreshInterval]);
 
     React.useEffect(() => {
       return () => window.clearTimeout(themeTimer.current);

@@ -231,9 +231,10 @@ function App({ tweaks, setTweaks, onLogout }) {
     return () => { cancelled = true; };
   }, [trafficRange]);
 
-  // Poll /api/traffic every 1s; the server keeps the rolling 24h history.
+  // Poll /api/traffic on configurable interval; the server keeps the rolling 24h history.
   uE(() => {
     let cancelled = false;
+    const interval = tweaks.refreshInterval || 1000;
     const fetchTraffic = async () => {
       try {
         const t = await window.WG.apiCall('/api/traffic');
@@ -254,9 +255,9 @@ function App({ tweaks, setTweaks, onLogout }) {
       } catch (_) {}
     };
     fetchTraffic();
-    const id = setInterval(fetchTraffic, 1000);
+    const id = setInterval(fetchTraffic, interval);
     return () => { cancelled = true; clearInterval(id); };
-  }, [trafficRange]);
+  }, [trafficRange, tweaks.refreshInterval]);
 
   // Poll /api/logs every 8s
   uE(() => {

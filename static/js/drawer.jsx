@@ -1453,21 +1453,46 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
                 <svg style={{ transform: advancedOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', color: 'var(--muted)', flexShrink: 0 }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
               </button>
               {advancedOpen && (
-                <div className="setting-row">
-                  <div>
-                    <div className="setting-title">Dev updates</div>
-                    <div className="setting-desc">Opt in to pre-release builds — may contain simulated or incorrect data</div>
+                <>
+                  <div className="setting-row">
+                    <div>
+                      <div className="setting-title">Throughput refresh rate</div>
+                      <div className="setting-desc">How often the live throughput chart polls for new data</div>
+                    </div>
+                    <div className="setting-control" style={{ flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
+                      <div className="seg" style={{ width: 'fit-content' }}>
+                        {[{ v: 500, label: '500ms' }, { v: 1000, label: '1s' }, { v: 2000, label: '2s' }, { v: 5000, label: '5s' }].map(({ v, label }) => (
+                          <button
+                            key={v}
+                            className={tweaks.refreshInterval === v ? 'on' : ''}
+                            onClick={() => setTweaks({ ...tweaks, refreshInterval: v })}
+                          >{label}</button>
+                        ))}
+                      </div>
+                      {tweaks.refreshInterval === 500 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2.2" style={{ flexShrink: 0 }}><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg>
+                          <span style={{ fontSize: '10px', color: 'var(--muted)' }}>High server load</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="setting-control">
-                    <button
-                      className={`toggle ${tweaks.devUpdates ? 'on' : ''}`}
-                      onClick={() => setTweaks({ ...tweaks, devUpdates: !tweaks.devUpdates })}
-                      aria-pressed={tweaks.devUpdates}
-                    >
-                      <span className="toggle-knob" />
-                    </button>
+                  <div className="setting-row">
+                    <div>
+                      <div className="setting-title">Dev updates</div>
+                      <div className="setting-desc">Opt in to pre-release builds — may contain simulated or incorrect data</div>
+                    </div>
+                    <div className="setting-control">
+                      <button
+                        className={`toggle ${tweaks.devUpdates ? 'on' : ''}`}
+                        onClick={() => setTweaks({ ...tweaks, devUpdates: !tweaks.devUpdates })}
+                        aria-pressed={tweaks.devUpdates}
+                      >
+                        <span className="toggle-knob" />
+                      </button>
+                    </div>
                   </div>
-                </div>
+                </>
               )}
             </div>
           </section>
