@@ -451,7 +451,7 @@ function App({ tweaks, setTweaks, onLogout }) {
             </div>
             <div className="hero-head-right">
               <div className="range-pills">
-                {['1m', '5m', '1h', '24h'].map(r => (
+                {['10s', '30s', '1m', '5m', '1h', '24h'].map(r => (
                   <button key={r} className={`range-pill ${trafficRange === r ? 'active' : ''}`} onClick={() => setTrafficRange(r)}>{r}</button>
                 ))}
               </div>

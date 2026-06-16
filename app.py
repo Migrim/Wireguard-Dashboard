@@ -1470,7 +1470,7 @@ def api_traffic():
 @app.route("/api/traffic/history")
 def api_traffic_history():
     range_arg=str(request.args.get("range","1m")).lower()
-    ranges={"1m":60,"5m":5*60,"1h":60*60,"24h":24*60*60}
+    ranges={"10s":10,"30s":30,"1m":60,"5m":5*60,"1h":60*60,"24h":24*60*60}
     seconds=ranges.get(range_arg, 60)
     try:
         max_points=int(request.args.get("max_points","1200"))

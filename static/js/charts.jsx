@@ -78,6 +78,8 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
   const lastIn = dataIn[n - 1] || 0;
   const lastOut = dataOut[n - 1] || 0;
   const rangeLabels = {
+    '10s': ['-10s', '-5s', 'now'],
+    '30s': ['-30s', '-15s', 'now'],
     '1m': ['-1m', '-30s', 'now'],
     '5m': ['-5m', '-2.5m', 'now'],
     '1h': ['-1h', '-30m', 'now'],
