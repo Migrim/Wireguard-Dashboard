@@ -820,7 +820,7 @@ html.theme-switching .theme-toggle-icon {
 }
 .peers-row {
   display: grid;
-  grid-template-columns: var(--peer-grid);
+  grid-template-columns: 34px 1fr auto auto auto auto auto 40px;
   gap: 14px;
   align-items: center;
   padding: 10px 20px;
@@ -876,44 +876,7 @@ html.theme-switching .theme-toggle-icon {
 .handshake-abs { font-size: 10px; color: var(--muted-2); }
 .row-action { display: flex; justify-content: flex-end; }
 
-/* Column drag/resize handles */
-.peer-col-header {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  user-select: none;
-  min-width: 0;
-}
-.peer-col-header.num { justify-content: flex-end; }
-.peer-col-header.col-drag-over {
-  color: var(--accent);
-  background: color-mix(in oklab, var(--accent) 10%, transparent);
-  border-radius: 4px;
-  outline: 1px dashed color-mix(in oklab, var(--accent) 40%, transparent);
-  outline-offset: 2px;
-}
-.col-drag-icon {
-  opacity: 0;
-  flex-shrink: 0;
-  font-size: 11px;
-  color: var(--muted);
-  cursor: grab;
-  line-height: 1;
-  letter-spacing: -1px;
-  transition: opacity 0.12s;
-}
-.col-drag-icon:active { cursor: grabbing; }
-.peer-col-header:hover .col-drag-icon { opacity: 0.7; }
-/* label: single line, truncate if too narrow */
-.col-header-label {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex: 1;
-  min-width: 0;
-}
-.peer-col-header.num .col-header-label { text-align: right; }
+
 
 
 

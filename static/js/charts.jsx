@@ -3,48 +3,65 @@
 const { useState, useEffect, useRef, useMemo } = React;
 
 // ============================================================
-// ThroughputChart — hero live chart, area + line, scrolls left
+// ThroughputChart — hero live chart, area + line
 // ============================================================
 function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 'var(--accent)', accent2 = 'var(--accent-2)', range = '2m', spline = false, smooth = false, pollInterval = 5000 }) {
-  const dispInRef = useRef(dataIn);
-  const dispOutRef = useRef(dataOut);
-  const [dispIn, setDispIn] = useState(dataIn);
-  const [dispOut, setDispOut] = useState(dataOut);
-  const gRef = useRef(null);
+  // Smooth mode: keep prev/next snapshots and lerp between them each RAF frame.
+  // The chart always shows data one poll behind; values glide to new positions
+  // over pollInterval ms, giving the appearance of 30-fps live video.
+  const prevInRef  = useRef(dataIn);
+  const prevOutRef = useRef(dataOut);
+  const nextInRef  = useRef(dataIn);
+  const nextOutRef = useRef(dataOut);
   const rafRef = useRef(null);
+  const [lerpT, setLerpT] = useState(1);
 
   useEffect(() => {
     cancelAnimationFrame(rafRef.current);
-    if (!smooth || dispInRef.current.length < 2) {
-      if (gRef.current) gRef.current.style.transform = '';
-      dispInRef.current = dataIn;
-      dispOutRef.current = dataOut;
-      setDispIn(dataIn);
-      setDispOut(dataOut);
+    if (!smooth) {
+      prevInRef.current  = dataIn;
+      prevOutRef.current = dataOut;
+      nextInRef.current  = dataIn;
+      nextOutRef.current = dataOut;
+      setLerpT(1);
       return;
     }
-    const n = Math.max(dispInRef.current.length, dispOutRef.current.length);
-    const stepW = n <= 1 ? 0 : (width - 70 - 16) / (n - 1);
+    // Previous "next" becomes new "prev"; incoming data becomes new "next"
+    prevInRef.current  = nextInRef.current;
+    prevOutRef.current = nextOutRef.current;
+    nextInRef.current  = dataIn;
+    nextOutRef.current = dataOut;
+
     const dur = Math.max(100, pollInterval - 80);
     const t0 = performance.now();
-    const capturedIn = dataIn;
-    const capturedOut = dataOut;
+    setLerpT(0);
     const tick = (now) => {
-      const p = Math.min(1, (now - t0) / dur);
-      if (gRef.current) gRef.current.style.transform = `translateX(${(-stepW * p).toFixed(2)}px)`;
-      if (p < 1) {
-        rafRef.current = requestAnimationFrame(tick);
-      } else {
-        if (gRef.current) gRef.current.style.transform = '';
-        dispInRef.current = capturedIn;
-        dispOutRef.current = capturedOut;
-        setDispIn(capturedIn);
-        setDispOut(capturedOut);
-      }
+      const t = Math.min(1, (now - t0) / dur);
+      setLerpT(t);
+      if (t < 1) rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [dataIn, dataOut, smooth, pollInterval, width]);
+  }, [dataIn, dataOut, smooth, pollInterval]);
+
+  // Compute displayed arrays: lerp between prev and next at current t
+  let dispIn, dispOut;
+  if (!smooth || lerpT >= 1) {
+    dispIn  = nextInRef.current;
+    dispOut = nextOutRef.current;
+  } else {
+    const pIn  = prevInRef.current;
+    const pOut = prevOutRef.current;
+    const nIn  = nextInRef.current;
+    const nOut = nextOutRef.current;
+    const len = Math.max(pIn.length, nIn.length, pOut.length, nOut.length);
+    dispIn  = new Array(len);
+    dispOut = new Array(len);
+    for (let i = 0; i < len; i++) {
+      dispIn[i]  = (pIn[i]  || 0) + ((nIn[i]  || 0) - (pIn[i]  || 0)) * lerpT;
+      dispOut[i] = (pOut[i] || 0) + ((nOut[i] || 0) - (pOut[i] || 0)) * lerpT;
+    }
+  }
 
   const n = Math.max(dispIn.length, dispOut.length);
   const pad = { l: 70, r: 16, t: 18, b: 28 };
@@ -157,7 +174,7 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
         <line key={i} x1={pad.l + w * f} x2={pad.l + w * f} y1={pad.t} y2={pad.t + h} stroke="var(--border)" strokeDasharray="2 3" strokeWidth="1" opacity="0.35" />
       ))}
 
-      <g ref={gRef} clipPath="url(#chartClip)">
+      <g clipPath="url(#chartClip)">
         <path d={areaFor(dispOut)} fill="url(#gOut)" />
         <path d={areaFor(dispIn)} fill="url(#gIn)" />
         <path d={line(dispOut)} fill="none" stroke={accent2} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" opacity="0.8" />
