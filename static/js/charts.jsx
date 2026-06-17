@@ -6,67 +6,79 @@ const { useState, useEffect, useRef, useMemo } = React;
 // ThroughputChart — hero live chart, area + line
 // ============================================================
 function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 'var(--accent)', accent2 = 'var(--accent-2)', range = '2m', spline = false, smooth = false, pollInterval = 5000 }) {
-  // Smooth mode: keep prev/next snapshots and lerp between them each RAF frame.
-  // The chart always shows data one poll behind; values glide to new positions
-  // over pollInterval ms, giving the appearance of 30-fps live video.
+  // Smooth scroll mode:
+  // On each new poll we render prevData + the incoming new point (N+1 pts), spanning
+  // W + stepW horizontally. We then translateX from 0 → -stepW over pollInterval ms
+  // so the new point scrolls in from the right edge. At t=1 we commit to newData.
   const prevInRef  = useRef(dataIn);
   const prevOutRef = useRef(dataOut);
-  const nextInRef  = useRef(dataIn);
-  const nextOutRef = useRef(dataOut);
-  const rafRef = useRef(null);
-  const [lerpT, setLerpT] = useState(1);
+  const baseNRef   = useRef(dataIn.length); // denominator for xAt during animation
+  const rafRef     = useRef(null);
+  const [dispIn,    setDispIn]    = useState(dataIn);
+  const [dispOut,   setDispOut]   = useState(dataOut);
+  const [txOffset,  setTxOffset]  = useState(0);
+  const [animating, setAnimating] = useState(false);
 
   useEffect(() => {
     cancelAnimationFrame(rafRef.current);
     if (!smooth) {
       prevInRef.current  = dataIn;
       prevOutRef.current = dataOut;
-      nextInRef.current  = dataIn;
-      nextOutRef.current = dataOut;
-      setLerpT(1);
+      setDispIn(dataIn);
+      setDispOut(dataOut);
+      setTxOffset(0);
+      setAnimating(false);
       return;
     }
-    // Previous "next" becomes new "prev"; incoming data becomes new "next"
-    prevInRef.current  = nextInRef.current;
-    prevOutRef.current = nextOutRef.current;
-    nextInRef.current  = dataIn;
-    nextOutRef.current = dataOut;
-
-    const dur = Math.max(100, pollInterval - 80);
+    const prevIn  = prevInRef.current;
+    const prevOut = prevOutRef.current;
+    const N = Math.max(prevIn.length, prevOut.length);
+    if (N < 2) {
+      prevInRef.current  = dataIn;
+      prevOutRef.current = dataOut;
+      setDispIn(dataIn);
+      setDispOut(dataOut);
+      return;
+    }
+    baseNRef.current = N;
+    const stepW = (width - 70 - 16) / (N - 1);
+    // Append the incoming last point so the new sample scrolls in from the right
+    const extIn  = [...prevIn,  dataIn[dataIn.length - 1]   ?? 0];
+    const extOut = [...prevOut, dataOut[dataOut.length - 1]  ?? 0];
+    setDispIn(extIn);
+    setDispOut(extOut);
+    setTxOffset(0);
+    setAnimating(true);
+    const dur = Math.max(150, pollInterval - 100);
     const t0 = performance.now();
-    setLerpT(0);
+    const capturedIn  = dataIn;
+    const capturedOut = dataOut;
     const tick = (now) => {
       const t = Math.min(1, (now - t0) / dur);
-      setLerpT(t);
-      if (t < 1) rafRef.current = requestAnimationFrame(tick);
+      setTxOffset(-stepW * t);
+      if (t < 1) {
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        prevInRef.current  = capturedIn;
+        prevOutRef.current = capturedOut;
+        setDispIn(capturedIn);
+        setDispOut(capturedOut);
+        setTxOffset(0);
+        setAnimating(false);
+      }
     };
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [dataIn, dataOut, smooth, pollInterval]);
-
-  // Compute displayed arrays: lerp between prev and next at current t
-  let dispIn, dispOut;
-  if (!smooth || lerpT >= 1) {
-    dispIn  = nextInRef.current;
-    dispOut = nextOutRef.current;
-  } else {
-    const pIn  = prevInRef.current;
-    const pOut = prevOutRef.current;
-    const nIn  = nextInRef.current;
-    const nOut = nextOutRef.current;
-    const len = Math.max(pIn.length, nIn.length, pOut.length, nOut.length);
-    dispIn  = new Array(len);
-    dispOut = new Array(len);
-    for (let i = 0; i < len; i++) {
-      dispIn[i]  = (pIn[i]  || 0) + ((nIn[i]  || 0) - (pIn[i]  || 0)) * lerpT;
-      dispOut[i] = (pOut[i] || 0) + ((nOut[i] || 0) - (pOut[i] || 0)) * lerpT;
-    }
-  }
+  }, [dataIn, dataOut, smooth, pollInterval, width]);
 
   const n = Math.max(dispIn.length, dispOut.length);
   const pad = { l: 70, r: 16, t: 18, b: 28 };
   const w = width - pad.l - pad.r;
   const h = height - pad.t - pad.b;
+
+  // During animation the N+1 points span W + stepW; using baseN-1 as the denominator
+  // extends the last point one step beyond the right edge of the clip.
+  const baseN = animating ? baseNRef.current : n;
 
   const { maxVal, ticks } = useMemo(() => {
     let m = 0;
@@ -99,7 +111,8 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
     return { maxVal: niceMax, ticks: ticksArr };
   }, [dispIn, dispOut, n, height]);
 
-  const xAt = (i) => pad.l + (n <= 1 ? w : (i / (n - 1)) * w);
+  // baseN-1 as denominator: during animation the N+1th point lands at W + stepW (off right edge)
+  const xAt = (i) => pad.l + (baseN <= 1 ? w : (i / (baseN - 1)) * w);
   const yAt = (v) => pad.t + h - (v / maxVal) * h;
 
   const pathFor = (data) => {
@@ -174,17 +187,26 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
         <line key={i} x1={pad.l + w * f} x2={pad.l + w * f} y1={pad.t} y2={pad.t + h} stroke="var(--border)" strokeDasharray="2 3" strokeWidth="1" opacity="0.35" />
       ))}
 
-      <g clipPath="url(#chartClip)">
+      <g clipPath="url(#chartClip)" style={txOffset ? { transform: `translateX(${txOffset.toFixed(2)}px)` } : undefined}>
         <path d={areaFor(dispOut)} fill="url(#gOut)" />
         <path d={areaFor(dispIn)} fill="url(#gIn)" />
         <path d={line(dispOut)} fill="none" stroke={accent2} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" opacity="0.8" />
         <path d={line(dispIn)} fill="none" stroke={accent} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-        <circle cx={xAt(n - 1)} cy={yAt(lastIn)} r="3" fill={accent} opacity="0">
-          <animate attributeName="opacity" from="0" to="1" begin="0.9s" dur="0.3s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />
-        </circle>
-        <circle cx={xAt(n - 1)} cy={yAt(lastOut)} r="3" fill={accent2} opacity="0">
-          <animate attributeName="opacity" from="0" to="1" begin="0.9s" dur="0.3s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />
-        </circle>
+        {smooth ? (
+          <>
+            <circle cx={xAt(n - 1)} cy={yAt(lastIn)}  r="3" fill={accent} />
+            <circle cx={xAt(n - 1)} cy={yAt(lastOut)} r="3" fill={accent2} opacity="0.8" />
+          </>
+        ) : (
+          <>
+            <circle cx={xAt(n - 1)} cy={yAt(lastIn)} r="3" fill={accent} opacity="0">
+              <animate attributeName="opacity" from="0" to="1" begin="0.9s" dur="0.3s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />
+            </circle>
+            <circle cx={xAt(n - 1)} cy={yAt(lastOut)} r="3" fill={accent2} opacity="0">
+              <animate attributeName="opacity" from="0" to="1" begin="0.9s" dur="0.3s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />
+            </circle>
+          </>
+        )}
       </g>
 
       <text x={pad.l} y={height - 8} fontSize="10" fill="var(--muted)" fontFamily="var(--mono)">{labels[0]}</text>
