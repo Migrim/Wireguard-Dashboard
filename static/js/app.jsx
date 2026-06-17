@@ -4,6 +4,34 @@ const { useState: uS, useEffect: uE, useRef: uR, useMemo: uM, useCallback: uC } 
 const LOG_VERBOSE_KEY = 'WG_LOG_VERBOSE';
 const DISMISSED_ALERTS_KEY = 'WG_DISMISSED_ALERTS';
 
+// ============================================================
+// Peer table column configuration
+// ============================================================
+const PEER_COLS_KEY = 'WG_PEER_COLS';
+const PEER_COLS_META = {
+  name:      { label: 'Name',           minW: 100 },
+  address:   { label: 'Address',        minW: 70 },
+  traffic:   { label: 'Traffic (60s)',  minW: 100 },
+  bytesIn:   { label: 'Bytes in',       minW: 60, num: true },
+  bytesOut:  { label: 'Bytes out',      minW: 60, num: true },
+  handshake: { label: 'Last handshake', minW: 100 },
+};
+const PEER_COLS_DEFAULT_ORDER = ['name', 'address', 'traffic', 'bytesIn', 'bytesOut', 'handshake'];
+
+function loadPeerCols() {
+  try {
+    const s = JSON.parse(localStorage.getItem(PEER_COLS_KEY) || 'null');
+    if (!s || !Array.isArray(s.order)) return null;
+    const order = s.order.filter(id => PEER_COLS_META[id]);
+    PEER_COLS_DEFAULT_ORDER.forEach(id => { if (!order.includes(id)) order.push(id); });
+    return { order, widths: s.widths || {} };
+  } catch { return null; }
+}
+
+function peerColsTemplate(order, widths) {
+  return ['34px', ...order.map(id => widths[id] ? `${widths[id]}px` : 'auto'), '40px'].join(' ');
+}
+
 function App({ tweaks, setTweaks, onLogout }) {
   const [peers, setPeers] = uS([]);
   const [selectedPeer, setSelectedPeer] = uS(null);
@@ -51,6 +79,8 @@ function App({ tweaks, setTweaks, onLogout }) {
   // Previous cumulative bytes per peer — used to compute sparkline deltas
   const prevBytesRef = uR({});
 
+  const [peerCols, setPeerCols] = uS(() => loadPeerCols() || { order: PEER_COLS_DEFAULT_ORDER, widths: {} });
+
   uE(() => {
     localStorage.setItem(LOG_VERBOSE_KEY, logsVerbose ? '1' : '0');
   }, [logsVerbose]);
@@ -58,6 +88,10 @@ function App({ tweaks, setTweaks, onLogout }) {
   uE(() => {
     localStorage.setItem(DISMISSED_ALERTS_KEY, JSON.stringify([...dismissedAlerts]));
   }, [dismissedAlerts]);
+
+  uE(() => {
+    try { localStorage.setItem(PEER_COLS_KEY, JSON.stringify(peerCols)); } catch {}
+  }, [peerCols]);
 
   uE(() => {
     const check = () => fetch('/api/update/check').then(r => r.json()).then(j => {
@@ -296,6 +330,22 @@ function App({ tweaks, setTweaks, onLogout }) {
     return r;
   };
 
+  const reorderPeerCol = uC((srcId, tgtId) => {
+    setPeerCols(prev => {
+      const order = [...prev.order];
+      const si = order.indexOf(srcId);
+      const ti = order.indexOf(tgtId);
+      if (si < 0 || ti < 0 || si === ti) return prev;
+      order.splice(si, 1);
+      order.splice(ti, 0, srcId);
+      return { ...prev, order };
+    });
+  }, []);
+
+  const resetPeerCols = uC(() => {
+    setPeerCols({ order: PEER_COLS_DEFAULT_ORDER, widths: {} });
+  }, []);
+
   const chartTraffic = uM(() => {
     const rangeMs = window.WG.TRAFFIC_RANGES[trafficRange] || window.WG.TRAFFIC_RANGES['1m'];
     const cutoff = Date.now() - rangeMs;
@@ -458,7 +508,7 @@ function App({ tweaks, setTweaks, onLogout }) {
               </div>
             </div>
           </div>
-          <ThroughputChart dataIn={chartTraffic.rx} dataOut={chartTraffic.tx} width={900} height={240} range={trafficRange} spline={tweaks.splineChart} />
+          <ThroughputChart dataIn={chartTraffic.rx} dataOut={chartTraffic.tx} width={900} height={240} range={trafficRange} spline={tweaks.splineChart} smooth={tweaks.smoothChart} pollInterval={tweaks.refreshInterval || 5000} />
         </div>
 
         <div className="logs-card-shell">
@@ -472,32 +522,31 @@ function App({ tweaks, setTweaks, onLogout }) {
             <div className="section-label">PEERS</div>
             <div className="peers-count">{filtered.length} of {peers.length}</div>
           </div>
-          <div className="peers-filters">
-            {['all', 'connected', 'offline'].map(s => (
-              <button key={s} className={`filter-pill ${statusFilter === s ? 'active' : ''}`} onClick={() => setStatusFilter(s)}>
-                {s === 'all' ? 'All' : s === 'connected' ? 'Online' : 'Offline'}
-              </button>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button className="icon-btn-sm" onClick={resetPeerCols} title="Reset column layout">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                <path d="M3 3v5h5"/>
+              </svg>
+            </button>
+            <div className="peers-filters">
+              {['all', 'connected', 'offline'].map(s => (
+                <button key={s} className={`filter-pill ${statusFilter === s ? 'active' : ''}`} onClick={() => setStatusFilter(s)}>
+                  {s === 'all' ? 'All' : s === 'connected' ? 'Online' : 'Offline'}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-        <div className="peers-table">
-          <div className="peers-row peers-head-row">
-            <div>Status</div>
-            <div>Name</div>
-            <div>Address</div>
-            <div>Traffic (60s)</div>
-            <div className="num">Bytes in</div>
-            <div className="num">Bytes out</div>
-            <div>Last handshake</div>
-            <div></div>
-          </div>
+        <div className="peers-table" style={{ '--peer-grid': peerColsTemplate(peerCols.order, peerCols.widths) }}>
+          <PeerTableHeader order={peerCols.order} onReorder={reorderPeerCol} />
           {filtered.length === 0 && (
             <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 12 }}>
               {peers.length === 0 ? 'Loading peers…' : 'No peers match the current filter'}
             </div>
           )}
           {filtered.map(p => (
-            <PeerRow key={p.id} peer={p} spark={sparks[p.id] || []} onClick={() => setSelectedPeer(p.id)} />
+            <PeerRow key={p.id} peer={p} spark={sparks[p.id] || []} onClick={() => setSelectedPeer(p.id)} colOrder={peerCols.order} />
           ))}
         </div>
       </section>
@@ -720,49 +769,95 @@ function OfflinePlaceholder({ width = 110, height = 30 }) {
   );
 }
 
-function PeerRow({ peer, spark, onClick }) {
+function PeerRow({ peer, spark, onClick, colOrder }) {
   const statusColor = peer.status === 'connected' ? 'var(--success)' : 'var(--muted)';
   const isOnline = peer.status === 'connected';
   let hasDraft = false;
   try { hasDraft = !!localStorage.getItem('WG_PEER_DRAFT_' + peer.name); } catch (_) {}
 
+  const renderCell = (id) => {
+    switch (id) {
+      case 'name': return (
+        <div key={id} className="peer-name-cell">
+          <div className="peer-avatar-sm">
+            {peer.name.split('-').map(s => s[0]).join('').slice(0, 2).toUpperCase()}
+          </div>
+          <div>
+            <div className="peer-name">
+              {peer.name}
+              {hasDraft && <span className="peer-draft-dot" title="Unsaved config changes" />}
+            </div>
+            <div className="peer-device">{peer.device}</div>
+          </div>
+        </div>
+      );
+      case 'address': return <div key={id} className="mono peer-address-cell">{peer.addr}</div>;
+      case 'traffic': return (
+        <div key={id} className="peer-traffic-cell">
+          {isOnline
+            ? <Sparkline data={spark} width={110} height={30} color="var(--accent)" active={true} />
+            : <OfflinePlaceholder width={110} height={30} />
+          }
+        </div>
+      );
+      case 'bytesIn':   return <div key={id} className="mono num peer-bytes-in-cell">{window.WG.formatBytes(peer.bytesIn)}</div>;
+      case 'bytesOut':  return <div key={id} className="mono num peer-bytes-out-cell">{window.WG.formatBytes(peer.bytesOut)}</div>;
+      case 'handshake': return (
+        <div key={id} className="mono handshake-cell peer-handshake-cell">
+          <div>{window.WG.formatRelTime(peer.lastHs)}</div>
+          <div className="handshake-abs">{peer.lastHs ? window.WG.formatAbsTime(peer.lastHs) : ''}</div>
+        </div>
+      );
+      default: return <div key={id} />;
+    }
+  };
+
   return (
-    <div className={`peers-row data-row ${!isOnline ? 'row-offline' : ''}`} onClick={onClick}>
+    <div className={`peers-row data-row${!isOnline ? ' row-offline' : ''}`} onClick={onClick}>
       <div className="peer-status-cell">
         <span className={`status-dot-wrap status-${peer.status}`}>
           <span className="status-dot" style={{ background: statusColor }} />
         </span>
       </div>
-      <div className="peer-name-cell">
-        <div className="peer-avatar-sm">
-          {peer.name.split('-').map(s => s[0]).join('').slice(0, 2).toUpperCase()}
-        </div>
-        <div>
-          <div className="peer-name">
-            {peer.name}
-            {hasDraft && <span className="peer-draft-dot" title="Unsaved config changes" />}
-          </div>
-          <div className="peer-device">{peer.device}</div>
-        </div>
-      </div>
-      <div className="mono peer-address-cell">{peer.addr}</div>
-      <div className="peer-traffic-cell">
-        {isOnline
-          ? <Sparkline data={spark} width={110} height={30} color="var(--accent)" active={true} />
-          : <OfflinePlaceholder width={110} height={30} />
-        }
-      </div>
-      <div className="mono num peer-bytes-in-cell">{window.WG.formatBytes(peer.bytesIn)}</div>
-      <div className="mono num peer-bytes-out-cell">{window.WG.formatBytes(peer.bytesOut)}</div>
-      <div className="mono handshake-cell peer-handshake-cell">
-        <div>{window.WG.formatRelTime(peer.lastHs)}</div>
-        <div className="handshake-abs">{peer.lastHs ? window.WG.formatAbsTime(peer.lastHs) : ''}</div>
-      </div>
+      {colOrder.map(renderCell)}
       <div className="row-action">
         <button className="icon-btn-sm" onClick={(e) => { e.stopPropagation(); onClick(); }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
         </button>
       </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Peer table header — drag-to-reorder + resize
+// ============================================================
+function PeerTableHeader({ order, onReorder }) {
+  const [dragOver, setDragOver] = uS(null);
+
+  return (
+    <div className="peers-row peers-head-row">
+      <div>Status</div>
+      {order.map(id => {
+        const meta = PEER_COLS_META[id];
+        const isOver = dragOver === id;
+        return (
+          <div
+            key={id}
+            className={`peer-col-header${meta.num ? ' num' : ''}${isOver ? ' col-drag-over' : ''}`}
+            draggable
+            onDragStart={e => e.dataTransfer.setData('text/plain', id)}
+            onDragOver={e => { e.preventDefault(); setDragOver(id); }}
+            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(null); }}
+            onDrop={e => { e.preventDefault(); const src = e.dataTransfer.getData('text/plain'); if (src && src !== id) onReorder(src, id); setDragOver(null); }}
+            onDragEnd={() => setDragOver(null)}
+          >
+            <span className="col-drag-icon">⠿</span>
+            <span className="col-header-label">{meta.label}</span>
+          </div>
+        );
+      })}
+      <div />
     </div>
   );
 }

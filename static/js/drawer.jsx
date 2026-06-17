@@ -1316,6 +1316,21 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
                   </button>
                 </div>
               </div>
+              <div className="setting-row">
+                <div>
+                  <div className="setting-title">Smooth scroll</div>
+                  <div className="setting-desc">Animate the chart scrolling left between polls instead of jumping</div>
+                </div>
+                <div className="setting-control">
+                  <button
+                    className={`toggle ${tweaks.smoothChart ? 'on' : ''}`}
+                    onClick={() => setTweaks({ ...tweaks, smoothChart: !tweaks.smoothChart })}
+                    aria-pressed={tweaks.smoothChart}
+                  >
+                    <span className="toggle-knob" />
+                  </button>
+                </div>
+              </div>
             </div>
           </section>
 
@@ -1459,7 +1474,7 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
                       <div className="setting-title">Throughput refresh rate</div>
                       <div className="setting-desc">How often the live throughput chart polls for new data</div>
                     </div>
-                    <div className="setting-control" style={{ flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
+                    <div className="setting-control" style={{ flexDirection: 'column', alignItems: 'flex-end' }}>
                       <div className="seg" style={{ width: 'fit-content' }}>
                         {[{ v: 500, label: '500ms' }, { v: 1000, label: '1s' }, { v: 2000, label: '2s' }, { v: 5000, label: '5s' }].map(({ v, label }) => (
                           <button
@@ -1469,12 +1484,17 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
                           >{label}</button>
                         ))}
                       </div>
-                      {tweaks.refreshInterval === 500 && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2.2" style={{ flexShrink: 0 }}><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg>
-                          <span style={{ fontSize: '10px', color: 'var(--muted)' }}>High server load</span>
-                        </div>
-                      )}
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: 4,
+                        maxHeight: tweaks.refreshInterval === 500 ? '20px' : '0',
+                        opacity: tweaks.refreshInterval === 500 ? 1 : 0,
+                        marginTop: tweaks.refreshInterval === 500 ? '5px' : '0',
+                        overflow: 'hidden',
+                        transition: 'max-height 0.22s ease, opacity 0.18s ease, margin-top 0.22s ease',
+                      }}>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0zM12 9v4M12 17h.01"/></svg>
+                        <span style={{ fontSize: '10px', color: 'var(--muted)' }}>High server load</span>
+                      </div>
                     </div>
                   </div>
                   <div className="setting-row">
