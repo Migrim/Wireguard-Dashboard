@@ -820,14 +820,13 @@ html.theme-switching .theme-toggle-icon {
 }
 .peers-row {
   display: grid;
-  grid-template-columns: 34px 1fr auto auto auto auto auto 40px;
+  grid-template-columns: 34px 1.4fr 1fr 130px 0.8fr 0.8fr 1.3fr 40px;
   gap: 14px;
   align-items: center;
-  padding: 12px 20px;
+  padding: 10px 20px;
   border-top: 1px solid var(--border);
   font-size: 12.5px;
 }
-.peers-row > div { min-width: 0; overflow: hidden; }
 .peers-head-row {
   font-family: var(--mono);
   font-size: 10px;
@@ -1027,7 +1026,7 @@ html.theme-switching .theme-toggle-icon {
 @media (max-width: 1200px) {
   .kpi-row { grid-template-columns: repeat(2, 1fr); }
   .main-grid { grid-template-columns: 1fr; }
-  .peers-row { gap: 10px; font-size: 12px; }
+  .peers-row { grid-template-columns: 24px 1.2fr 0.9fr 100px 0.7fr 0.7fr 1fr 40px; gap: 10px; font-size: 12px; }
 }
 @media (max-width: 720px) {
   .topbar { grid-template-columns: auto auto; }

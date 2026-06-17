@@ -459,7 +459,7 @@ function App({ tweaks, setTweaks, onLogout }) {
               </div>
             </div>
           </div>
-          <ThroughputChart dataIn={chartTraffic.rx} dataOut={chartTraffic.tx} width={900} height={240} range={trafficRange} spline={tweaks.splineChart} smooth={tweaks.smoothChart} pollInterval={tweaks.refreshInterval || 5000} />
+          <ThroughputChart dataIn={chartTraffic.rx} dataOut={chartTraffic.tx} width={900} height={240} range={trafficRange} spline={tweaks.splineChart} />
         </div>
 
         <div className="logs-card-shell">
@@ -473,14 +473,12 @@ function App({ tweaks, setTweaks, onLogout }) {
             <div className="section-label">PEERS</div>
             <div className="peers-count">{filtered.length} of {peers.length}</div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div className="peers-filters">
-              {['all', 'connected', 'offline'].map(s => (
-                <button key={s} className={`filter-pill ${statusFilter === s ? 'active' : ''}`} onClick={() => setStatusFilter(s)}>
-                  {s === 'all' ? 'All' : s === 'connected' ? 'Online' : 'Offline'}
-                </button>
-              ))}
-            </div>
+          <div className="peers-filters">
+            {['all', 'connected', 'offline'].map(s => (
+              <button key={s} className={`filter-pill ${statusFilter === s ? 'active' : ''}`} onClick={() => setStatusFilter(s)}>
+                {s === 'all' ? 'All' : s === 'connected' ? 'Online' : 'Offline'}
+              </button>
+            ))}
           </div>
         </div>
         <div className="peers-table">

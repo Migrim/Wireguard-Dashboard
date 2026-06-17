@@ -1316,21 +1316,6 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
                   </button>
                 </div>
               </div>
-              <div className="setting-row">
-                <div>
-                  <div className="setting-title">Smooth scroll</div>
-                  <div className="setting-desc">Animate the chart scrolling left between polls instead of jumping</div>
-                </div>
-                <div className="setting-control">
-                  <button
-                    className={`toggle ${tweaks.smoothChart ? 'on' : ''}`}
-                    onClick={() => setTweaks({ ...tweaks, smoothChart: !tweaks.smoothChart })}
-                    aria-pressed={tweaks.smoothChart}
-                  >
-                    <span className="toggle-knob" />
-                  </button>
-                </div>
-              </div>
             </div>
           </section>
 
