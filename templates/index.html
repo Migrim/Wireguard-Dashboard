@@ -2635,9 +2635,9 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
 
 .login-checking-wrapper {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
 }
 
 .login-checking-label {
@@ -2700,7 +2700,7 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
 </style>
 </head>
 <body data-base="{{ request.script_root or '' }}">
-<div id="root"><div class="login-screen"><div class="login-checking-wrapper"><div class="login-checking-spinner"></div><span class="login-checking-label">Loading your dashboard</span></div></div></div>
+<div id="root"><div class="login-screen"><div class="login-checking-wrapper"><div class="login-checking-spinner"></div><span class="login-checking-label">Loading <em>your</em> dashboard</span></div></div></div>
 
 <script src="{{ url_for('static', filename='js/qrcode.min.js') }}?v={{ app_version }}"></script>
 <script src="https://unpkg.com/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
