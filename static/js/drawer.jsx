@@ -371,7 +371,7 @@ function LogsPanel({ logs, notifications = [], onExpand }) {
 // ============================================================
 // DataBudgetDrawer
 // ============================================================
-function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets = {}, setPeerBudget, budgetUsage, updateBudgetSettings, onClose }) {
+function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets = {}, setPeerBudget, enforcement = { action: 'none', throttle_mbps: 5 }, budgetUsage, updateBudgetSettings, onClose }) {
   const [saving, setSaving] = _useState(false);
   const [msg, setMsg] = _useState('');
 
@@ -578,6 +578,40 @@ function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets
                   </button>
                 </div>
               </div>
+              <div className="setting-row">
+                <div>
+                  <div className="setting-title">When budget exceeded</div>
+                  <div className="setting-desc">Action applied per peer once their limit is hit</div>
+                </div>
+                <div className="setting-control">
+                  <select
+                    className="select-input"
+                    value={enforcement.action}
+                    disabled={saving}
+                    onChange={e => saveSettings({ enforcement: { ...enforcement, action: e.target.value } })}
+                  >
+                    <option value="none">No action</option>
+                    <option value="throttle">Reduce speed</option>
+                    <option value="pause">Pause connection</option>
+                    <option value="combined">Combined — slow at 80%, pause at 100%</option>
+                  </select>
+                </div>
+              </div>
+              {(enforcement.action === 'throttle' || enforcement.action === 'combined') && (
+                <div className="setting-row">
+                  <div>
+                    <div className="setting-title">Reduced speed</div>
+                    <div className="setting-desc">Speed cap applied when peer exceeds their budget</div>
+                  </div>
+                  <div className="setting-control">
+                    <div className="stepper">
+                      <button disabled={saving} onClick={() => saveSettings({ enforcement: { ...enforcement, throttle_mbps: Math.max(1, (enforcement.throttle_mbps || 5) - 1) } })}>−</button>
+                      <span className="mono">{enforcement.throttle_mbps || 5} Mbps</span>
+                      <button disabled={saving} onClick={() => saveSettings({ enforcement: { ...enforcement, throttle_mbps: (enforcement.throttle_mbps || 5) + 1 } })}>+</button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </section>
 

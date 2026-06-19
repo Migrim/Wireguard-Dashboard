@@ -40,6 +40,8 @@ HANDSHAKE_FLUSH_SECONDS=30
 GEO_CACHE_SECONDS=6*60*60
 SUDO_BIN=os.environ.get("SUDO_BIN","/usr/bin/sudo")
 BASH_BIN=os.environ.get("BASH_BIN","/bin/bash")
+TC_BIN=os.environ.get("TC_BIN","/usr/sbin/tc")
+IPTABLES_BIN=os.environ.get("IPTABLES_BIN","/usr/sbin/iptables")
 DASHBOARD_PASSWORD_HASH=os.environ.get("DASHBOARD_PASSWORD_HASH","")
 
 app=Flask(__name__)
@@ -682,7 +684,7 @@ def _update_handshake_cache(name: str, ts: int) -> None:
 
 def _load_data_budget_db() -> Dict[str, Any]:
     default = {
-        "settings": {"budget_gb": 50, "alerts": True, "reset_time": "00:00", "peer_budgets": {}},
+        "settings": {"budget_gb": 50, "alerts": True, "reset_time": "00:00", "peer_budgets": {}, "enforcement": {"action": "none", "throttle_mbps": 5}},
         "period_start": 0,
         "baselines": {},
         "carryover": {},
@@ -711,12 +713,22 @@ def _load_data_budget_db() -> Dict[str, Any]:
     settings = db.get("settings") if isinstance(db.get("settings"), dict) else {}
     peer_budgets_raw = settings.get("peer_budgets", {})
     peer_budgets = {k: (v if v == "inf" else max(1, int(v or 1))) for k, v in peer_budgets_raw.items()} if isinstance(peer_budgets_raw, dict) else {}
+    enf_raw = settings.get("enforcement") or {}
+    enf_action = str(enf_raw.get("action", "none")).lower()
+    if enf_action not in {"none", "throttle", "pause", "combined"}:
+        enf_action = "none"
+    try:
+        enf_mbps = max(1, min(1000, int(enf_raw.get("throttle_mbps", 5) or 5)))
+    except (TypeError, ValueError):
+        enf_mbps = 5
     default["settings"].update({
         "budget_gb": max(1, int(settings.get("budget_gb", default["settings"]["budget_gb"]) or 50)),
         "alerts": bool(settings.get("alerts", default["settings"]["alerts"])),
         "reset_time": str(settings.get("reset_time", default["settings"]["reset_time"])),
         "peer_budgets": peer_budgets,
+        "enforcement": {"action": enf_action, "throttle_mbps": enf_mbps},
     })
+    default["enforce_state"] = db.get("enforce_state") if isinstance(db.get("enforce_state"), dict) else {}
     default["period_start"] = int(db.get("period_start", 0) or 0)
     default["baselines"] = db.get("baselines") if isinstance(db.get("baselines"), dict) else {}
     default["carryover"] = db.get("carryover") if isinstance(db.get("carryover"), dict) else {}
@@ -763,6 +775,125 @@ def _peer_current_totals(issued: List[Dict[str, Any]], live: List[Dict[str, Any]
             continue
         out[str(name)] = int(p.get("bytes_recv", 0) or 0) + int(p.get("bytes_sent", 0) or 0)
     return out
+
+def _tc_peer_handle(name: str) -> int:
+    """Deterministic handle in [1000, 9999] for tc/iptables per-peer throttling."""
+    h = 5381
+    for b in name.encode("utf-8"):
+        h = ((h << 5) + h + b) & 0xFFFFFFFF
+    return h % 9000 + 1000
+
+def _ensure_htb_qdisc() -> None:
+    o, _ = _run(f"tc qdisc show dev {WG_IFACE} 2>/dev/null")
+    if "htb" not in o:
+        _sudo([TC_BIN, "qdisc", "add", "dev", WG_IFACE, "root", "handle", "1:", "htb", "default", "1"])
+        _sudo([TC_BIN, "class", "add", "dev", WG_IFACE, "parent", "1:", "classid", "1:1", "htb", "rate", "10gbit"])
+
+def _apply_peer_throttle(name: str, addr: str, mbps: int) -> None:
+    handle = _tc_peer_handle(name)
+    peer_ip = addr.split("/")[0]
+    rate = f"{max(1, mbps)}mbit"
+    _ensure_htb_qdisc()
+    _sudo([TC_BIN, "class", "replace", "dev", WG_IFACE, "parent", "1:", "classid", f"1:{handle}", "htb", "rate", rate, "ceil", rate])
+    _sudo([TC_BIN, "filter", "replace", "dev", WG_IFACE, "parent", "1:", "handle", str(handle), "fw", "classid", f"1:{handle}"])
+    _, c = _sudo([IPTABLES_BIN, "-t", "mangle", "-C", "FORWARD", "-d", peer_ip, "-j", "MARK", "--set-mark", str(handle)])
+    if c != 0:
+        _sudo([IPTABLES_BIN, "-t", "mangle", "-A", "FORWARD", "-d", peer_ip, "-j", "MARK", "--set-mark", str(handle)])
+
+def _remove_peer_throttle(name: str, addr: str) -> None:
+    handle = _tc_peer_handle(name)
+    peer_ip = addr.split("/")[0]
+    _sudo([IPTABLES_BIN, "-t", "mangle", "-D", "FORWARD", "-d", peer_ip, "-j", "MARK", "--set-mark", str(handle)])
+    _sudo([TC_BIN, "filter", "del", "dev", WG_IFACE, "parent", "1:", "handle", str(handle), "fw"])
+    _sudo([TC_BIN, "class", "del", "dev", WG_IFACE, "classid", f"1:{handle}"])
+
+def _enforce_budgets(db: Dict[str, Any], rows: List[Dict[str, Any]], settings: Dict[str, Any], total_pct: float) -> bool:
+    """Apply or remove per-peer enforcement based on budget usage. Returns True if state changed."""
+    enf = settings.get("enforcement") or {}
+    action = str(enf.get("action", "none")).lower()
+    throttle_mbps = max(1, int(enf.get("throttle_mbps", 5) or 5))
+    enforce_state = db.setdefault("enforce_state", {})
+    peer_budgets = settings.get("peer_budgets", {})
+    peer_db = _load_peers_db()
+    peer_db_changed = False
+    changed = False
+
+    if action == "none":
+        for name, state in list(enforce_state.items()):
+            if state == "none":
+                continue
+            meta = peer_db.get(name, {})
+            if state == "throttled":
+                try: _remove_peer_throttle(name, meta.get("address", ""))
+                except Exception: pass
+            elif state == "paused" and meta.get("paused"):
+                try:
+                    _sudo(["/usr/bin/wg", "set", WG_IFACE, "peer", meta.get("public_key", ""), "allowed-ips", meta.get("address", "")])
+                    meta["paused"] = False
+                    peer_db[name] = meta
+                    peer_db_changed = True
+                except Exception: pass
+            enforce_state[name] = "none"
+            changed = True
+        if peer_db_changed:
+            _save_peers_db(peer_db)
+        return changed
+
+    for row in rows:
+        name = row["name"]
+        used = row["bytes"]
+        meta = peer_db.get(name, {})
+        pub = meta.get("public_key", "")
+        addr = meta.get("address", "")
+        pb = peer_budgets.get(name)
+        if pb and pb != "inf":
+            peer_cap = int(pb) * 1024 * 1024 * 1024
+            pct = (used / peer_cap * 100) if peer_cap else 0
+        else:
+            pct = total_pct
+        prev = enforce_state.get(name, "none")
+        if action == "pause":
+            desired = "paused" if pct >= 100 else "none"
+        elif action == "throttle":
+            desired = "throttled" if pct >= 100 else "none"
+        elif action == "combined":
+            desired = "paused" if pct >= 100 else ("throttled" if pct >= 80 else "none")
+        else:
+            desired = "none"
+        if desired == prev:
+            continue
+        if prev == "throttled":
+            try: _remove_peer_throttle(name, addr)
+            except Exception as e: app.logger.warning("throttle_remove_failed peer=%s err=%s", name, e)
+        if prev == "paused" and desired != "paused" and meta.get("paused"):
+            try:
+                _sudo(["/usr/bin/wg", "set", WG_IFACE, "peer", pub, "allowed-ips", addr])
+                meta["paused"] = False
+                peer_db[name] = meta
+                peer_db_changed = True
+            except Exception as e: app.logger.warning("resume_failed peer=%s err=%s", name, e)
+        if desired == "throttled":
+            try: _apply_peer_throttle(name, addr, throttle_mbps)
+            except Exception as e:
+                app.logger.error("throttle_apply_failed peer=%s err=%s", name, e)
+                desired = prev
+        elif desired == "paused" and not meta.get("paused"):
+            try:
+                _sudo(["/usr/bin/wg", "set", WG_IFACE, "peer", pub, "remove"])
+                meta["paused"] = True
+                peer_db[name] = meta
+                peer_db_changed = True
+            except Exception as e:
+                app.logger.error("pause_apply_failed peer=%s err=%s", name, e)
+                desired = prev
+        if desired != prev:
+            enforce_state[name] = desired
+            app.logger.info("budget_enforce peer=%s prev=%s now=%s pct=%.1f action=%s", name, prev, desired, pct, action)
+            changed = True
+
+    if peer_db_changed:
+        _save_peers_db(peer_db)
+    return changed
 
 def _data_budget_state(issued: List[Dict[str, Any]], live: List[Dict[str, Any]], persist: bool = True) -> Dict[str, Any]:
     db = _load_data_budget_db()
@@ -814,6 +945,12 @@ def _data_budget_state(issued: List[Dict[str, Any]], live: List[Dict[str, Any]],
         elif not level and state.get("last_level"):
             state.pop("last_level", None)
             changed = True
+    if persist:
+        try:
+            if _enforce_budgets(db, rows, settings, pct):
+                changed = True
+        except Exception:
+            app.logger.exception("budget_enforce_failed")
     if changed and persist:
         _save_data_budget_db(db)
     return {
@@ -824,6 +961,7 @@ def _data_budget_state(issued: List[Dict[str, Any]], live: List[Dict[str, Any]],
         "budget_bytes": budget_bytes,
         "pct": pct,
         "peers": rows,
+        "enforce_state": db.get("enforce_state", {}),
     }
 
 def _valid_name(x: Any) -> bool:
@@ -1102,6 +1240,9 @@ def api_status():
         peer_throughput_history={}
     try:
         data_budget=_data_budget_state(issued, live)
+        enforce_state=data_budget.get("enforce_state", {})
+        for p in issued:
+            p["throttled"] = enforce_state.get(p.get("name", ""), "none") == "throttled"
     except Exception:
         app.logger.exception("data_budget_status_failed")
         data_budget={"settings":{"budget_gb":50,"alerts":True,"reset_time":"00:00"},"total":0,"budget_bytes":50*1024*1024*1024,"pct":0,"peers":[]}
@@ -1490,6 +1631,16 @@ def api_data_budget():
                         except (TypeError, ValueError):
                             pass
                 settings["peer_budgets"] = peer_budgets
+        if "enforcement" in data:
+            enf = data.get("enforcement") or {}
+            enf_action = str(enf.get("action", "none")).lower()
+            if enf_action not in {"none", "throttle", "pause", "combined"}:
+                enf_action = "none"
+            try:
+                enf_mbps = max(1, min(1000, int(enf.get("throttle_mbps", 5) or 5)))
+            except (TypeError, ValueError):
+                enf_mbps = 5
+            settings["enforcement"] = {"action": enf_action, "throttle_mbps": enf_mbps}
         db["settings"] = settings
         if old.get("reset_time") != settings.get("reset_time"):
             db["period_start"] = 0

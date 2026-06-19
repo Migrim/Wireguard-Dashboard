@@ -59,6 +59,7 @@ function mapApiPeers(issued, live) {
       clientAllowedIps: iss.client_allowed_ips || '',
       keepalive: iss.keepalive != null ? String(iss.keepalive) : '25',
       paused: iss.paused || false,
+      throttled: iss.throttled || false,
     };
   });
 }

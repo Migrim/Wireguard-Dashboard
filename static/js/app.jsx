@@ -18,6 +18,7 @@ function App({ tweaks, setTweaks, onLogout }) {
   const [dataBudget, setDataBudget] = uS(50);
   const [budgetAlerts, setBudgetAlerts] = uS(true);
   const [resetTime, setResetTime] = uS('00:00');
+  const [enforcement, setEnforcement] = uS({ action: 'none', throttle_mbps: 5 });
   const [peerBudgets, setPeerBudgets] = uS({});
   const setPeerBudget = uC((id, val) => {
     setPeerBudgets(prev => {
@@ -115,6 +116,7 @@ function App({ tweaks, setTweaks, onLogout }) {
           setBudgetAlerts(j.data_budget.settings?.alerts !== false);
           setResetTime(j.data_budget.settings?.reset_time || '00:00');
           if (j.data_budget.settings?.peer_budgets) setPeerBudgets(j.data_budget.settings.peer_budgets);
+          if (j.data_budget.settings?.enforcement) setEnforcement(j.data_budget.settings.enforcement);
         }
         const mapped = window.WG.mapApiPeers(j.clients.issued, j.clients.live);
         setPeers(prev => {
@@ -307,6 +309,7 @@ function App({ tweaks, setTweaks, onLogout }) {
     setBudgetAlerts(r.settings?.alerts !== false);
     setResetTime(r.settings?.reset_time || '00:00');
     if (r.settings?.peer_budgets) setPeerBudgets(r.settings.peer_budgets);
+    if (r.settings?.enforcement) setEnforcement(r.settings.enforcement);
     return r;
   };
 
@@ -539,6 +542,7 @@ function App({ tweaks, setTweaks, onLogout }) {
           peers={peers}
           peerBudgets={peerBudgets}
           setPeerBudget={setPeerBudget}
+          enforcement={enforcement}
           budgetUsage={budgetUsage}
           updateBudgetSettings={updateBudgetSettings}
           onClose={() => setDataDrawerOpen(false)}
@@ -729,7 +733,7 @@ function OfflinePlaceholder({ width = 110, height = 30 }) {
 }
 
 function PeerRow({ peer, spark, onClick }) {
-  const statusColor = peer.paused ? 'var(--warn)' : peer.status === 'connected' ? 'var(--success)' : 'var(--muted)';
+  const statusColor = peer.paused ? 'var(--warn)' : peer.throttled ? 'var(--warn)' : peer.status === 'connected' ? 'var(--success)' : 'var(--muted)';
   const isOnline = peer.status === 'connected';
   let hasDraft = false;
   try { hasDraft = !!localStorage.getItem('WG_PEER_DRAFT_' + peer.name); } catch (_) {}
@@ -737,7 +741,7 @@ function PeerRow({ peer, spark, onClick }) {
   return (
     <div className={`peers-row data-row${!isOnline ? ' row-offline' : ''}`} onClick={onClick}>
       <div className="peer-status-cell">
-        <span className={`status-dot-wrap status-${peer.paused ? 'paused' : peer.status}`}>
+        <span className={`status-dot-wrap status-${peer.paused ? 'paused' : peer.throttled ? 'paused' : peer.status}`}>
           <span className="status-dot" style={{ background: statusColor }} />
         </span>
       </div>
@@ -751,6 +755,9 @@ function PeerRow({ peer, spark, onClick }) {
             {hasDraft && <span className="peer-draft-dot" title="Unsaved config changes" />}
             {peer.paused && (
               <span style={{ marginLeft: 6, fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--warn)', background: 'color-mix(in oklch, var(--warn) 12%, transparent)', padding: '1px 5px', borderRadius: 4, verticalAlign: 'middle' }}>paused</span>
+            )}
+            {peer.throttled && !peer.paused && (
+              <span style={{ marginLeft: 6, fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--warn)', background: 'color-mix(in oklch, var(--warn) 12%, transparent)', padding: '1px 5px', borderRadius: 4, verticalAlign: 'middle' }}>throttled</span>
             )}
           </div>
           <div className="peer-device">{peer.device}</div>
