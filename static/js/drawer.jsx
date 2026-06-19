@@ -1291,14 +1291,14 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
 
   const SI = sysInfo || {};
   const stats = [
-    { label: 'Version',      value: version,                                         mono: true,  highlight: phase === 'done' },
-    { label: 'Platform',     value: SI.platform   || '…',                            mono: false },
-    { label: 'Kernel',       value: SI.kernel     || '…',                            mono: true  },
-    { label: 'Uptime',       value: SI.uptime     || '…',                            mono: false },
-    { label: 'Interface',    value: SI.interface  || '…',                            mono: true  },
-    { label: 'Service',      value: SI.service    || '…',                            mono: true  },
-    { label: 'Status',       value: SI.service_enabled != null ? (SI.service_enabled ? 'enabled' : 'disabled') : '…', mono: true },
-    { label: 'Peers online', value: `${connectedCount} / ${totalPeers}`,             mono: true  },
+    { label: 'Version',      value: version !== '…' ? version : null,               skelW: 72,  mono: true,  highlight: phase === 'done' },
+    { label: 'Platform',     value: SI.platform   || null,                           skelW: 110, mono: false },
+    { label: 'Kernel',       value: SI.kernel     || null,                           skelW: 150, mono: true  },
+    { label: 'Uptime',       value: SI.uptime     || null,                           skelW: 120, mono: false },
+    { label: 'Interface',    value: SI.interface  || null,                           skelW: 36,  mono: true  },
+    { label: 'Service',      value: SI.service    || null,                           skelW: 100, mono: true  },
+    { label: 'Status',       value: SI.service_enabled != null ? (SI.service_enabled ? 'enabled' : 'disabled') : null, skelW: 52, mono: true },
+    { label: 'Peers online', value: `${connectedCount} / ${totalPeers}`,             skelW: 40,  mono: true  },
   ];
 
   const accents = [
@@ -1320,8 +1320,10 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
             </div>
             <div>
               <h2 className="drawer-title">Dashboard settings</h2>
-              <div className="drawer-sub">
-                {SI.service || '…'} · {SI.service_enabled != null ? (SI.service_enabled ? 'enabled' : 'disabled') : '…'}
+              <div className="drawer-sub" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {SI.service ? SI.service : <span className="skel skel-sub" style={{ width: 100 }} />}
+                {' · '}
+                {SI.service_enabled != null ? (SI.service_enabled ? 'enabled' : 'disabled') : <span className="skel skel-sub" style={{ width: 52 }} />}
               </div>
             </div>
           </div>
@@ -1374,7 +1376,11 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
               {stats.map(s => (
                 <div className="set-stat" key={s.label}>
                   <div className="set-stat-label">{s.label}</div>
-                  <div className={`set-stat-val ${s.mono ? 'mono' : ''} ${s.highlight ? 'is-new' : ''}`}>{s.value}</div>
+                  <div className={`set-stat-val ${s.mono ? 'mono' : ''} ${s.highlight ? 'is-new' : ''}`}>
+                    {s.value != null
+                      ? s.value
+                      : <span className="skel" style={{ width: s.skelW }} />}
+                  </div>
                 </div>
               ))}
             </div>
