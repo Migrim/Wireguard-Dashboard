@@ -784,7 +784,7 @@ def _tc_peer_handle(name: str) -> int:
     return h % 9000 + 1000
 
 def _ensure_htb_qdisc() -> None:
-    o, _ = _run(f"tc qdisc show dev {WG_IFACE} 2>/dev/null")
+    o, _ = _sudo([TC_BIN, "qdisc", "show", "dev", WG_IFACE])
     if "htb" not in o:
         _sudo([TC_BIN, "qdisc", "add", "dev", WG_IFACE, "root", "handle", "1:", "htb", "default", "1"])
         _sudo([TC_BIN, "class", "add", "dev", WG_IFACE, "parent", "1:", "classid", "1:1", "htb", "rate", "10gbit"])
@@ -794,17 +794,27 @@ def _apply_peer_throttle(name: str, addr: str, mbps: int) -> None:
     peer_ip = addr.split("/")[0]
     rate = f"{max(1, mbps)}mbit"
     _ensure_htb_qdisc()
-    _sudo([TC_BIN, "class", "replace", "dev", WG_IFACE, "parent", "1:", "classid", f"1:{handle}", "htb", "rate", rate, "ceil", rate])
-    _sudo([TC_BIN, "filter", "replace", "dev", WG_IFACE, "parent", "1:", "handle", str(handle), "fw", "classid", f"1:{handle}"])
-    _, c = _sudo([IPTABLES_BIN, "-t", "mangle", "-C", "FORWARD", "-d", peer_ip, "-j", "MARK", "--set-mark", str(handle)])
-    if c != 0:
-        _sudo([IPTABLES_BIN, "-t", "mangle", "-A", "FORWARD", "-d", peer_ip, "-j", "MARK", "--set-mark", str(handle)])
+    # Add or update the HTB class for this peer
+    o, _ = _sudo([TC_BIN, "class", "show", "dev", WG_IFACE, "classid", f"1:{handle}"])
+    if str(handle) in o:
+        _sudo([TC_BIN, "class", "change", "dev", WG_IFACE, "parent", "1:", "classid", f"1:{handle}", "htb", "rate", rate, "ceil", rate])
+    else:
+        _sudo([TC_BIN, "class", "add", "dev", WG_IFACE, "parent", "1:", "classid", f"1:{handle}", "htb", "rate", rate, "ceil", rate])
+    # Delete-then-add is more reliable than replace for fw filters
+    _sudo([TC_BIN, "filter", "del", "dev", WG_IFACE, "parent", "1:0", "prio", "1", "handle", str(handle), "fw"])
+    _sudo([TC_BIN, "filter", "add", "dev", WG_IFACE, "parent", "1:0", "protocol", "all", "prio", "1", "handle", str(handle), "fw", "classid", f"1:{handle}"])
+    # Mark in both FORWARD (routed VPN traffic) and OUTPUT (server-originated traffic)
+    for chain in ("FORWARD", "OUTPUT"):
+        _, c = _sudo([IPTABLES_BIN, "-t", "mangle", "-C", chain, "-d", peer_ip, "-j", "MARK", "--set-mark", str(handle)])
+        if c != 0:
+            _sudo([IPTABLES_BIN, "-t", "mangle", "-A", chain, "-d", peer_ip, "-j", "MARK", "--set-mark", str(handle)])
 
 def _remove_peer_throttle(name: str, addr: str) -> None:
     handle = _tc_peer_handle(name)
     peer_ip = addr.split("/")[0]
-    _sudo([IPTABLES_BIN, "-t", "mangle", "-D", "FORWARD", "-d", peer_ip, "-j", "MARK", "--set-mark", str(handle)])
-    _sudo([TC_BIN, "filter", "del", "dev", WG_IFACE, "parent", "1:", "handle", str(handle), "fw"])
+    for chain in ("FORWARD", "OUTPUT"):
+        _sudo([IPTABLES_BIN, "-t", "mangle", "-D", chain, "-d", peer_ip, "-j", "MARK", "--set-mark", str(handle)])
+    _sudo([TC_BIN, "filter", "del", "dev", WG_IFACE, "parent", "1:0", "prio", "1", "handle", str(handle), "fw"])
     _sudo([TC_BIN, "class", "del", "dev", WG_IFACE, "classid", f"1:{handle}"])
 
 def _enforce_budgets(db: Dict[str, Any], rows: List[Dict[str, Any]], settings: Dict[str, Any], total_pct: float) -> bool:
