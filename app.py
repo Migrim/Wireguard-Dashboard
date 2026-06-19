@@ -912,6 +912,14 @@ def _data_budget_state(issued: List[Dict[str, Any]], live: List[Dict[str, Any]],
         settings["reset_time"] = "00:00"
     period_start = _budget_period_start(settings["reset_time"])
     totals = _peer_current_totals(issued, live)
+    # Peers paused by budget enforcement are removed from the wg runtime, so
+    # their byte counter reads 0. Preserve the last known total so the budget
+    # stays at 100%+ and doesn't immediately unpause them.
+    _enforce_snap = db.get("enforce_state", {})
+    _last_snap = db.get("last_totals", {})
+    for _name, _total in totals.items():
+        if _total == 0 and _enforce_snap.get(_name) == "paused":
+            totals[_name] = int(_last_snap.get(_name, 0) or 0)
     changed = False
     if int(db.get("period_start", 0) or 0) != period_start:
         app.logger.info("data_budget_reset period_start=%s reset_time=%s peers=%s", period_start, settings["reset_time"], len(totals))
