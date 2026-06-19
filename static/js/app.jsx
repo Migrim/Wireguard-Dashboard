@@ -713,7 +713,7 @@ function OfflinePlaceholder({ width = 110, height = 30 }) {
 }
 
 function PeerRow({ peer, spark, onClick }) {
-  const statusColor = peer.status === 'connected' ? 'var(--success)' : 'var(--muted)';
+  const statusColor = peer.paused ? 'var(--warn)' : peer.status === 'connected' ? 'var(--success)' : 'var(--muted)';
   const isOnline = peer.status === 'connected';
   let hasDraft = false;
   try { hasDraft = !!localStorage.getItem('WG_PEER_DRAFT_' + peer.name); } catch (_) {}
@@ -733,6 +733,9 @@ function PeerRow({ peer, spark, onClick }) {
           <div className="peer-name">
             {peer.name}
             {hasDraft && <span className="peer-draft-dot" title="Unsaved config changes" />}
+            {peer.paused && (
+              <span style={{ marginLeft: 6, fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--warn)', background: 'color-mix(in oklch, var(--warn) 12%, transparent)', padding: '1px 5px', borderRadius: 4, verticalAlign: 'middle' }}>paused</span>
+            )}
           </div>
           <div className="peer-device">{peer.device}</div>
         </div>

@@ -972,6 +972,7 @@ def list_clients() -> List[Dict[str, Any]]:
             "dns": meta.get("dns", ""),
             "client_allowed_ips": meta.get("client_allowed_ips", ""),
             "keepalive": meta.get("keepalive", "25"),
+            "paused": bool(meta.get("paused", False)),
         })
 
     return issued, live
@@ -1287,6 +1288,36 @@ def api_users_restore(name: str):
         conf["Peers"]=peers
         _write_conf(conf)
     return jsonify({"ok":True})
+
+@app.route("/api/users/<name>/pause", methods=["POST"])
+def api_users_pause(name: str):
+    db = _load_peers_db()
+    meta = db.get(name)
+    if not meta:
+        abort(404)
+    pub = meta.get("public_key", "")
+    # Remove from the running WireGuard instance — blocks all traffic from this peer.
+    # The peer stays in the .conf so it auto-restores on wg-quick service restart.
+    _sudo(["/usr/bin/wg", "set", WG_IFACE, "peer", pub, "remove"])
+    meta["paused"] = True
+    db[name] = meta
+    _save_peers_db(db)
+    return jsonify({"ok": True})
+
+@app.route("/api/users/<name>/resume", methods=["POST"])
+def api_users_resume(name: str):
+    db = _load_peers_db()
+    meta = db.get(name)
+    if not meta:
+        abort(404)
+    pub = meta.get("public_key", "")
+    addr = meta.get("address", "")
+    # Re-add the peer to the running WireGuard instance.
+    _sudo(["/usr/bin/wg", "set", WG_IFACE, "peer", pub, "allowed-ips", addr])
+    meta["paused"] = False
+    db[name] = meta
+    _save_peers_db(db)
+    return jsonify({"ok": True})
 
 @app.route("/api/users/<name>/ovpn")
 def api_users_conf(name: str):

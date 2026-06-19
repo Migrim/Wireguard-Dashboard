@@ -9,6 +9,7 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated 
   const [copied, setCopied] = _useState('');
   const [downloading, setDownloading] = _useState(false);
   const [revoking, setRevoking] = _useState(false);
+  const [pausing, setPausing] = _useState(false);
   const [tab, setTab] = _useState('overview');
   const [settingsDirty, setSettingsDirty] = _useState(() => {
     try { return !!localStorage.getItem('WG_PEER_DRAFT_' + peer?.name); } catch { return false; }
@@ -89,6 +90,19 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated 
       alert('Failed to revoke peer: ' + (e.message || 'API error'));
     } finally {
       setRevoking(false);
+    }
+  };
+
+  const togglePause = async () => {
+    setPausing(true);
+    const action = peer.paused ? 'resume' : 'pause';
+    try {
+      await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/' + action, { method: 'POST' });
+      if (onPeerUpdated) onPeerUpdated();
+    } catch (e) {
+      alert('Failed to ' + action + ' peer: ' + (e.message || 'API error'));
+    } finally {
+      setPausing(false);
     }
   };
 
@@ -254,11 +268,29 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated 
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
                 {downloading ? 'Downloading…' : 'Download config'}
               </button>
+              <button className="btn" onClick={togglePause} disabled={pausing} title={peer.paused ? 'Re-enable this peer on the server' : 'Block this peer server-side without revoking it'} style={{ color: peer.paused ? 'var(--success)' : 'var(--warn)', borderColor: peer.paused ? 'var(--success)' : 'var(--warn)' }}>
+                {peer.paused ? (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M5 3l14 9-14 9V3z"/></svg>
+                    {pausing ? 'Resuming…' : 'Resume'}
+                  </>
+                ) : (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                    {pausing ? 'Pausing…' : 'Pause'}
+                  </>
+                )}
+              </button>
               <button className="btn btn-danger" onClick={revokePeer} disabled={revoking}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/></svg>
                 {revoking ? 'Revoking…' : 'Revoke'}
               </button>
             </div>
+            {peer.paused && (
+              <div style={{ marginTop: 8, padding: '6px 10px', borderRadius: 6, background: 'color-mix(in oklch, var(--warn) 12%, transparent)', color: 'var(--warn)', fontFamily: 'var(--mono)', fontSize: 11 }}>
+                Peer is paused — traffic is blocked server-side. The device tunnel may still show as connected.
+              </div>
+            )}
           </section>
         </div>
         )}
