@@ -236,12 +236,15 @@ body {
 }
 [data-theme="dark"] .btn-primary { background: var(--ink); color: var(--bg); }
 .btn-primary:hover { background: var(--ink-2); }
-.btn-danger { color: var(--danger); background: var(--danger-soft); border-color: color-mix(in oklab, var(--danger) 35%, var(--border)); }
-.btn-danger:hover { background: color-mix(in oklab, var(--danger) 18%, transparent); }
-.btn-warn { color: var(--warn); background: var(--warn-soft); border-color: color-mix(in oklab, var(--warn) 35%, var(--border)); }
-.btn-warn:hover { background: color-mix(in oklab, var(--warn) 18%, transparent); }
-.btn-success { color: var(--success); background: var(--success-soft); border-color: color-mix(in oklab, var(--success) 35%, var(--border)); }
-.btn-success:hover { background: color-mix(in oklab, var(--success) 18%, transparent); }
+.btn-danger { color: #fff; background: var(--danger); border-color: color-mix(in oklab, var(--danger) 75%, #000); }
+.btn-danger svg { stroke: oklch(94% 0.06 25); }
+.btn-danger:hover { background: color-mix(in oklab, var(--danger) 85%, #000); }
+.btn-warn { color: #fff; background: var(--warn); border-color: color-mix(in oklab, var(--warn) 75%, #000); }
+.btn-warn svg { stroke: oklch(95% 0.06 70); }
+.btn-warn:hover { background: color-mix(in oklab, var(--warn) 85%, #000); }
+.btn-success { color: #fff; background: var(--success); border-color: color-mix(in oklab, var(--success) 75%, #000); }
+.btn-success svg { stroke: oklch(94% 0.06 150); }
+.btn-success:hover { background: color-mix(in oklab, var(--success) 85%, #000); }
 
 .icon-btn {
   width: 34px; height: 34px;
