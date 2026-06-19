@@ -748,7 +748,7 @@ function OfflinePlaceholder({ width = 110, height = 30 }) {
 }
 
 function PeerRow({ peer, spark, onClick }) {
-  const statusColor = peer.paused ? 'var(--warn)' : peer.throttled ? 'var(--warn)' : peer.status === 'connected' ? 'var(--success)' : 'var(--muted)';
+  const statusColor = peer.paused ? 'var(--warn)' : peer.throttled ? 'var(--danger)' : peer.status === 'connected' ? 'var(--success)' : 'var(--muted)';
   const isOnline = peer.status === 'connected';
   let hasDraft = false;
   try { hasDraft = !!localStorage.getItem('WG_PEER_DRAFT_' + peer.name); } catch (_) {}
@@ -772,7 +772,7 @@ function PeerRow({ peer, spark, onClick }) {
               <span style={{ marginLeft: 6, fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--warn)', background: 'color-mix(in oklch, var(--warn) 12%, transparent)', padding: '1px 5px', borderRadius: 4, verticalAlign: 'middle' }}>paused</span>
             )}
             {peer.throttled && !peer.paused && (
-              <span style={{ marginLeft: 6, fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--warn)', background: 'color-mix(in oklch, var(--warn) 12%, transparent)', padding: '1px 5px', borderRadius: 4, verticalAlign: 'middle' }}>throttled</span>
+              <span style={{ marginLeft: 6, fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--danger)', background: 'color-mix(in oklch, var(--danger) 12%, transparent)', padding: '1px 5px', borderRadius: 4, verticalAlign: 'middle' }}>throttled</span>
             )}
           </div>
           <div className="peer-device">{peer.device}</div>

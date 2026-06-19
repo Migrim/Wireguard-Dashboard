@@ -444,7 +444,7 @@ function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets
             </div>
             <div>
               <h2 className="drawer-title">Data budget</h2>
-              <div className="drawer-sub">Actual usage since {budgetUsage?.period_start_iso ? new Date(budgetUsage.period_start_iso).toLocaleString() : 'current reset'} · resets at {resetTime} local</div>
+              <div className="drawer-sub">Usage since {budgetUsage?.period_start_iso ? new Date(budgetUsage.period_start_iso).toLocaleString() : 'current reset'} · resets at {resetTime} local</div>
             </div>
           </div>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
