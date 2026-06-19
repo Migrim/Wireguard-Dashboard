@@ -862,6 +862,13 @@ html.theme-switching .theme-toggle-icon {
 .status-connected .status-dot {
   box-shadow: 0 0 4px 1px color-mix(in oklab, var(--success) 40%, transparent);
 }
+.status-paused .status-dot {
+  animation: pausedBlink 1.4s ease-in-out infinite;
+}
+@keyframes pausedBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.10; }
+}
 
 .peer-name-cell { display: flex; align-items: center; gap: 10px; }
 .peer-avatar-sm {

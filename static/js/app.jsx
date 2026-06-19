@@ -721,7 +721,7 @@ function PeerRow({ peer, spark, onClick }) {
   return (
     <div className={`peers-row data-row${!isOnline ? ' row-offline' : ''}`} onClick={onClick}>
       <div className="peer-status-cell">
-        <span className={`status-dot-wrap status-${peer.status}`}>
+        <span className={`status-dot-wrap status-${peer.paused ? 'paused' : peer.status}`}>
           <span className="status-dot" style={{ background: statusColor }} />
         </span>
       </div>
