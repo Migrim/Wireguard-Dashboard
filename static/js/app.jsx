@@ -356,6 +356,21 @@ function App({ tweaks, setTweaks, onLogout }) {
       alerts.push({ level: 'warn', title: `${offlineLong.length + neverConnected.length} peer(s) need attention`, desc, key: desc });
     }
   }
+  if (budgetAlerts) {
+    const bpct = budgetUsage.pct || 0;
+    const period = budgetUsage.period_start_iso || '';
+    if (bpct >= 90) {
+      const key = `budget-90-${period}`;
+      if (!dismissedAlerts.has(key)) {
+        alerts.push({ level: 'warn', title: 'Budget nearly exhausted', desc: `${bpct.toFixed(0)}% of ${dataBudget} GB daily budget used.`, key });
+      }
+    } else if (bpct >= 70) {
+      const key = `budget-70-${period}`;
+      if (!dismissedAlerts.has(key)) {
+        alerts.push({ level: 'warn', title: 'Budget at 70%', desc: `${bpct.toFixed(0)}% of ${dataBudget} GB daily budget used.`, key });
+      }
+    }
+  }
 
   const filtered = peers.filter(p => {
     if (statusFilter !== 'all' && p.status !== statusFilter) return false;
