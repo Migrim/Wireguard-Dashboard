@@ -682,7 +682,7 @@ def _update_handshake_cache(name: str, ts: int) -> None:
 
 def _load_data_budget_db() -> Dict[str, Any]:
     default = {
-        "settings": {"budget_gb": 50, "alerts": True, "reset_time": "00:00"},
+        "settings": {"budget_gb": 50, "alerts": True, "reset_time": "00:00", "peer_budgets": {}},
         "period_start": 0,
         "baselines": {},
         "carryover": {},
@@ -709,10 +709,13 @@ def _load_data_budget_db() -> Dict[str, Any]:
     if not isinstance(db, dict):
         return default
     settings = db.get("settings") if isinstance(db.get("settings"), dict) else {}
+    peer_budgets_raw = settings.get("peer_budgets", {})
+    peer_budgets = {k: (v if v == "inf" else max(1, int(v or 1))) for k, v in peer_budgets_raw.items()} if isinstance(peer_budgets_raw, dict) else {}
     default["settings"].update({
         "budget_gb": max(1, int(settings.get("budget_gb", default["settings"]["budget_gb"]) or 50)),
         "alerts": bool(settings.get("alerts", default["settings"]["alerts"])),
         "reset_time": str(settings.get("reset_time", default["settings"]["reset_time"])),
+        "peer_budgets": peer_budgets,
     })
     default["period_start"] = int(db.get("period_start", 0) or 0)
     default["baselines"] = db.get("baselines") if isinstance(db.get("baselines"), dict) else {}
@@ -1472,6 +1475,21 @@ def api_data_budget():
             if not _valid_reset_time(rt):
                 return jsonify({"ok": False, "error": "invalid_reset_time"}), 400
             settings["reset_time"] = rt
+        if "peer_budgets" in data:
+            raw = data.get("peer_budgets") or {}
+            if isinstance(raw, dict):
+                peer_budgets = {}
+                for k, v in raw.items():
+                    if not _valid_name(k):
+                        continue
+                    if v == "inf":
+                        peer_budgets[k] = "inf"
+                    else:
+                        try:
+                            peer_budgets[k] = max(1, min(100000, int(v or 1)))
+                        except (TypeError, ValueError):
+                            pass
+                settings["peer_budgets"] = peer_budgets
         db["settings"] = settings
         if old.get("reset_time") != settings.get("reset_time"):
             db["period_start"] = 0

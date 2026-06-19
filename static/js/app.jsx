@@ -19,7 +19,15 @@ function App({ tweaks, setTweaks, onLogout }) {
   const [budgetAlerts, setBudgetAlerts] = uS(true);
   const [resetTime, setResetTime] = uS('00:00');
   const [peerBudgets, setPeerBudgets] = uS({});
-  const setPeerBudget = uC((id, val) => setPeerBudgets(prev => ({ ...prev, [id]: val })), []);
+  const setPeerBudget = uC((id, val) => {
+    setPeerBudgets(prev => {
+      const next = { ...prev, [id]: val };
+      window.WG.apiCall('/api/data-budget', { method: 'POST', body: JSON.stringify({ peer_budgets: next }) })
+        .then(r => { if (r.settings?.peer_budgets) setPeerBudgets(r.settings.peer_budgets); })
+        .catch(() => {});
+      return next;
+    });
+  }, []);
   const [budgetUsage, setBudgetUsage] = uS({ total: 0, peers: [], pct: 0, period_start_iso: '' });
   const [filter, setFilter] = uS('');
   const [statusFilter, setStatusFilter] = uS('all');
@@ -106,6 +114,7 @@ function App({ tweaks, setTweaks, onLogout }) {
           setDataBudget(j.data_budget.settings?.budget_gb || 50);
           setBudgetAlerts(j.data_budget.settings?.alerts !== false);
           setResetTime(j.data_budget.settings?.reset_time || '00:00');
+          if (j.data_budget.settings?.peer_budgets) setPeerBudgets(j.data_budget.settings.peer_budgets);
         }
         const mapped = window.WG.mapApiPeers(j.clients.issued, j.clients.live);
         setPeers(prev => {
@@ -297,6 +306,7 @@ function App({ tweaks, setTweaks, onLogout }) {
     setDataBudget(r.settings?.budget_gb || 50);
     setBudgetAlerts(r.settings?.alerts !== false);
     setResetTime(r.settings?.reset_time || '00:00');
+    if (r.settings?.peer_budgets) setPeerBudgets(r.settings.peer_budgets);
     return r;
   };
 
