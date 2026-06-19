@@ -28,7 +28,8 @@ function App({ tweaks, setTweaks, onLogout }) {
   const [serviceActive, setServiceActive] = uS(false);
   const [serviceEnabled, setServiceEnabled] = uS(false);
   const [unit, setUnit] = uS('wg-quick@wg0');
-  const [startedAt] = uS(() => Date.now() - 60_000);
+  const [startedAt, setStartedAt] = uS(0);
+  const [servicePort, setServicePort] = uS(null);
 
   const [trafficRange, setTrafficRange] = uS('1m');
   const [trafficHistory, setTrafficHistory] = uS([]);
@@ -98,6 +99,8 @@ function App({ tweaks, setTweaks, onLogout }) {
         setServiceActive(!!j.service.active);
         setServiceEnabled(!!j.service.enabled);
         if (j.service.unit) setUnit(j.service.unit);
+        if (j.service.started_at) setStartedAt(j.service.started_at);
+        if (j.network?.port) setServicePort(`${j.network.port}/udp`);
         if (j.data_budget) {
           setBudgetUsage(j.data_budget);
           setDataBudget(j.data_budget.settings?.budget_gb || 50);
@@ -418,6 +421,7 @@ function App({ tweaks, setTweaks, onLogout }) {
           serviceEnabled={serviceEnabled}
           unit={unit}
           startedAt={startedAt}
+          servicePort={servicePort}
           connectedCount={connectedCount}
           totalCount={peers.length}
           doService={doService}
@@ -563,11 +567,13 @@ function App({ tweaks, setTweaks, onLogout }) {
 // ============================================================
 // KPI tiles
 // ============================================================
-function KPIServiceControl({ serviceActive, serviceEnabled, unit, startedAt, connectedCount, totalCount, doService, updateAvailable, onOpenSettings }) {
-  const uptimeMs = Date.now() - startedAt;
-  const mins = Math.floor(uptimeMs / 60000);
-  const hrs = Math.floor(mins / 60);
-  const uptime = hrs > 0 ? `${hrs}h ${mins % 60}m` : `${mins}m`;
+function KPIServiceControl({ serviceActive, serviceEnabled, unit, startedAt, servicePort, connectedCount, totalCount, doService, updateAvailable, onOpenSettings }) {
+  const uptime = (() => {
+    if (!startedAt || !serviceActive) return '—';
+    const mins = Math.floor((Date.now() - startedAt) / 60000);
+    const hrs = Math.floor(mins / 60);
+    return hrs > 0 ? `${hrs}h ${mins % 60}m` : `${mins}m`;
+  })();
 
   return (
     <div className="kpi-tile">
@@ -599,7 +605,7 @@ function KPIServiceControl({ serviceActive, serviceEnabled, unit, startedAt, con
         </div>
         <div className="svc-stat">
           <div className="svc-stat-label">Port</div>
-          <div className="svc-stat-val mono">51820/udp</div>
+          <div className="svc-stat-val mono">{servicePort || '—'}</div>
         </div>
         <div className="svc-stat">
           <div className="svc-stat-label">Peers</div>

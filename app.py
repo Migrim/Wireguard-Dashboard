@@ -111,6 +111,18 @@ def service_enabled() -> bool:
     o,c=_run(f"systemctl is-enabled {UNIT} || true")
     return o.strip()=="enabled"
 
+def service_started_at_ms() -> int:
+    """Return the Unix timestamp (ms) when the service entered active state, or 0."""
+    o,c=_run(f"systemctl show {UNIT} --property=ActiveEnterTimestamp --value 2>/dev/null || true")
+    val=o.strip()
+    if not val or val=="n/a":
+        return 0
+    try:
+        dt=datetime.datetime.strptime(val,"%a %Y-%m-%d %H:%M:%S %Z")
+        return int(dt.replace(tzinfo=datetime.timezone.utc).timestamp()*1000)
+    except Exception:
+        return 0
+
 def ufw_allowed(port: int, proto: str="udp") -> bool:
     o,c=_run("ufw status numbered | grep -E '\\b{}/{}\\b' || true".format(port,proto))
     return bool(o)
@@ -1096,7 +1108,7 @@ def api_status():
         ntp="unknown"
     lp=(conf.get("Interface",{}).get("ListenPort") or str(WG_PORT))
     payload={
-        "service":{"active":False,"enabled":False,"unit":UNIT},
+        "service":{"active":False,"enabled":False,"unit":UNIT,"started_at":0},
         "network":{"host_ip":HOST_IP,"port":int(lp),"ufw_udp_open":False,"listening":False,"ping_ok":False,"iface":iface,"rx":rx,"tx":tx},
         "clients":{"count":len(issued),"issued":issued,"live":live,"status_updated":None,"spark_history":spark_history,"peer_throughput_history":peer_throughput_history},
         "data_budget":data_budget,
@@ -1117,6 +1129,10 @@ def api_status():
         pass
     try:
         payload["service"]["enabled"]=service_enabled()
+    except:
+        pass
+    try:
+        payload["service"]["started_at"]=service_started_at_ms()
     except:
         pass
     try:
