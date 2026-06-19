@@ -234,33 +234,6 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated 
 
           <section className="drawer-section">
             <div className="section-head">
-              <span className="section-label">CONFIG SNAPSHOT</span>
-              <button className="mini-btn" onClick={() => setTab('settings')}>edit →</button>
-            </div>
-            <div className="cs-grid">
-              <div className="cs-chip">
-                <span className="cs-chip-label">Tunnel</span>
-                <span className="cs-chip-val mono">{peer.clientAllowedIps || '0.0.0.0/0, ::/0'}</span>
-              </div>
-              <div className="cs-chip">
-                <span className="cs-chip-label">DNS</span>
-                <span className="cs-chip-val mono">{peer.dns || 'server default'}</span>
-              </div>
-              <div className="cs-chip">
-                <span className="cs-chip-label">Keepalive</span>
-                <span className="cs-chip-val mono">{(!peer.keepalive || peer.keepalive === '0') ? 'off' : `${peer.keepalive}s`}</span>
-              </div>
-              {peer.owner && (
-                <div className="cs-chip">
-                  <span className="cs-chip-label">Owner</span>
-                  <span className="cs-chip-val">{peer.owner}</span>
-                </div>
-              )}
-            </div>
-          </section>
-
-          <section className="drawer-section">
-            <div className="section-head">
               <span className="section-label">ACTIONS</span>
             </div>
             <div className="action-row">
