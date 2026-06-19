@@ -236,8 +236,12 @@ body {
 }
 [data-theme="dark"] .btn-primary { background: var(--ink); color: var(--bg); }
 .btn-primary:hover { background: var(--ink-2); }
-.btn-danger { color: var(--danger); border-color: color-mix(in oklab, var(--danger) 30%, var(--border)); }
-.btn-danger:hover { background: var(--danger-soft); }
+.btn-danger { color: var(--danger); background: var(--danger-soft); border-color: color-mix(in oklab, var(--danger) 35%, var(--border)); }
+.btn-danger:hover { background: color-mix(in oklab, var(--danger) 18%, transparent); }
+.btn-warn { color: var(--warn); background: var(--warn-soft); border-color: color-mix(in oklab, var(--warn) 35%, var(--border)); }
+.btn-warn:hover { background: color-mix(in oklab, var(--warn) 18%, transparent); }
+.btn-success { color: var(--success); background: var(--success-soft); border-color: color-mix(in oklab, var(--success) 35%, var(--border)); }
+.btn-success:hover { background: color-mix(in oklab, var(--success) 18%, transparent); }
 
 .icon-btn {
   width: 34px; height: 34px;

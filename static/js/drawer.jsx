@@ -268,7 +268,7 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated 
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
                 {downloading ? 'Downloading…' : 'Download config'}
               </button>
-              <button className="btn" onClick={togglePause} disabled={pausing} title={peer.paused ? 'Re-enable this peer on the server' : 'Block this peer server-side without revoking it'} style={{ color: peer.paused ? 'var(--success)' : 'var(--warn)', borderColor: peer.paused ? 'var(--success)' : 'var(--warn)' }}>
+              <button className={`btn ${peer.paused ? 'btn-success' : 'btn-warn'}`} onClick={togglePause} disabled={pausing} title={peer.paused ? 'Re-enable this peer on the server' : 'Block this peer server-side without revoking it'}>
                 {peer.paused ? (
                   <>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M5 3l14 9-14 9V3z"/></svg>
