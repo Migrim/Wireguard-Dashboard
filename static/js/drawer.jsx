@@ -1139,9 +1139,12 @@ const UPD_COOLDOWN_KEY = 'WG_UPDATE_COOLDOWN_END';
 
 function CountdownRing({ remaining }) {
   const secs = Math.ceil(remaining / 1000);
+  const digits = String(secs).split('');
   return (
     <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--muted)', flexShrink: 0 }}>
-      <span key={secs} style={{ display: 'inline-block', animation: 'numFlyUp 0.3s cubic-bezier(0.2, 0.9, 0.25, 1) both' }}>{secs}</span>s
+      {digits.map((d, i) => (
+        <span key={`${i}_${d}`} style={{ display: 'inline-block', animation: 'numFlyUp 0.3s cubic-bezier(0.2, 0.9, 0.25, 1) both' }}>{d}</span>
+      ))}s
     </span>
   );
 }
