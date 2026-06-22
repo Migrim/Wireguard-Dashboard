@@ -1302,7 +1302,11 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
               if (evt.event === 'stage') {
                 const idx = UPDATE_STAGES.findIndex(s => s.id === evt.id);
                 if (idx >= 0) setStageIdx(idx);
-                if (evt.detail) setStageDetails(prev => ({ ...prev, [evt.id]: evt.detail }));
+                if (evt.detail) setStageDetails(prev => {
+                  const existing = prev[evt.id] || [];
+                  const last = existing[existing.length - 1];
+                  return last === evt.detail ? prev : { ...prev, [evt.id]: [...existing, evt.detail] };
+                });
                 animateTo(evt.progress || 0);
               } else if (evt.event === 'done') {
                 animateTo(100, 600, () => {
@@ -1488,7 +1492,7 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
                   {UPDATE_STAGES.map((s, i) => {
                     const done = i < stageIdx;
                     const active = i === stageIdx;
-                    const detail = stageDetails[s.id] || s.detail;
+                    const details = stageDetails[s.id] || [s.detail];
                     return (
                       <div key={s.id} className={`upd-step ${done ? 'done' : ''} ${active ? 'active' : ''}`}>
                         <span className="upd-step-marker">
@@ -1500,8 +1504,12 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
                             <span className="pc-idle-dot" />
                           )}
                         </span>
-                        <span className="upd-step-label">{s.label}</span>
-                        <span className="upd-step-detail mono">{detail}</span>
+                        <span className="upd-step-body">
+                          <span className="upd-step-label">{s.label}</span>
+                          {(active || done) && details.map((d, di) => (
+                            <span key={di} className="upd-step-detail mono">{d}</span>
+                          ))}
+                        </span>
                       </div>
                     );
                   })}
