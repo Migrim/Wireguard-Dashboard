@@ -16,28 +16,29 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
   const h = height - pad.t - pad.b;
 
   const rafRef = useRef(null);
-  const lastUpdateRef = useRef(Date.now());
   const innerGroupRef = useRef(null);
 
-  // useLayoutEffect runs synchronously before paint, so the transform is always
-  // reset to "" in the same frame that new SVG content lands — no teleport flash.
+  // Smooth-scroll: each data poll shifts the content left by one slot.
+  // We animate with accumulated delta-time so a hidden-tab resume never causes
+  // a large position jump.  Resetting offset to 0 on each data update means the
+  // incoming slot always scrolls in from exactly the right edge.
+  // useLayoutEffect fires synchronously before paint, so the transform is always
+  // cleared in the same frame that new SVG content lands — no teleport flash.
   useLayoutEffect(() => {
     cancelAnimationFrame(rafRef.current);
-
     if (innerGroupRef.current) innerGroupRef.current.setAttribute('transform', '');
-    lastUpdateRef.current = Date.now();
-
     if (!smoothScroll || n < 2) return;
 
-    // Scroll speed = w / rangeMs px/ms — one full chart width per range duration.
-    // This is correct regardless of poll rate or bucketing because chartTraffic
-    // always maps the full range onto width w evenly.
     const rangeMs = CHART_RANGE_MS[range] || 60000;
-    const slotWidth = w / (n - 1);
-    const pixelsPerMs = w / rangeMs;
-    const tick = () => {
-      const elapsed = Date.now() - lastUpdateRef.current;
-      const offset = Math.min(elapsed * pixelsPerMs, slotWidth);
+    const slotW = w / (n - 1);
+    const pxPerMs = w / rangeMs;
+    let offset = 0;
+    let lastTime = performance.now();
+
+    const tick = (now) => {
+      const dt = Math.min(now - lastTime, 100); // cap prevents jump after hidden-tab resume
+      lastTime = now;
+      offset = Math.min(offset + dt * pxPerMs, slotW);
       if (innerGroupRef.current) innerGroupRef.current.setAttribute('transform', `translate(${-offset}, 0)`);
       rafRef.current = requestAnimationFrame(tick);
     };
@@ -45,9 +46,11 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
     return () => cancelAnimationFrame(rafRef.current);
   }, [smoothScroll, dataIn, dataOut, n, w, range]);
 
-  // When smooth, extend data by one extrapolated point so the right side fills continuously
-  const extIn  = smoothScroll && n > 0 ? [...dataIn,  dataIn[dataIn.length   - 1] || 0] : dataIn;
-  const extOut = smoothScroll && n > 0 ? [...dataOut, dataOut[dataOut.length  - 1] || 0] : dataOut;
+  // One extra point repeating the latest value keeps the right edge filled while
+  // the chart scrolls toward it.  xAt is keyed on n so this extra point sits
+  // exactly one slotW beyond the right edge, ready to scroll into view.
+  const extIn  = smoothScroll && n > 0 ? [...dataIn,  dataIn[dataIn.length - 1]   || 0] : dataIn;
+  const extOut = smoothScroll && n > 0 ? [...dataOut, dataOut[dataOut.length - 1] || 0] : dataOut;
   const extN   = smoothScroll ? n + 1 : n;
 
   const { maxVal, ticks } = useMemo(() => {
@@ -81,12 +84,13 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
     return { maxVal: niceMax, ticks: ticksArr };
   }, [dataIn, dataOut, n, height]);
 
-  // xAt is still keyed on the original n so the extrapolated point at index n sits
-  // exactly one slotWidth beyond the right edge, scrolling in as the offset grows
-  const xAt = (i) => pad.l + (n <= 1 ? w : (i / (n - 1)) * w);
+  // Uniform slot width — x-coords are always evenly spaced.
+  const slotW = n <= 1 ? w : w / (n - 1);
+  const xAt = (i) => pad.l + i * slotW;
   const yAt = (v) => pad.t + h - (v / maxVal) * h;
 
-  const pathFor = (data, count) => {
+  // Linear path (M L L …).
+  const linePath = (data, count) => {
     let d = '';
     for (let i = 0; i < count; i++) {
       d += (i === 0 ? 'M' : 'L') + xAt(i).toFixed(1) + ',' + yAt(data[i] || 0).toFixed(1) + ' ';
@@ -94,27 +98,29 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
     return d;
   };
 
-  const smoothPathFor = (data, count) => {
-    if (count < 2) return pathFor(data, count);
-    const px = (i) => xAt(i);
-    const py = (i) => yAt(data[i] || 0);
-    let d = `M${px(0).toFixed(1)},${py(0).toFixed(1)}`;
+  // Catmull-Rom spline converted to cubic Bezier.
+  // Because x-coords are uniformly spaced the x control-point offset is always
+  // spanPx/6, where span = slotW at clamped endpoints and 2×slotW in the interior.
+  // This avoids looking up p0x/p3x on every iteration.
+  const splinePath = (data, count) => {
+    let d = `M${xAt(0).toFixed(1)},${yAt(data[0] || 0).toFixed(1)}`;
     for (let i = 1; i < count; i++) {
-      const p0x = px(Math.max(0, i - 2)), p0y = py(Math.max(0, i - 2));
-      const p1x = px(i - 1),             p1y = py(i - 1);
-      const p2x = px(i),                 p2y = py(i);
-      const p3x = px(Math.min(count - 1, i + 1)), p3y = py(Math.min(count - 1, i + 1));
-      const cp1x = p1x + (p2x - p0x) / 6;
-      const cp1y = p1y + (p2y - p0y) / 6;
-      const cp2x = p2x - (p3x - p1x) / 6;
-      const cp2y = p2y - (p3y - p1y) / 6;
-      d += ` C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2x.toFixed(1)},${p2y.toFixed(1)}`;
+      const y0 = yAt(data[Math.max(0, i - 2)]         || 0);
+      const y1 = yAt(data[i - 1]                       || 0);
+      const y2 = yAt(data[i]                           || 0);
+      const y3 = yAt(data[Math.min(count - 1, i + 1)] || 0);
+      const x1 = xAt(i - 1), x2 = xAt(i);
+      const spanL = i === 1         ? slotW : 2 * slotW;
+      const spanR = i === count - 1 ? slotW : 2 * slotW;
+      d += ` C${(x1 + spanL / 6).toFixed(1)},${(y1 + (y2 - y0) / 6).toFixed(1)} ${(x2 - spanR / 6).toFixed(1)},${(y2 - (y3 - y1) / 6).toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
     }
     return d;
   };
 
-  const line = (data, count) => (spline ? smoothPathFor : pathFor)(data, count);
-  const areaFor = (data, count) => line(data, count) + `L${xAt(count - 1).toFixed(1)},${(pad.t + h).toFixed(1)} L${xAt(0).toFixed(1)},${(pad.t + h).toFixed(1)} Z`;
+  const buildLine = (data, count) => (spline && count >= 2) ? splinePath(data, count) : linePath(data, count);
+  const buildArea = (data, count) =>
+    buildLine(data, count) +
+    `L${xAt(count - 1).toFixed(1)},${(pad.t + h).toFixed(1)} L${xAt(0).toFixed(1)},${(pad.t + h).toFixed(1)} Z`;
 
   const lastIn = dataIn[n - 1] || 0;
   const lastOut = dataOut[n - 1] || 0;
@@ -160,10 +166,10 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
 
       <g clipPath={`url(#${uid}-clip)`}>
         <g ref={innerGroupRef}>
-          <path d={areaFor(extOut, extN)} fill={`url(#${uid}-gOut)`} />
-          <path d={areaFor(extIn, extN)} fill={`url(#${uid}-gIn)`} />
-          <path d={line(extOut, extN)} fill="none" stroke={accent2} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" opacity="0.8" />
-          <path d={line(extIn, extN)} fill="none" stroke={accent} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+          <path d={buildArea(extOut, extN)} fill={`url(#${uid}-gOut)`} />
+          <path d={buildArea(extIn, extN)} fill={`url(#${uid}-gIn)`} />
+          <path d={buildLine(extOut, extN)} fill="none" stroke={accent2} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" opacity="0.8" />
+          <path d={buildLine(extIn, extN)} fill="none" stroke={accent} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
         </g>
         {/* Dots pinned at the right edge (outside the scrolling group).
             In smooth mode, CSS-transition the cy so the dot glides vertically
