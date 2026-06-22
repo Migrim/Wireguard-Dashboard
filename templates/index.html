@@ -590,9 +590,8 @@ html.theme-switching .theme-toggle-icon {
 .upd-progress { height: 6px; background: var(--card); border-radius: 3px; overflow: hidden; position: relative; margin-bottom: 16px; }
 .upd-progress-fill { width: 0; height: 100%; background: linear-gradient(90deg, color-mix(in oklab, var(--accent) 75%, var(--accent-2)), var(--accent)); border-radius: 3px; box-shadow: 0 0 10px color-mix(in oklab, var(--accent) 50%, transparent); will-change: width; }
 .upd-progress-glow { position: absolute; left: 0; top: -4px; bottom: -4px; width: 22px; transform: translateX(-50%); background: radial-gradient(circle, color-mix(in oklab, var(--accent) 85%, transparent), transparent 70%); animation: glowPulse 1s ease-in-out infinite; }
-.upd-steplist { display: flex; flex-direction: column; gap: 0; }
-.upd-step { display: grid; grid-template-columns: 18px 1fr; align-items: start; gap: 9px; padding: 8px 4px; opacity: 0.45; transition: opacity 0.3s; border-top: 1px solid var(--border); }
-.upd-steplist .upd-step:first-child { border-top: none; }
+.upd-steplist { display: flex; flex-direction: column; gap: 2px; }
+.upd-step { display: grid; grid-template-columns: 18px 1fr; align-items: start; gap: 9px; padding: 6px 4px; opacity: 0.45; transition: opacity 0.3s; }
 .upd-step.active, .upd-step.done { opacity: 1; }
 .upd-step-marker { width: 18px; height: 18px; display: grid; place-items: center; margin-top: 1px; }
 .upd-step-marker .pc-idle-dot { opacity: 1; }
