@@ -80,7 +80,7 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated 
   };
 
   const revokePeer = async () => {
-    if (!confirm(`Revoke peer "${peer.name}"? This will disconnect them immediately.`)) return;
+    if (!confirm(`Revoke peer "${peer.name}"? This will disconnect the peer immediately.`)) return;
     setRevoking(true);
     try {
       await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/revoke', { method: 'POST' });
@@ -444,7 +444,7 @@ function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets
             </div>
             <div>
               <h2 className="drawer-title">Data budget</h2>
-              <div className="drawer-sub">Usage since {budgetUsage?.period_start_iso ? new Date(budgetUsage.period_start_iso).toLocaleString() : 'current reset'} · resets at {resetTime} local</div>
+              <div className="drawer-sub">Usage since {budgetUsage?.period_start_iso ? new Date(budgetUsage.period_start_iso).toLocaleString() : 'current reset'} · resets at {resetTime} local time</div>
             </div>
           </div>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
@@ -542,7 +542,7 @@ function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets
               <div className="setting-row">
                 <div>
                   <div className="setting-title">Daily budget</div>
-                  <div className="setting-desc">Target data volume per day across all peers</div>
+                  <div className="setting-desc">Daily data limit across all peers</div>
                 </div>
                 <div className="setting-control">
                   <div className="stepper">
@@ -851,7 +851,7 @@ function LogsDrawer({ alerts, onClose, verbose, setVerbose, onDismiss }) {
                 <div>
                   <div className="setting-title">Retention</div>
                   <div className="setting-desc">
-                    Vacuum journal on disk — removes entries older than selected period
+                    Vacuum journal on disk — removes entries older than the selected period
                     {retentionMsg && <span style={{ display: 'block', marginTop: 3, color: retentionMsg.startsWith('Error') ? 'var(--danger)' : 'var(--accent-2)', fontFamily: 'var(--mono)', fontSize: 10 }}>{retentionMsg}</span>}
                   </div>
                 </div>
@@ -1426,7 +1426,7 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
             {phase === 'loading' && (
               <div className="upd-card" style={{display:'flex',alignItems:'center',gap:'8px',color:'var(--text-2)',fontSize:'13px'}}>
                 <span className="pc-spinner" style={{width:'14px',height:'14px',flexShrink:0}} />
-                Checking for updates…
+                Fetching updates…
               </div>
             )}
 
@@ -1579,7 +1579,7 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
                   <div className="setting-row">
                     <div>
                       <div className="setting-title">Developer updates</div>
-                      <div className="setting-desc">Opt in to pre-release builds — may contain simulated or incorrect data</div>
+                      <div className="setting-desc">Opt in to pre-release builds — may be unstable or contain bugs</div>
                     </div>
                     <div className="setting-control">
                       <button

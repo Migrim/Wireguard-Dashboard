@@ -489,7 +489,6 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
             onBlur={() => instantSave({ long_note: longNote })}
             placeholder="Anything future-you should know about this peer…" />
         </div>
-        <div className="ap2-help">All fields saved when you leave them.</div>
       </>
     );
     if (id === 'life') return (

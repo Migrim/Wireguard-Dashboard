@@ -969,7 +969,7 @@ function LoginScreen({ onLogin, loading, error, exiting }) {
             </svg>
           </div>
           <div className="login-brand-text">
-            <div className="login-title">WireGuard</div>
+            <div className="login-title">WG-Quick</div>
             <div className="login-subtitle">Dashboard</div>
           </div>
         </div>
