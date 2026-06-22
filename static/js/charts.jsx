@@ -5,7 +5,10 @@ const { useState, useEffect, useLayoutEffect, useRef, useMemo } = React;
 // ============================================================
 // ThroughputChart — hero live chart, area + line, scrolls left
 // ============================================================
-function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 'var(--accent)', accent2 = 'var(--accent-2)', range = '2m', spline = false, smoothScroll = false, refreshInterval = 1000 }) {
+// Maps range labels to milliseconds — mirrors TRAFFIC_RANGES in data.jsx
+const CHART_RANGE_MS = { '10s': 10000, '30s': 30000, '1m': 60000, '5m': 300000, '1h': 3600000, '24h': 86400000, '2m': 120000 };
+
+function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 'var(--accent)', accent2 = 'var(--accent-2)', range = '2m', spline = false, smoothScroll = false }) {
   const n = Math.max(dataIn.length, dataOut.length);
   const pad = { l: 70, r: 16, t: 18, b: 28 };
   const w = width - pad.l - pad.r;
@@ -25,16 +28,21 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
 
     if (!smoothScroll || n < 2) return;
 
+    // Scroll speed = w / rangeMs px/ms — one full chart width per range duration.
+    // This is correct regardless of poll rate or bucketing because chartTraffic
+    // always maps the full range onto width w evenly.
+    const rangeMs = CHART_RANGE_MS[range] || 60000;
     const slotWidth = w / (n - 1);
+    const pixelsPerMs = w / rangeMs;
     const tick = () => {
       const elapsed = Date.now() - lastUpdateRef.current;
-      const offset = Math.min((elapsed / refreshInterval) * slotWidth, slotWidth);
+      const offset = Math.min(elapsed * pixelsPerMs, slotWidth);
       if (innerGroupRef.current) innerGroupRef.current.setAttribute('transform', `translate(${-offset}, 0)`);
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [smoothScroll, dataIn, dataOut, n, w, refreshInterval]);
+  }, [smoothScroll, dataIn, dataOut, n, w, range]);
 
   // When smooth, extend data by one extrapolated point so the right side fills continuously
   const extIn  = smoothScroll && n > 0 ? [...dataIn,  dataIn[dataIn.length   - 1] || 0] : dataIn;

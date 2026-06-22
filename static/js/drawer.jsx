@@ -154,7 +154,7 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated,
             </div>
             <div className="drawer-chart">
               {thr.rx.length > 0 ? (
-                <ThroughputChart dataIn={thr.rx} dataOut={thr.tx} width={500} height={180} smoothScroll={tweaks.smoothThroughput} refreshInterval={tweaks.refreshInterval || 1000} />
+                <ThroughputChart dataIn={thr.rx} dataOut={thr.tx} width={500} height={180} smoothScroll={tweaks.smoothThroughput} />
               ) : (
                 <div className="empty-chart">No recent activity</div>
               )}
