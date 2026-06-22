@@ -287,6 +287,9 @@ body {
 .btn-success { color: #fff; background: var(--success); border-color: color-mix(in oklab, var(--success) 75%, #000); }
 .btn-success svg { stroke: oklch(94% 0.06 150); }
 .btn-success:hover { background: color-mix(in oklab, var(--success) 85%, #000); }
+.btn-success-soft { color: var(--success); background: var(--success-soft); border-color: color-mix(in oklab, var(--success) 30%, transparent); }
+.btn-success-soft svg { stroke: var(--success); }
+.btn-success-soft:hover { background: color-mix(in oklab, var(--success-soft) 80%, var(--success)); }
 
 .icon-btn {
   width: 34px; height: 34px;
@@ -587,10 +590,12 @@ html.theme-switching .theme-toggle-icon {
 .upd-progress { height: 6px; background: var(--card); border-radius: 3px; overflow: hidden; position: relative; margin-bottom: 16px; }
 .upd-progress-fill { width: 0; height: 100%; background: linear-gradient(90deg, color-mix(in oklab, var(--accent) 75%, var(--accent-2)), var(--accent)); border-radius: 3px; box-shadow: 0 0 10px color-mix(in oklab, var(--accent) 50%, transparent); will-change: width; }
 .upd-progress-glow { position: absolute; left: 0; top: -4px; bottom: -4px; width: 22px; transform: translateX(-50%); background: radial-gradient(circle, color-mix(in oklab, var(--accent) 85%, transparent), transparent 70%); animation: glowPulse 1s ease-in-out infinite; }
-.upd-steplist { display: flex; flex-direction: column; gap: 2px; }
-.upd-step { display: grid; grid-template-columns: 18px 1fr; align-items: start; gap: 9px; padding: 6px 4px; opacity: 0.5; transition: opacity 0.3s; }
+.upd-steplist { display: flex; flex-direction: column; gap: 0; }
+.upd-step { display: grid; grid-template-columns: 18px 1fr; align-items: start; gap: 9px; padding: 8px 4px; opacity: 0.45; transition: opacity 0.3s; border-top: 1px solid var(--border); }
+.upd-steplist .upd-step:first-child { border-top: none; }
 .upd-step.active, .upd-step.done { opacity: 1; }
 .upd-step-marker { width: 18px; height: 18px; display: grid; place-items: center; margin-top: 1px; }
+.upd-step-marker .pc-idle-dot { opacity: 1; }
 .upd-step.done .upd-step-marker { color: var(--success); }
 .upd-step-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .upd-step-label { font-size: 12px; color: var(--ink); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
