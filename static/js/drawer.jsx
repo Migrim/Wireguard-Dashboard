@@ -1137,25 +1137,12 @@ const UPDATE_STAGES = [
 const UPD_COOLDOWN_MS = 30_000;
 const UPD_COOLDOWN_KEY = 'WG_UPDATE_COOLDOWN_END';
 
-function CountdownRing({ remaining, total }) {
-  const r = 6;
-  const circ = 2 * Math.PI * r;
-  const pct = total > 0 ? remaining / total : 0;
-  const offset = circ * (1 - pct);
+function CountdownRing({ remaining }) {
   const secs = Math.ceil(remaining / 1000);
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
-      <svg width="16" height="16" viewBox="0 0 16 16" style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx="8" cy="8" r={r} fill="none" stroke="var(--border)" strokeWidth="2" />
-        <circle cx="8" cy="8" r={r} fill="none" stroke="var(--accent)" strokeWidth="2"
-          strokeLinecap="round"
-          strokeDasharray={String(circ)}
-          strokeDashoffset={String(offset)}
-          style={{ transition: 'stroke-dashoffset 0.12s linear' }}
-        />
-      </svg>
-      <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--muted)' }}>{secs}s</span>
-    </div>
+    <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--muted)', flexShrink: 0 }}>
+      <span key={secs} style={{ display: 'inline-block', animation: 'numFlyUp 0.3s cubic-bezier(0.2, 0.9, 0.25, 1) both' }}>{secs}</span>s
+    </span>
   );
 }
 
@@ -1445,7 +1432,7 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
                 <div className={`upd-idle-content${checking ? ' is-blurring' : ''}`}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.2" style={{flexShrink:0}}><path d="M5 12l5 5L20 7"/></svg>
                   <span style={{color:'var(--text-2)',fontSize:'13px',flex:1}}>Up to date · <span className="mono">{version}</span></span>
-                  {onCooldown && <CountdownRing remaining={remaining} total={UPD_COOLDOWN_MS} />}
+                  {onCooldown && <CountdownRing remaining={remaining} />}
                   <button className="icon-btn" onClick={() => checkForUpdates(true)} aria-label="Check for updates" title={onCooldown ? 'Check again in a moment' : 'Check for updates'} disabled={checking || onCooldown}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-9-9c2.5 0 4.7 1 6.4 2.6L21 3v6h-6"/></svg>
                   </button>
