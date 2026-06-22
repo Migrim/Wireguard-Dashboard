@@ -10,6 +10,11 @@
     if (savedTheme === 'dark' || savedTheme === 'light') {
       document.documentElement.setAttribute('data-theme', savedTheme);
     }
+    const savedAccent = localStorage.getItem('WG_ACCENT');
+    const validAccents = ['terracotta', 'forest', 'ink', 'plum', 'amber'];
+    if (savedAccent && savedAccent !== 'terracotta' && validAccents.includes(savedAccent)) {
+      document.documentElement.classList.add('accent-' + savedAccent);
+    }
   })();
 </script>
 <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='icons/favicon.svg') }}">
