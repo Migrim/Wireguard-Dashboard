@@ -9,6 +9,7 @@ const { useState, useEffect, useLayoutEffect, useRef, useMemo } = React;
 const CHART_RANGE_MS = { '10s': 10000, '30s': 30000, '1m': 60000, '5m': 300000, '1h': 3600000, '24h': 86400000, '2m': 120000 };
 
 function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 'var(--accent)', accent2 = 'var(--accent-2)', range = '2m', spline = false, smoothScroll = false }) {
+  const uid = useRef(`tc-${Math.random().toString(36).slice(2)}`).current;
   const n = Math.max(dataIn.length, dataOut.length);
   const pad = { l: 70, r: 16, t: 18, b: 28 };
   const w = width - pad.l - pad.r;
@@ -131,15 +132,15 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ width: '100%', height, display: 'block' }}>
       <defs>
-        <linearGradient id="gIn" x1="0" x2="0" y1="0" y2="1">
+        <linearGradient id={`${uid}-gIn`} x1="0" x2="0" y1="0" y2="1">
           <stop offset="0%" stopColor={accent} stopOpacity="0.35" />
           <stop offset="100%" stopColor={accent} stopOpacity="0.02" />
         </linearGradient>
-        <linearGradient id="gOut" x1="0" x2="0" y1="0" y2="1">
+        <linearGradient id={`${uid}-gOut`} x1="0" x2="0" y1="0" y2="1">
           <stop offset="0%" stopColor={accent2} stopOpacity="0.28" />
           <stop offset="100%" stopColor={accent2} stopOpacity="0.01" />
         </linearGradient>
-        <clipPath id="chartClip">
+        <clipPath id={`${uid}-clip`}>
           <rect x={pad.l} y={pad.t} height={h}>
             <animate attributeName="width" from="0" to={w} dur="1.1s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />
           </rect>
@@ -157,10 +158,10 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
         <line key={i} x1={pad.l + w * f} x2={pad.l + w * f} y1={pad.t} y2={pad.t + h} stroke="var(--border)" strokeDasharray="2 3" strokeWidth="1" opacity="0.35" />
       ))}
 
-      <g clipPath="url(#chartClip)">
+      <g clipPath={`url(#${uid}-clip)`}>
         <g ref={innerGroupRef}>
-          <path d={areaFor(extOut, extN)} fill="url(#gOut)" />
-          <path d={areaFor(extIn, extN)} fill="url(#gIn)" />
+          <path d={areaFor(extOut, extN)} fill={`url(#${uid}-gOut)`} />
+          <path d={areaFor(extIn, extN)} fill={`url(#${uid}-gIn)`} />
           <path d={line(extOut, extN)} fill="none" stroke={accent2} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" opacity="0.8" />
           <path d={line(extIn, extN)} fill="none" stroke={accent} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
         </g>
