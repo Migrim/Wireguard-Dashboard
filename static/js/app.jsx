@@ -36,6 +36,7 @@ function App({ tweaks, setTweaks, onLogout }) {
   const [logsVerbose, setLogsVerbose] = uS(() => localStorage.getItem(LOG_VERBOSE_KEY) === '1');
   const [serviceActive, setServiceActive] = uS(false);
   const [serviceEnabled, setServiceEnabled] = uS(false);
+  const [serviceLoading, setServiceLoading] = uS(null);
   const [unit, setUnit] = uS('wg-quick@wg0');
   const [startedAt, setStartedAt] = uS(0);
   const [servicePort, setServicePort] = uS(null);
@@ -293,6 +294,7 @@ function App({ tweaks, setTweaks, onLogout }) {
 
 
   const doService = async (action) => {
+    setServiceLoading(action);
     try {
       await window.WG.apiCall('/api/service', { method: 'POST', body: JSON.stringify({ action }) });
       // Force a status refresh
@@ -300,6 +302,7 @@ function App({ tweaks, setTweaks, onLogout }) {
       setServiceActive(!!j.service.active);
       setServiceEnabled(!!j.service.enabled);
     } catch (_) {}
+    setServiceLoading(null);
   };
 
   const updateBudgetSettings = async (patch) => {
@@ -453,6 +456,7 @@ function App({ tweaks, setTweaks, onLogout }) {
           connectedCount={connectedCount}
           totalCount={peers.length}
           doService={doService}
+          serviceLoading={serviceLoading}
           updateAvailable={updateAvailable}
           onOpenSettings={() => { setSettingsOpen(true); setUpdateAvailable(false); }}
         />
@@ -596,7 +600,7 @@ function App({ tweaks, setTweaks, onLogout }) {
 // ============================================================
 // KPI tiles
 // ============================================================
-function KPIServiceControl({ serviceActive, serviceEnabled, unit, startedAt, servicePort, connectedCount, totalCount, doService, updateAvailable, onOpenSettings }) {
+function KPIServiceControl({ serviceActive, serviceEnabled, unit, startedAt, servicePort, connectedCount, totalCount, doService, serviceLoading, updateAvailable, onOpenSettings }) {
   const uptime = (() => {
     if (!startedAt || !serviceActive) return '—';
     const mins = Math.floor((Date.now() - startedAt) / 60000);
@@ -614,16 +618,16 @@ function KPIServiceControl({ serviceActive, serviceEnabled, unit, startedAt, ser
         </span>
       </div>
       <div className="svc-buttons">
-        <button className={`svc-btn ${serviceActive ? 'disabled' : ''}`} disabled={serviceActive} onClick={() => doService('start')}>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l14 8-14 8V4z"/></svg>
+        <button className={`svc-btn ${serviceActive || serviceLoading ? 'disabled' : ''}`} disabled={serviceActive || !!serviceLoading} onClick={() => doService('start')}>
+          {serviceLoading === 'start' ? <span className="pc-spinner" /> : <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l14 8-14 8V4z"/></svg>}
           Start
         </button>
-        <button className="svc-btn" onClick={() => doService('restart')}>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-9-9c2.5 0 4.7 1 6.4 2.6L21 3v6h-6"/></svg>
+        <button className={`svc-btn ${serviceLoading ? 'disabled' : ''}`} disabled={!!serviceLoading} onClick={() => doService('restart')}>
+          {serviceLoading === 'restart' ? <span className="pc-spinner" /> : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-9-9c2.5 0 4.7 1 6.4 2.6L21 3v6h-6"/></svg>}
           Restart
         </button>
-        <button className={`svc-btn ${!serviceActive ? 'disabled' : ''}`} disabled={!serviceActive} onClick={() => doService('stop')}>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+        <button className={`svc-btn ${!serviceActive || serviceLoading ? 'disabled' : ''}`} disabled={!serviceActive || !!serviceLoading} onClick={() => doService('stop')}>
+          {serviceLoading === 'stop' ? <span className="pc-spinner" /> : <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>}
           Stop
         </button>
       </div>
