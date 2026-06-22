@@ -1460,7 +1460,7 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
                   <svg className="upd-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14m-6-6l6 6-6 6"/></svg>
                   <span className="upd-ver upd-ver-new mono">{newVersion}</span>
                 </div>
-                <div className="upd-notes">New version available on GitHub. Pulls latest commits and restarts the service.</div>
+                <div className="upd-notes">New version available on GitHub. The WireGuard service will be restarted to apply the update.</div>
                 <button className="btn btn-primary upd-btn" onClick={runUpdate}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 12a9 9 0 11-9-9c2.5 0 4.7 1 6.4 2.6L21 3v6h-6"/></svg>
                   Install update
@@ -1578,7 +1578,7 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
                   </div>
                   <div className="setting-row">
                     <div>
-                      <div className="setting-title">Dev updates</div>
+                      <div className="setting-title">Developer updates</div>
                       <div className="setting-desc">Opt in to pre-release builds — may contain simulated or incorrect data</div>
                     </div>
                     <div className="setting-control">
