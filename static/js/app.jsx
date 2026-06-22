@@ -31,6 +31,7 @@ function App({ tweaks, setTweaks, onLogout }) {
   }, []);
   const [budgetUsage, setBudgetUsage] = uS({ total: 0, peers: [], pct: 0, period_start_iso: '' });
   const [filter, setFilter] = uS('');
+  const searchRef = uR(null);
   const [statusFilter, setStatusFilter] = uS('all');
   const [logs, setLogs] = uS(() => window.WG.makeInitialLogs());
   const [logsVerbose, setLogsVerbose] = uS(() => localStorage.getItem(LOG_VERBOSE_KEY) === '1');
@@ -41,7 +42,7 @@ function App({ tweaks, setTweaks, onLogout }) {
   const [startedAt, setStartedAt] = uS(0);
   const [servicePort, setServicePort] = uS(null);
 
-  const [trafficRange, setTrafficRange] = uS('1m');
+  const [trafficRange, setTrafficRange] = uS(() => localStorage.getItem('trafficRange') || '1m');
   const [trafficHistory, setTrafficHistory] = uS([]);
   const [dismissedAlerts, setDismissedAlerts] = uS(() => {
     try { return new Set(JSON.parse(localStorage.getItem(DISMISSED_ALERTS_KEY) || '[]')); }
@@ -62,6 +63,18 @@ function App({ tweaks, setTweaks, onLogout }) {
 
   // Previous cumulative bytes per peer — used to compute sparkline deltas
   const prevBytesRef = uR({});
+
+  uE(() => {
+    const handler = e => {
+      if ((e.metaKey || e.altKey) && e.key === 'k') {
+        e.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   uE(() => {
     localStorage.setItem(LOG_VERBOSE_KEY, logsVerbose ? '1' : '0');
@@ -382,6 +395,17 @@ function App({ tweaks, setTweaks, onLogout }) {
     return p.name.toLowerCase().includes(f) || p.addr.includes(f) || (p.pubKey || '').toLowerCase().includes(f);
   });
 
+  const searchSuggestion = (() => {
+    if (!filter) return '';
+    const f = filter.toLowerCase();
+    for (const p of peers) {
+      if (p.name.toLowerCase().startsWith(f)) return p.name;
+      if (p.addr.toLowerCase().startsWith(f)) return p.addr;
+    }
+    return '';
+  })();
+  const ghostSuffix = searchSuggestion.length > filter.length ? searchSuggestion.slice(filter.length) : '';
+
   const density = tweaks.density || 'dense';
   const accent = tweaks.accent || 'terracotta';
 
@@ -402,13 +426,27 @@ function App({ tweaks, setTweaks, onLogout }) {
         <div className="topbar-center">
           <div className="search">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-            <input
-              type="text"
-              placeholder="Filter peers by name, IP, or public key…"
-              value={filter}
-              onChange={e => setFilter(e.target.value)}
-            />
-            <span className="kbd">⌘K</span>
+            <div className="search-input-wrap">
+              {ghostSuffix && (
+                <span className="search-ghost" aria-hidden="true">
+                  <span className="search-ghost-typed">{filter}</span>{ghostSuffix}
+                </span>
+              )}
+              <input
+                ref={searchRef}
+                type="text"
+                placeholder="Filter peers by name, IP, or public key…"
+                value={filter}
+                onChange={e => setFilter(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Tab' && ghostSuffix) { e.preventDefault(); setFilter(searchSuggestion); } }}
+              />
+            </div>
+            {filter
+              ? <button className="search-clear" onClick={() => { setFilter(''); searchRef.current?.focus(); }} aria-label="Clear search">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+              : <span className="kbd">⌘K</span>
+            }
           </div>
         </div>
         <div className="topbar-right">
@@ -490,7 +528,7 @@ function App({ tweaks, setTweaks, onLogout }) {
             <div className="hero-head-right">
               <div className="range-pills">
                 {['10s', '30s', '1m', '5m', '1h', '24h'].map(r => (
-                  <button key={r} className={`range-pill ${trafficRange === r ? 'active' : ''}`} onClick={() => setTrafficRange(r)}>{r}</button>
+                  <button key={r} className={`range-pill ${trafficRange === r ? 'active' : ''}`} onClick={() => { localStorage.setItem('trafficRange', r); setTrafficRange(r); }}>{r}</button>
                 ))}
               </div>
             </div>

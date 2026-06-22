@@ -212,6 +212,42 @@ body {
   color: var(--muted);
 }
 
+.search-input-wrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+.search-input-wrap input {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  background: transparent;
+}
+.search-ghost {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--muted);
+  opacity: 0.5;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 0;
+  user-select: none;
+}
+.search-ghost-typed { opacity: 0; }
+.search-clear {
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: none; padding: 3px; margin-left: auto;
+  cursor: pointer; color: var(--muted); border-radius: 4px;
+  flex-shrink: 0; transition: color 0.1s, background 0.1s;
+}
+.search-clear:hover { color: var(--ink); background: var(--bg-2); }
+
 .topbar-right { display: flex; align-items: center; gap: 8px; }
 
 .btn {

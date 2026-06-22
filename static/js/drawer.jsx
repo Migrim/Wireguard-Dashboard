@@ -643,6 +643,7 @@ function LogsDrawer({ alerts, onClose, verbose, setVerbose, onDismiss }) {
   const [loading, setLoading] = _useState(true);
   const streamRef = _useRef(null);
   const wasAtBottom = _useRef(true);
+  const logSearchRef = _useRef(null);
 
   // Keyboard close
   _useEffect(() => {
@@ -790,7 +791,12 @@ function LogsDrawer({ alerts, onClose, verbose, setVerbose, onDismiss }) {
             <div className="log-toolbar">
               <div className="search" style={{ flex: 1, height: 32 }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-                <input type="text" placeholder="Search logs…" value={search} onChange={e => setSearch(e.target.value)} />
+                <input ref={logSearchRef} type="text" placeholder="Search logs…" value={search} onChange={e => setSearch(e.target.value)} />
+                {search && (
+                  <button className="search-clear" onClick={() => { setSearch(''); logSearchRef.current?.focus(); }} aria-label="Clear search">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  </button>
+                )}
               </div>
               <div className="peers-filters">
                 {['all', 'info', 'warn', 'error'].map(s => (
