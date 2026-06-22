@@ -138,20 +138,6 @@ const I = {
 };
 
 // ============================================================
-// Fullscreen toggle button
-// ============================================================
-function FsToggle({ on, onClick }) {
-  return (
-    <button className="icon-btn" onClick={onClick} aria-label={on ? 'Exit fullscreen' : 'Fullscreen'} title={on ? 'Exit fullscreen' : 'Fullscreen'} aria-pressed={on}>
-      {on
-        ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3M16 3v3a2 2 0 0 0 2 2h3M8 21v-3a2 2 0 0 0-2-2H3M16 21v-3a2 2 0 0 1 2-2h3"/></svg>
-        : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
-      }
-    </button>
-  );
-}
-
-// ============================================================
 // DeviceIcon
 // ============================================================
 function DeviceIcon({ kind }) {
@@ -180,7 +166,6 @@ const PRESET_DEFAULTS = {
 function AddPeerDrawer({ peers, onClose, onCreated }) {
   const [created, setCreated] = aS(false);
   const [serverProfile, setServerProfile] = aS('');
-  const [fullscreen, setFullscreen] = aS(false);
   const [openSection, setOpenSection] = aS({});
   const [creating, setCreating] = aS(false);
   const [createError, setCreateError] = aS('');
@@ -253,17 +238,6 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
     if (routingPreset === 'all') setAllowedIps('0.0.0.0/0, ::/0');
     else if (routingPreset === 'lan') setAllowedIps('10.7.0.0/24, 192.168.1.0/24');
   }, [routingPreset]);
-
-  // Preview config for the fullscreen live rail
-  const previewConfig = buildConfig({
-    name: name || 'new-peer',
-    address, dns: blockAds ? '10.7.0.1' : dns, searchDomains, mtu, keepalive, listenPort,
-    table, fwmark, preUp, postUp, preDown, postDown,
-    endpoint, allowedIps,
-    presharedKey: usePsk ? keys.presharedKey : '',
-    privateKey: keys.privateKey,
-    serverPubKey: keys.serverPubKey,
-  });
 
   const canCreate = name.length >= 2 && !ipTaken && !nameTaken;
 
@@ -367,8 +341,6 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
         profile={serverProfile}
         copy={copy}
         copied={copied}
-        fullscreen={fullscreen}
-        onToggleFullscreen={() => setFullscreen((v) => !v)}
         onAddAnother={() => {
           setCreated(false);
           setName('');
@@ -629,7 +601,7 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
     return null;
   }
 
-  // ====== Essentials (shared between normal & fullscreen) ======
+  // ====== Essentials ======
   const essentials = (
     <>
       <section className="ap2-sec">
@@ -703,21 +675,6 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
     </>
   );
 
-  // Live preview rail (fullscreen only)
-  const livePreview = (
-    <div className="ap-fs-preview">
-      <div className="ap-fs-preview-head">
-        <span className="section-label">LIVE PREVIEW</span>
-        <span className="ap-fs-preview-name mono">{name || 'new-peer'}.conf</span>
-      </div>
-      <div className="ap-fs-qr">
-        <PseudoQR seed={name + address + keys.publicKey} size={150} />
-        <span className="ap-fs-qr-cap">scan to import</span>
-      </div>
-      <pre className="ap-config-block ap-fs-config">{previewConfig}</pre>
-    </div>
-  );
-
   const footChips = (
     <div className="ap2-foot-chips">
       {nameTaken ? (
@@ -741,8 +698,8 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
 
   return (
     <>
-      <div className={`drawer-scrim ${fullscreen ? 'scrim-fs' : ''}`} onClick={onClose} />
-      <aside className={`drawer ${fullscreen ? 'drawer-fullscreen' : ''}`} role="dialog" aria-label="Add peer">
+      <div className="drawer-scrim" onClick={onClose} />
+      <aside className="drawer" role="dialog" aria-label="Add peer">
         <header className="drawer-head">
           <div className="drawer-head-left">
             <div className="peer-avatar" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
@@ -756,29 +713,16 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
             </div>
           </div>
           <div className="drawer-head-actions">
-            <FsToggle on={fullscreen} onClick={() => setFullscreen((v) => !v)} />
             <button className="icon-btn" onClick={onClose} aria-label="Close">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 6l12 12M18 6L6 18"/></svg>
             </button>
           </div>
         </header>
 
-        {fullscreen ? (
-          <div className="drawer-body ap-body-fs" style={{ padding: 0 }}>
-            <div className="ap-fs-cols">
-              <div className="ap2-fs-form">
-                {essentials}
-                {proStack}
-              </div>
-              <aside className="ap-fs-side">{livePreview}</aside>
-            </div>
-          </div>
-        ) : (
-          <div className="drawer-body ap2-body">
-            {essentials}
-            {proStack}
-          </div>
-        )}
+        <div className="drawer-body ap2-body">
+          {essentials}
+          {proStack}
+        </div>
 
         <footer className="ap-foot">
           {footChips}
@@ -797,7 +741,7 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
 // ============================================================
 // CreatedView — post-create provisioning screen
 // ============================================================
-function CreatedView({ name, address, endpoint, allowedIps, profile, copy, copied, fullscreen, onToggleFullscreen, onAddAnother, onClose }) {
+function CreatedView({ name, address, endpoint, allowedIps, profile, copy, copied, onAddAnother, onClose }) {
   const [tab, setTab] = aS('qr');
   const [qrUrl, setQrUrl] = aS('');
 
@@ -821,8 +765,8 @@ function CreatedView({ name, address, endpoint, allowedIps, profile, copy, copie
 
   return (
     <>
-      <div className={`drawer-scrim ${fullscreen ? 'scrim-fs' : ''}`} onClick={onClose} />
-      <aside className={`drawer ${fullscreen ? 'drawer-fullscreen' : ''}`} role="dialog" aria-label="Peer created">
+      <div className="drawer-scrim" onClick={onClose} />
+      <aside className="drawer" role="dialog" aria-label="Peer created">
         <header className="drawer-head">
           <div className="drawer-head-left">
             <div className="peer-avatar ap-avatar-ok">
@@ -834,14 +778,13 @@ function CreatedView({ name, address, endpoint, allowedIps, profile, copy, copie
             </div>
           </div>
           <div className="drawer-head-actions">
-            <FsToggle on={fullscreen} onClick={onToggleFullscreen} />
             <button className="icon-btn" onClick={onClose} aria-label="Close">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 6l12 12M18 6L6 18"/></svg>
             </button>
           </div>
         </header>
 
-        <div className={`drawer-body ap-body ${fullscreen ? 'ap-body-fs-created' : ''}`}>
+        <div className="drawer-body ap-body">
           <div className="ap-prov-tabs">
             <button className={`ap-prov-tab ${tab === 'qr' ? 'on' : ''}`} onClick={() => setTab('qr')}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3M21 14v3M14 17v4h3M17 21h4"/></svg>

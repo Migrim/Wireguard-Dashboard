@@ -771,6 +771,7 @@ html.theme-switching .theme-toggle-icon {
   cursor: pointer;
 }
 .range-pill.active { background: var(--card); color: var(--ink); box-shadow: var(--shadow-sm); }
+[data-theme="dark"] .range-pills { background: var(--bg); border-color: var(--border); }
 
 /* LOGS PANEL */
 .logs-card-shell { position: relative; }
@@ -870,6 +871,7 @@ html.theme-switching .theme-toggle-icon {
   color: var(--muted); background: transparent; border: none; border-radius: 5px; cursor: pointer;
 }
 .filter-pill.active { background: var(--card); color: var(--ink); box-shadow: var(--shadow-sm); }
+[data-theme="dark"] .peers-filters { background: var(--bg); border-color: var(--border); }
 
 .peers-table {
   display: flex; flex-direction: column;
@@ -1393,6 +1395,21 @@ html.theme-switching .theme-toggle-icon {
 html:not([data-theme="dark"]) .coll.open .ap-input,
 html:not([data-theme="dark"]) .coll.open .ap2-textarea { background: var(--card-raised); }
 html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--card-raised); }
+
+/* Dark-mode add-peer form: inputs/selectors use page bg for contrast against --card drawer */
+[data-theme="dark"] .ap-input { background: var(--bg); }
+[data-theme="dark"] .ap-input:focus { background: var(--bg); }
+[data-theme="dark"] .ap2-textarea,
+[data-theme="dark"] .coll.open .ap2-textarea { background: var(--bg); }
+[data-theme="dark"] .ap2-ip-row { background: var(--bg); }
+[data-theme="dark"] .ap-tag-row { background: var(--bg); }
+[data-theme="dark"] .ap-config-block { background: var(--bg); }
+[data-theme="dark"] .ap-device { background: var(--bg); }
+[data-theme="dark"] .ap-routing-card { background: var(--bg); }
+[data-theme="dark"] .ap-radio { background: var(--bg); }
+[data-theme="dark"] .coll { background: var(--bg); }
+[data-theme="dark"] .coll.open { background: var(--card); }
+[data-theme="dark"] .select-input { background: var(--bg); }
 
 /* ============================================================
    Peer drawer — tabs + PeerSettings
