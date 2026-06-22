@@ -429,7 +429,7 @@ function App({ tweaks, setTweaks, onLogout }) {
             <div className="search-input-wrap">
               {ghostSuffix && (
                 <span className="search-ghost" aria-hidden="true">
-                  <span className="search-ghost-typed">{filter}</span>{ghostSuffix}<span className="search-ghost-tab">tab</span>
+                  <span className="search-ghost-typed">{filter}</span>{ghostSuffix}<span className="search-ghost-tab">⇥</span>
                 </span>
               )}
               <input
