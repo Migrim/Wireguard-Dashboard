@@ -550,9 +550,13 @@ function App({ tweaks, setTweaks, onLogout }) {
             <div className="peers-count">{filtered.length} of {peers.length}</div>
           </div>
           <div className="peers-filters">
-            {['all', 'connected', 'offline'].map(s => (
-              <button key={s} className={`filter-pill ${statusFilter === s ? 'active' : ''}`} onClick={() => setStatusFilter(s)}>
-                {s === 'all' ? 'All' : s === 'connected' ? 'Online' : 'Offline'}
+            {[
+              { key: 'all',       label: 'All',     count: null },
+              { key: 'connected', label: 'Online',  count: peers.filter(p => p.status === 'connected').length },
+              { key: 'offline',   label: 'Offline', count: peers.filter(p => p.status === 'offline').length },
+            ].map(({ key, label, count }) => (
+              <button key={key} className={`filter-pill ${statusFilter === key ? 'active' : ''}`} onClick={() => setStatusFilter(key)}>
+                {label}{count !== null && <span className="filter-pill-count">{count}</span>}
               </button>
             ))}
           </div>
