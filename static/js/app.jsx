@@ -429,7 +429,7 @@ function App({ tweaks, setTweaks, onLogout }) {
             <div className="search-input-wrap">
               {ghostSuffix && (
                 <span className="search-ghost" aria-hidden="true">
-                  <span className="search-ghost-typed">{filter}</span>{ghostSuffix}<span className="search-ghost-tab">⇥</span>
+                  <span className="search-ghost-typed">{filter}</span>{ghostSuffix}<span className="search-ghost-tab"><svg width="12" height="10" viewBox="0 0 12 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 5h7M5 2l3 3-3 3"/><line x1="11" y1="1" x2="11" y2="9"/></svg></span>
                 </span>
               )}
               <input
