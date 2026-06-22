@@ -7,6 +7,7 @@ const DISMISSED_ALERTS_KEY = 'WG_DISMISSED_ALERTS';
 
 function App({ tweaks, setTweaks, onLogout }) {
   const [peers, setPeers] = uS([]);
+  const [peersLoaded, setPeersLoaded] = uS(false);
   const [selectedPeer, setSelectedPeer] = uS(null);
   const [dataDrawerOpen, setDataDrawerOpen] = uS(false);
   const [trafficModeOpen, setTrafficModeOpen] = uS(false);
@@ -140,6 +141,7 @@ function App({ tweaks, setTweaks, onLogout }) {
             return old ? { ...old, ...p } : p;
           });
         });
+        setPeersLoaded(true);
         ensurePeerState(mapped);
         const serverSparks = j.clients.spark_history || {};
         const serverPeerThr = j.clients.peer_throughput_history || {};
@@ -557,9 +559,27 @@ function App({ tweaks, setTweaks, onLogout }) {
         </div>
         <div className="peers-table">
           <PeerTableHeader />
-          {filtered.length === 0 && (
+          {filtered.length === 0 && !peersLoaded && (
             <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 12 }}>
-              {peers.length === 0 ? 'Loading peers…' : 'No peers match the current filter'}
+              Loading peers…
+            </div>
+          )}
+          {peersLoaded && peers.length === 0 && (
+            <div className="peers-empty-state">
+              <div className="peers-empty-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a6 6 0 016-6h4a6 6 0 016 6v2M18 10v6M15 13h6"/></svg>
+              </div>
+              <div className="peers-empty-title">No peers yet</div>
+              <div className="peers-empty-desc">Add your first peer to get started. They'll appear here once created.</div>
+              <button className="btn btn-primary peers-empty-btn" onClick={() => setAddOpen(true)}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a6 6 0 016-6h4a6 6 0 016 6v2M18 10v6M15 13h6"/></svg>
+                Add peer
+              </button>
+            </div>
+          )}
+          {peersLoaded && peers.length > 0 && filtered.length === 0 && (
+            <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 12 }}>
+              No peers match the current filter
             </div>
           )}
           {filtered.map(p => (

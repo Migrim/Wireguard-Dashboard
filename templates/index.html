@@ -864,6 +864,19 @@ html.theme-switching .theme-toggle-icon {
 
 /* PEERS TABLE */
 .peers-card { padding: 2px 0 4px; }
+.peers-empty-state {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  padding: 40px 20px 36px; gap: 0;
+}
+.peers-empty-icon {
+  width: 48px; height: 48px; border-radius: 14px;
+  background: var(--accent-soft); color: var(--accent);
+  display: grid; place-items: center; margin-bottom: 14px;
+}
+.peers-empty-title { font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 6px; }
+.peers-empty-desc { font-size: 12px; color: var(--muted); line-height: 1.55; max-width: 280px; margin-bottom: 18px; }
+.peers-empty-btn { height: 34px; gap: 6px; }
+
 .peers-head {
   display: flex; justify-content: space-between; align-items: center;
   padding: 16px 20px 12px;
