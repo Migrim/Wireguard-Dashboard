@@ -1,15 +1,45 @@
 // Live animated SVG charts for WG-Quick
 
-const { useState, useEffect, useRef, useMemo } = React;
+const { useState, useEffect, useLayoutEffect, useRef, useMemo } = React;
 
 // ============================================================
 // ThroughputChart — hero live chart, area + line, scrolls left
 // ============================================================
-function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 'var(--accent)', accent2 = 'var(--accent-2)', range = '2m', spline = false }) {
+function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 'var(--accent)', accent2 = 'var(--accent-2)', range = '2m', spline = false, smoothScroll = false, refreshInterval = 1000 }) {
   const n = Math.max(dataIn.length, dataOut.length);
   const pad = { l: 70, r: 16, t: 18, b: 28 };
   const w = width - pad.l - pad.r;
   const h = height - pad.t - pad.b;
+
+  const rafRef = useRef(null);
+  const lastUpdateRef = useRef(Date.now());
+  const innerGroupRef = useRef(null);
+
+  // useLayoutEffect runs synchronously before paint, so the transform is always
+  // reset to "" in the same frame that new SVG content lands — no teleport flash.
+  useLayoutEffect(() => {
+    cancelAnimationFrame(rafRef.current);
+
+    if (innerGroupRef.current) innerGroupRef.current.setAttribute('transform', '');
+    lastUpdateRef.current = Date.now();
+
+    if (!smoothScroll || n < 2) return;
+
+    const slotWidth = w / (n - 1);
+    const tick = () => {
+      const elapsed = Date.now() - lastUpdateRef.current;
+      const offset = Math.min((elapsed / refreshInterval) * slotWidth, slotWidth);
+      if (innerGroupRef.current) innerGroupRef.current.setAttribute('transform', `translate(${-offset}, 0)`);
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [smoothScroll, dataIn, dataOut, n, w, refreshInterval]);
+
+  // When smooth, extend data by one extrapolated point so the right side fills continuously
+  const extIn  = smoothScroll && n > 0 ? [...dataIn,  dataIn[dataIn.length   - 1] || 0] : dataIn;
+  const extOut = smoothScroll && n > 0 ? [...dataOut, dataOut[dataOut.length  - 1] || 0] : dataOut;
+  const extN   = smoothScroll ? n + 1 : n;
 
   const { maxVal, ticks } = useMemo(() => {
     let m = 0;
@@ -42,27 +72,29 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
     return { maxVal: niceMax, ticks: ticksArr };
   }, [dataIn, dataOut, n, height]);
 
+  // xAt is still keyed on the original n so the extrapolated point at index n sits
+  // exactly one slotWidth beyond the right edge, scrolling in as the offset grows
   const xAt = (i) => pad.l + (n <= 1 ? w : (i / (n - 1)) * w);
   const yAt = (v) => pad.t + h - (v / maxVal) * h;
 
-  const pathFor = (data) => {
+  const pathFor = (data, count) => {
     let d = '';
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < count; i++) {
       d += (i === 0 ? 'M' : 'L') + xAt(i).toFixed(1) + ',' + yAt(data[i] || 0).toFixed(1) + ' ';
     }
     return d;
   };
 
-  const smoothPathFor = (data) => {
-    if (n < 2) return pathFor(data);
+  const smoothPathFor = (data, count) => {
+    if (count < 2) return pathFor(data, count);
     const px = (i) => xAt(i);
     const py = (i) => yAt(data[i] || 0);
     let d = `M${px(0).toFixed(1)},${py(0).toFixed(1)}`;
-    for (let i = 1; i < n; i++) {
+    for (let i = 1; i < count; i++) {
       const p0x = px(Math.max(0, i - 2)), p0y = py(Math.max(0, i - 2));
       const p1x = px(i - 1),             p1y = py(i - 1);
       const p2x = px(i),                 p2y = py(i);
-      const p3x = px(Math.min(n - 1, i + 1)), p3y = py(Math.min(n - 1, i + 1));
+      const p3x = px(Math.min(count - 1, i + 1)), p3y = py(Math.min(count - 1, i + 1));
       const cp1x = p1x + (p2x - p0x) / 6;
       const cp1y = p1y + (p2y - p0y) / 6;
       const cp2x = p2x - (p3x - p1x) / 6;
@@ -72,8 +104,8 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
     return d;
   };
 
-  const line = spline ? smoothPathFor : pathFor;
-  const areaFor = (data) => line(data) + `L${xAt(n - 1).toFixed(1)},${(pad.t + h).toFixed(1)} L${xAt(0).toFixed(1)},${(pad.t + h).toFixed(1)} Z`;
+  const line = (data, count) => (spline ? smoothPathFor : pathFor)(data, count);
+  const areaFor = (data, count) => line(data, count) + `L${xAt(count - 1).toFixed(1)},${(pad.t + h).toFixed(1)} L${xAt(0).toFixed(1)},${(pad.t + h).toFixed(1)} Z`;
 
   const lastIn = dataIn[n - 1] || 0;
   const lastOut = dataOut[n - 1] || 0;
@@ -118,15 +150,18 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
       ))}
 
       <g clipPath="url(#chartClip)">
-        <path d={areaFor(dataOut)} fill="url(#gOut)" />
-        <path d={areaFor(dataIn)} fill="url(#gIn)" />
-        <path d={line(dataOut)} fill="none" stroke={accent2} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" opacity="0.8" />
-        <path d={line(dataIn)} fill="none" stroke={accent} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-        <circle cx={xAt(n - 1)} cy={yAt(lastIn)} r="3" fill={accent} opacity="0">
-          <animate attributeName="opacity" from="0" to="1" begin="0.9s" dur="0.3s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />
+        <g ref={innerGroupRef}>
+          <path d={areaFor(extOut, extN)} fill="url(#gOut)" />
+          <path d={areaFor(extIn, extN)} fill="url(#gIn)" />
+          <path d={line(extOut, extN)} fill="none" stroke={accent2} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" opacity="0.8" />
+          <path d={line(extIn, extN)} fill="none" stroke={accent} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        </g>
+        {/* Dots are outside the scrolling group so they stay pinned at the right edge */}
+        <circle cx={xAt(n - 1)} cy={yAt(lastIn)} r="3" fill={accent} opacity={smoothScroll ? 1 : 0}>
+          {!smoothScroll && <animate attributeName="opacity" from="0" to="1" begin="0.9s" dur="0.3s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />}
         </circle>
-        <circle cx={xAt(n - 1)} cy={yAt(lastOut)} r="3" fill={accent2} opacity="0">
-          <animate attributeName="opacity" from="0" to="1" begin="0.9s" dur="0.3s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />
+        <circle cx={xAt(n - 1)} cy={yAt(lastOut)} r="3" fill={accent2} opacity={smoothScroll ? 1 : 0}>
+          {!smoothScroll && <animate attributeName="opacity" from="0" to="1" begin="0.9s" dur="0.3s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />}
         </circle>
       </g>
 

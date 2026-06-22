@@ -5,7 +5,7 @@ const { useState: _useState, useEffect: _useEffect, useRef: _useRef, useMemo: _u
 // ============================================================
 // PeerDrawer — slide-out detail with charts + controls
 // ============================================================
-function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated }) {
+function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated, tweaks = {} }) {
   const [copied, setCopied] = _useState('');
   const [downloading, setDownloading] = _useState(false);
   const [revoking, setRevoking] = _useState(false);
@@ -154,7 +154,7 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated 
             </div>
             <div className="drawer-chart">
               {thr.rx.length > 0 ? (
-                <ThroughputChart dataIn={thr.rx} dataOut={thr.tx} width={500} height={180} />
+                <ThroughputChart dataIn={thr.rx} dataOut={thr.tx} width={500} height={180} smoothScroll={tweaks.smoothThroughput} refreshInterval={tweaks.refreshInterval || 1000} />
               ) : (
                 <div className="empty-chart">No recent activity</div>
               )}
@@ -1396,6 +1396,21 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
                     className={`toggle ${tweaks.splineChart ? 'on' : ''}`}
                     onClick={() => setTweaks({ ...tweaks, splineChart: !tweaks.splineChart })}
                     aria-pressed={tweaks.splineChart}
+                  >
+                    <span className="toggle-knob" />
+                  </button>
+                </div>
+              </div>
+              <div className="setting-row">
+                <div>
+                  <div className="setting-title">Smoother chart updates</div>
+                  <div className="setting-desc">placeholder description</div>
+                </div>
+                <div className="setting-control">
+                  <button
+                    className={`toggle ${tweaks.smoothThroughput ? 'on' : ''}`}
+                    onClick={() => setTweaks({ ...tweaks, smoothThroughput: !tweaks.smoothThroughput })}
+                    aria-pressed={tweaks.smoothThroughput}
                   >
                     <span className="toggle-knob" />
                   </button>

@@ -535,7 +535,7 @@ function App({ tweaks, setTweaks, onLogout }) {
               </div>
             </div>
           </div>
-          <ThroughputChart dataIn={chartTraffic.rx} dataOut={chartTraffic.tx} width={900} height={240} range={trafficRange} spline={tweaks.splineChart} />
+          <ThroughputChart dataIn={chartTraffic.rx} dataOut={chartTraffic.tx} width={900} height={240} range={trafficRange} spline={tweaks.splineChart} smoothScroll={tweaks.smoothThroughput} refreshInterval={tweaks.refreshInterval || 1000} />
         </div>
 
         <div className="logs-card-shell">
@@ -597,6 +597,7 @@ function App({ tweaks, setTweaks, onLogout }) {
           peer={peers.find(p => p.id === selectedPeer)}
           onClose={() => setSelectedPeer(null)}
           throughputBuffers={peerThr}
+          tweaks={tweaks}
           onRevoke={() => {
             // Re-fetch peers after revoke
             window.WG.apiCall('/api/status').then(j => {
