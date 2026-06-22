@@ -165,11 +165,27 @@ function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 
           <path d={line(extOut, extN)} fill="none" stroke={accent2} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" opacity="0.8" />
           <path d={line(extIn, extN)} fill="none" stroke={accent} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
         </g>
-        {/* Dots are outside the scrolling group so they stay pinned at the right edge */}
-        <circle cx={xAt(n - 1)} cy={yAt(lastIn)} r="3" fill={accent} opacity={smoothScroll ? 1 : 0}>
+        {/* Dots pinned at the right edge (outside the scrolling group).
+            In smooth mode, CSS-transition the cy so the dot glides vertically
+            instead of snapping when a new value arrives. */}
+        <circle
+          cx={xAt(n - 1)}
+          cy={yAt(lastIn)}
+          r="3"
+          fill={accent}
+          opacity={smoothScroll ? 1 : 0}
+          style={smoothScroll ? { transition: 'cy 0.35s cubic-bezier(0,0,0.2,1)' } : undefined}
+        >
           {!smoothScroll && <animate attributeName="opacity" from="0" to="1" begin="0.9s" dur="0.3s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />}
         </circle>
-        <circle cx={xAt(n - 1)} cy={yAt(lastOut)} r="3" fill={accent2} opacity={smoothScroll ? 1 : 0}>
+        <circle
+          cx={xAt(n - 1)}
+          cy={yAt(lastOut)}
+          r="3"
+          fill={accent2}
+          opacity={smoothScroll ? 1 : 0}
+          style={smoothScroll ? { transition: 'cy 0.35s cubic-bezier(0,0,0.2,1)' } : undefined}
+        >
           {!smoothScroll && <animate attributeName="opacity" from="0" to="1" begin="0.9s" dur="0.3s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />}
         </circle>
       </g>
