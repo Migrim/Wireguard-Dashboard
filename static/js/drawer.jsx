@@ -1403,14 +1403,29 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
               </div>
               <div className="setting-row">
                 <div>
-                  <div className="setting-title">Smoother chart updates</div>
-                  <div className="setting-desc">placeholder description</div>
+                  <div className="setting-title">Continuous scroll</div>
+                  <div className="setting-desc">Scrolls the chart between poll updates instead of jumping at each interval</div>
                 </div>
                 <div className="setting-control">
                   <button
                     className={`toggle ${tweaks.smoothThroughput ? 'on' : ''}`}
                     onClick={() => setTweaks({ ...tweaks, smoothThroughput: !tweaks.smoothThroughput })}
                     aria-pressed={tweaks.smoothThroughput}
+                  >
+                    <span className="toggle-knob" />
+                  </button>
+                </div>
+              </div>
+              <div className="setting-row">
+                <div>
+                  <div className="setting-title">Smooth Y-axis scaling</div>
+                  <div className="setting-desc">Animates the Y-axis when throughput crosses unit boundaries instead of snapping</div>
+                </div>
+                <div className="setting-control">
+                  <button
+                    className={`toggle ${tweaks.smoothScale ? 'on' : ''}`}
+                    onClick={() => setTweaks({ ...tweaks, smoothScale: !tweaks.smoothScale })}
+                    aria-pressed={tweaks.smoothScale}
                   >
                     <span className="toggle-knob" />
                   </button>

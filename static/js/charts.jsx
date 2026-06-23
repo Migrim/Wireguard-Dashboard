@@ -10,7 +10,7 @@ const PAD = { l: 70, r: 16, t: 18, b: 28 };
 const MAX_YTICKS = 6;
 
 // samples: [{ts: ms, rx: bytes/s, tx: bytes/s}, ...]
-function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, accent = 'var(--accent)', accent2 = 'var(--accent-2)', range = '1m', spline = false, smoothScroll = false }) {
+function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, accent = 'var(--accent)', accent2 = 'var(--accent-2)', range = '1m', spline = false, smoothScroll = false, smoothScale = false }) {
   const uid = useRef(`tc-${Math.random().toString(36).slice(2)}`).current;
   const containerRef   = useRef(null);
   const svgRef         = useRef(null);
@@ -32,7 +32,8 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
   const samplesRef    = useRef(samples);
   const rangeRef      = useRef(range);
   const splineRef     = useRef(spline);
-  const smoothRef     = useRef(smoothScroll);
+  const smoothRef      = useRef(smoothScroll);
+  const smoothScaleRef = useRef(smoothScale);
   const dotInYRef     = useRef(null);
   const dotOutYRef    = useRef(null);
   const animNiceMaxRef = useRef(null);
@@ -41,7 +42,8 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
   samplesRef.current  = samples;
   rangeRef.current    = range;
   splineRef.current   = spline;
-  smoothRef.current   = smoothScroll;
+  smoothRef.current      = smoothScroll;
+  smoothScaleRef.current = smoothScale;
 
   // Measure container width
   useEffect(() => {
@@ -115,7 +117,7 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
 
       // In smooth mode, lerp the displayed scale toward the target so KB↔MB transitions animate
       if (animNiceMaxRef.current === null) animNiceMaxRef.current = targetNiceMax;
-      if (smoothRef.current) {
+      if (smoothScaleRef.current) {
         animNiceMaxRef.current += (targetNiceMax - animNiceMaxRef.current) * (1 - Math.exp(-dt / 400));
       } else {
         animNiceMaxRef.current = targetNiceMax;
