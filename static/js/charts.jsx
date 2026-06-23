@@ -35,6 +35,7 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
   const smoothRef     = useRef(smoothScroll);
   const dotInYRef     = useRef(null);
   const dotOutYRef    = useRef(null);
+  const animNiceMaxRef = useRef(null);
   const rafRef        = useRef(null);
 
   samplesRef.current  = samples;
@@ -103,18 +104,35 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
         if (s.tx > maxRaw) maxRaw = s.tx;
       }
       maxRaw = Math.max(maxRaw, 10 * 1024);
-      const unitBytes   = maxRaw < 1024 * 1024 ? 1024 : 1024 * 1024;
-      const unitName    = unitBytes === 1024 ? 'KB/s' : 'MB/s';
-      const rawInUnit   = maxRaw / unitBytes;
-      const roughStep   = rawInUnit / 4;
-      const mag         = Math.pow(10, Math.floor(Math.log10(Math.max(roughStep, 0.001))));
-      const norm        = roughStep / mag;
-      const niceStep    = norm < 1.5 ? mag : norm < 3 ? 2 * mag : norm < 7 ? 5 * mag : 10 * mag;
-      const niceMaxUnit = Math.ceil(rawInUnit / niceStep) * niceStep;
-      const niceMax     = niceMaxUnit * unitBytes;
+      const tUnitBytes   = maxRaw < 1024 * 1024 ? 1024 : 1024 * 1024;
+      const tRawInUnit   = maxRaw / tUnitBytes;
+      const tRoughStep   = tRawInUnit / 4;
+      const tMag         = Math.pow(10, Math.floor(Math.log10(Math.max(tRoughStep, 0.001))));
+      const tNorm        = tRoughStep / tMag;
+      const tNiceStep    = tNorm < 1.5 ? tMag : tNorm < 3 ? 2 * tMag : tNorm < 7 ? 5 * tMag : 10 * tMag;
+      const tNiceMaxUnit = Math.ceil(tRawInUnit / tNiceStep) * tNiceStep;
+      const targetNiceMax = tNiceMaxUnit * tUnitBytes;
+
+      // In smooth mode, lerp the displayed scale toward the target so KB↔MB transitions animate
+      if (animNiceMaxRef.current === null) animNiceMaxRef.current = targetNiceMax;
+      if (smoothRef.current) {
+        animNiceMaxRef.current += (targetNiceMax - animNiceMaxRef.current) * (1 - Math.exp(-dt / 400));
+      } else {
+        animNiceMaxRef.current = targetNiceMax;
+      }
+      const niceMax = animNiceMaxRef.current;
+
+      // Derive display unit and tick spacing from the animated scale
+      const unitBytes = niceMax < 1024 * 1024 ? 1024 : 1024 * 1024;
+      const unitName  = unitBytes === 1024 ? 'KB/s' : 'MB/s';
+      const rawInUnit = niceMax / unitBytes;
+      const roughStep = rawInUnit / 4;
+      const mag       = Math.pow(10, Math.floor(Math.log10(Math.max(roughStep, 0.001))));
+      const norm      = roughStep / mag;
+      const niceStep  = norm < 1.5 ? mag : norm < 3 ? 2 * mag : norm < 7 ? 5 * mag : 10 * mag;
 
       const ticks = [];
-      for (let s = 0; s <= niceMaxUnit + niceStep * 0.01 && ticks.length < MAX_YTICKS; s += niceStep) {
+      for (let s = 0; s <= rawInUnit + niceStep * 0.01 && ticks.length < MAX_YTICKS; s += niceStep) {
         ticks.push({
           y:   PAD.t + h - (s * unitBytes / niceMax) * h,
           lbl: s === 0 ? '0 B/s' : `${Number(s.toFixed(4))} ${unitName}`,
