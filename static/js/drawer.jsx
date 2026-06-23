@@ -1391,7 +1391,18 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
                   <div className="setting-title">Smooth lines</div>
                   <div className="setting-desc">Use spline interpolation on the live throughput chart</div>
                 </div>
-                <div className="setting-control">
+                <div className="setting-control" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div className={`tension-slider-wrap${tweaks.splineChart ? ' visible' : ''}`}>
+                    <span style={{ fontSize: 10, color: 'var(--muted)', fontFamily: 'var(--mono)', minWidth: 26, textAlign: 'right' }}>
+                      {Math.round((tweaks.splineTension ?? 1) * 100)}%
+                    </span>
+                    <input
+                      type="range" min="0.1" max="1" step="0.1"
+                      value={tweaks.splineTension ?? 1}
+                      onChange={e => setTweaks({ ...tweaks, splineTension: parseFloat(e.target.value) })}
+                      className="tension-slider"
+                    />
+                  </div>
                   <button
                     className={`toggle ${tweaks.splineChart ? 'on' : ''}`}
                     onClick={() => setTweaks({ ...tweaks, splineChart: !tweaks.splineChart })}

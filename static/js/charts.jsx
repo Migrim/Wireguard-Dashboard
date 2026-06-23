@@ -10,7 +10,7 @@ const PAD = { l: 70, r: 16, t: 18, b: 28 };
 const MAX_YTICKS = 6;
 
 // samples: [{ts: ms, rx: bytes/s, tx: bytes/s}, ...]
-function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, accent = 'var(--accent)', accent2 = 'var(--accent-2)', range = '1m', spline = false, smoothScroll = false, smoothScale = false }) {
+function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, accent = 'var(--accent)', accent2 = 'var(--accent-2)', range = '1m', spline = false, splineTension = 1, smoothScroll = false, smoothScale = false }) {
   const uid = useRef(`tc-${Math.random().toString(36).slice(2)}`).current;
   const containerRef   = useRef(null);
   const svgRef         = useRef(null);
@@ -32,8 +32,9 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
   const samplesRef    = useRef(samples);
   const rangeRef      = useRef(range);
   const splineRef     = useRef(spline);
-  const smoothRef      = useRef(smoothScroll);
-  const smoothScaleRef = useRef(smoothScale);
+  const smoothRef         = useRef(smoothScroll);
+  const smoothScaleRef    = useRef(smoothScale);
+  const splineTensionRef  = useRef(splineTension);
   const dotInYRef     = useRef(null);
   const dotOutYRef    = useRef(null);
   const animNiceMaxRef = useRef(null);
@@ -42,8 +43,9 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
   samplesRef.current  = samples;
   rangeRef.current    = range;
   splineRef.current   = spline;
-  smoothRef.current      = smoothScroll;
-  smoothScaleRef.current = smoothScale;
+  smoothRef.current         = smoothScroll;
+  smoothScaleRef.current    = smoothScale;
+  splineTensionRef.current  = splineTension;
 
   // Measure container width
   useEffect(() => {
@@ -159,8 +161,9 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
             const p3 = visible[Math.min(visible.length - 1, i + 1)];
             const x1 = xAt(p1.ts), x2 = xAt(p2.ts);
             const dx = (x2 - x1) / 3;
-            d += ` C${(x1 + dx).toFixed(1)},${(yAt(p1[key]||0) + (yAt(p2[key]||0) - yAt(p0[key]||0)) / 6).toFixed(1)}` +
-                 ` ${(x2 - dx).toFixed(1)},${(yAt(p2[key]||0) - (yAt(p3[key]||0) - yAt(p1[key]||0)) / 6).toFixed(1)}` +
+            const t = splineTensionRef.current;
+            d += ` C${(x1 + dx).toFixed(1)},${(yAt(p1[key]||0) + (yAt(p2[key]||0) - yAt(p0[key]||0)) / 6 * t).toFixed(1)}` +
+                 ` ${(x2 - dx).toFixed(1)},${(yAt(p2[key]||0) - (yAt(p3[key]||0) - yAt(p1[key]||0)) / 6 * t).toFixed(1)}` +
                  ` ${x2.toFixed(1)},${yAt(p2[key] || 0).toFixed(1)}`;
           }
         } else {

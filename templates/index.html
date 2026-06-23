@@ -652,6 +652,12 @@ html.theme-switching .theme-toggle-icon {
 .toggle.on { background: var(--accent); }
 .toggle-knob { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; background: var(--card); border-radius: 50%; transition: transform 0.2s; box-shadow: var(--shadow-sm); }
 .toggle.on .toggle-knob { transform: translateX(16px); }
+.tension-slider-wrap { display: flex; align-items: center; gap: 6px; overflow: hidden; max-width: 0; opacity: 0; pointer-events: none; transition: max-width 0.22s ease, opacity 0.18s ease; }
+.tension-slider-wrap.visible { max-width: 120px; opacity: 1; pointer-events: auto; }
+.tension-slider { -webkit-appearance: none; appearance: none; width: 72px; height: 2px; background: var(--border); border-radius: 99px; outline: none; cursor: pointer; }
+.tension-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); border: none; cursor: pointer; }
+.tension-slider::-moz-range-track { height: 2px; background: var(--border); border-radius: 99px; border: none; }
+.tension-slider::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); border: none; cursor: pointer; }
 
 /* Port check drawer */
 .pc-hero { background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
@@ -2814,13 +2820,17 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
   const SPLINE_CHART_KEY = 'WG_SPLINE_CHART';
   const REFRESH_INTERVAL_KEY = 'WG_REFRESH_INTERVAL';
   const SMOOTH_THROUGHPUT_KEY = 'WG_SMOOTH_THROUGHPUT';
+  const SMOOTH_SCALE_KEY = 'WG_SMOOTH_SCALE';
+  const SPLINE_TENSION_KEY = 'WG_SPLINE_TENSION';
   const TWEAKS_DEFAULTS = {
     theme: localStorage.getItem(THEME_KEY) || 'light',
     density: 'compact',
     accent: localStorage.getItem(ACCENT_KEY) || 'terracotta',
     devUpdates: localStorage.getItem(DEV_UPDATES_KEY) === 'true',
     splineChart: localStorage.getItem(SPLINE_CHART_KEY) === 'true',
+    splineTension: parseFloat(localStorage.getItem(SPLINE_TENSION_KEY) || '1'),
     smoothThroughput: localStorage.getItem(SMOOTH_THROUGHPUT_KEY) === 'true',
+    smoothScale: localStorage.getItem(SMOOTH_SCALE_KEY) === 'true',
     refreshInterval: parseInt(localStorage.getItem(REFRESH_INTERVAL_KEY) || '1000', 10),
     _tweaksOpen: false,
   };
@@ -2863,6 +2873,14 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
     React.useEffect(() => {
       localStorage.setItem(SMOOTH_THROUGHPUT_KEY, tweaks.smoothThroughput ? 'true' : 'false');
     }, [tweaks.smoothThroughput]);
+
+    React.useEffect(() => {
+      localStorage.setItem(SMOOTH_SCALE_KEY, tweaks.smoothScale ? 'true' : 'false');
+    }, [tweaks.smoothScale]);
+
+    React.useEffect(() => {
+      localStorage.setItem(SPLINE_TENSION_KEY, String(tweaks.splineTension ?? 1));
+    }, [tweaks.splineTension]);
 
     React.useEffect(() => {
       localStorage.setItem(REFRESH_INTERVAL_KEY, String(tweaks.refreshInterval || 1000));
