@@ -1570,7 +1570,7 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
                     </div>
                     <div className="setting-control" style={{ flexDirection: 'column', alignItems: 'flex-end' }}>
                       <div className="seg" style={{ width: 'fit-content' }}>
-                        {[{ v: 500, label: '500ms' }, { v: 1000, label: '1s' }, { v: 2000, label: '2s' }, { v: 5000, label: '5s' }].map(({ v, label }) => (
+                        {[{ v: 10, label: '10ms' }, { v: 500, label: '500ms' }, { v: 1000, label: '1s' }, { v: 2000, label: '2s' }, { v: 5000, label: '5s' }].map(({ v, label }) => (
                           <button
                             key={v}
                             className={tweaks.refreshInterval === v ? 'on' : ''}
@@ -1580,9 +1580,9 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
                       </div>
                       <div style={{
                         display: 'flex', alignItems: 'center', gap: 4,
-                        maxHeight: tweaks.refreshInterval === 500 ? '20px' : '0',
-                        opacity: tweaks.refreshInterval === 500 ? 1 : 0,
-                        marginTop: tweaks.refreshInterval === 500 ? '5px' : '0',
+                        maxHeight: tweaks.refreshInterval <= 500 ? '20px' : '0',
+                        opacity: tweaks.refreshInterval <= 500 ? 1 : 0,
+                        marginTop: tweaks.refreshInterval <= 500 ? '5px' : '0',
                         overflow: 'hidden',
                         transition: 'max-height 0.22s ease, opacity 0.18s ease, margin-top 0.22s ease',
                       }}>
