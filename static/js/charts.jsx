@@ -75,17 +75,25 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
       const rangeMs  = CHART_RANGE_MS[rangeRef.current] || 60000;
       const w        = W - PAD.l - PAD.r;
       const h        = height - PAD.t - PAD.b;
-      // Smooth: window slides in real-time. Static: anchor to last sample so chart doesn't drift between updates.
-      const all      = samplesRef.current;
+      const all = samplesRef.current;
+
+      // In smooth mode, lag the window by one sample interval so new samples arrive
+      // beyond the right clip boundary and scroll into view — no jarring jumps.
+      // In static mode, anchor to the last sample so nothing drifts between polls.
+      const lag = smoothRef.current && all.length >= 2
+        ? Math.min(5000, all[all.length - 1].ts - all[all.length - 2].ts)
+        : 0;
       const nowMs    = smoothRef.current
-        ? Date.now()
+        ? Date.now() - lag
         : (all.length > 0 ? all[all.length - 1].ts : Date.now());
       const winStart = nowMs - rangeMs;
 
-      // Collect samples in [winStart - 2 extra seconds, now] for smooth clip-in
+      // In smooth mode, include samples beyond nowMs (outside clip) so they draw
+      // off-screen and slide left into view. In static mode, include only up to nowMs.
+      const sampleCeil = smoothRef.current ? Date.now() : nowMs;
       const visible = [];
       for (let i = 0; i < all.length; i++) {
-        if (all[i].ts >= winStart - 2000 && all[i].ts <= nowMs) visible.push(all[i]);
+        if (all[i].ts >= winStart - 2000 && all[i].ts <= sampleCeil) visible.push(all[i]);
       }
 
       // Y-axis: nice ticks based on max of visible data
@@ -156,17 +164,21 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
       pathLineInRef.current?.setAttribute('d',  buildPath('rx', false));
       pathLineOutRef.current?.setAttribute('d', buildPath('tx', false));
 
-      // Dots — spring-lerp Y toward latest sample value
-      if (visible.length > 0) {
-        const last  = visible[visible.length - 1];
-        const tInY  = yAt(last.rx || 0);
-        const tOutY = yAt(last.tx || 0);
+      // Dots — use the actual latest sample for Y so the live value is shown.
+      // In smooth mode, pin X to the right clip edge (the lag puts data off-screen
+      // to the right, so the last sample's xAt() would be outside the clip).
+      const dotSrc = all.length > 0 ? all[all.length - 1] : null;
+      if (dotSrc) {
+        const tInY  = yAt(dotSrc.rx || 0);
+        const tOutY = yAt(dotSrc.tx || 0);
         if (dotInYRef.current  === null) dotInYRef.current  = tInY;
         if (dotOutYRef.current === null) dotOutYRef.current = tOutY;
         const lf = 1 - Math.exp(-dt / 120);
         dotInYRef.current  += (tInY  - dotInYRef.current)  * lf;
         dotOutYRef.current += (tOutY - dotOutYRef.current) * lf;
-        const dX = xAt(last.ts).toFixed(1);
+        const dX = smoothRef.current
+          ? (PAD.l + w).toFixed(1)
+          : Math.min(PAD.l + w, xAt(dotSrc.ts)).toFixed(1);
         dotInRef.current?.setAttribute('cx', dX);
         dotInRef.current?.setAttribute('cy', dotInYRef.current.toFixed(2));
         dotInRef.current?.setAttribute('opacity', '1');
@@ -251,9 +263,10 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
           <path ref={pathAreaInRef}  d="" fill={`url(#${uid}-gIn)`} />
           <path ref={pathLineOutRef} d="" fill="none" stroke={accent2} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" opacity="0.8" />
           <path ref={pathLineInRef}  d="" fill="none" stroke={accent}  strokeWidth="2"   strokeLinejoin="round" strokeLinecap="round" />
-          <circle ref={dotInRef}  cx={0} cy={0} r="3" fill={accent}  opacity="0" />
-          <circle ref={dotOutRef} cx={0} cy={0} r="3" fill={accent2} opacity="0" />
         </g>
+        {/* Dots outside clip — always visible; in smooth mode pinned to right edge */}
+        <circle ref={dotInRef}  cx={0} cy={0} r="3" fill={accent}  opacity="0" />
+        <circle ref={dotOutRef} cx={0} cy={0} r="3" fill={accent2} opacity="0" />
 
         <text ref={lblLeft}  x={PAD.l} y={height - 8} fontSize="10" fill="var(--muted)" fontFamily="var(--mono)" />
         <text ref={lblMid}   x={PAD.l} y={height - 8} fontSize="10" fill="var(--muted)" fontFamily="var(--mono)" textAnchor="middle" />
