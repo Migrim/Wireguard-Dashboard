@@ -556,7 +556,7 @@ function App({ tweaks, setTweaks, onLogout }) {
               </div>
             </div>
           </div>
-          <ThroughputChart samples={trafficHistory} width={900} height={240} range={trafficRange} spline={tweaks.splineChart} />
+          <ThroughputChart samples={trafficHistory} width={900} height={240} range={trafficRange} spline={tweaks.splineChart} smoothScroll={tweaks.smoothThroughput} />
         </div>
 
         <div className="logs-card-shell">

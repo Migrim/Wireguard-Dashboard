@@ -10,7 +10,7 @@ const PAD = { l: 70, r: 16, t: 18, b: 28 };
 const MAX_YTICKS = 6;
 
 // samples: [{ts: ms, rx: bytes/s, tx: bytes/s}, ...]
-function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, accent = 'var(--accent)', accent2 = 'var(--accent-2)', range = '1m', spline = false }) {
+function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, accent = 'var(--accent)', accent2 = 'var(--accent-2)', range = '1m', spline = false, smoothScroll = false }) {
   const uid = useRef(`tc-${Math.random().toString(36).slice(2)}`).current;
   const containerRef   = useRef(null);
   const svgRef         = useRef(null);
@@ -28,17 +28,19 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
   const lblRight       = useRef(null);
 
   // Refs read inside RAF — updated synchronously each render, no stale-closure risk
-  const widthRef   = useRef(widthProp);
-  const samplesRef = useRef(samples);
-  const rangeRef   = useRef(range);
-  const splineRef  = useRef(spline);
-  const dotInYRef  = useRef(null);
-  const dotOutYRef = useRef(null);
-  const rafRef     = useRef(null);
+  const widthRef      = useRef(widthProp);
+  const samplesRef    = useRef(samples);
+  const rangeRef      = useRef(range);
+  const splineRef     = useRef(spline);
+  const smoothRef     = useRef(smoothScroll);
+  const dotInYRef     = useRef(null);
+  const dotOutYRef    = useRef(null);
+  const rafRef        = useRef(null);
 
-  samplesRef.current = samples;
-  rangeRef.current   = range;
-  splineRef.current  = spline;
+  samplesRef.current  = samples;
+  rangeRef.current    = range;
+  splineRef.current   = spline;
+  smoothRef.current   = smoothScroll;
 
   // Measure container width
   useEffect(() => {
@@ -73,11 +75,14 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
       const rangeMs  = CHART_RANGE_MS[rangeRef.current] || 60000;
       const w        = W - PAD.l - PAD.r;
       const h        = height - PAD.t - PAD.b;
-      const nowMs    = Date.now();
+      // Smooth: window slides in real-time. Static: anchor to last sample so chart doesn't drift between updates.
+      const all      = samplesRef.current;
+      const nowMs    = smoothRef.current
+        ? Date.now()
+        : (all.length > 0 ? all[all.length - 1].ts : Date.now());
       const winStart = nowMs - rangeMs;
 
       // Collect samples in [winStart - 2 extra seconds, now] for smooth clip-in
-      const all     = samplesRef.current;
       const visible = [];
       for (let i = 0; i < all.length; i++) {
         if (all[i].ts >= winStart - 2000 && all[i].ts <= nowMs) visible.push(all[i]);
