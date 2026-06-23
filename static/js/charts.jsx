@@ -179,12 +179,13 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
         const dX = smoothRef.current
           ? (PAD.l + w).toFixed(1)
           : Math.min(PAD.l + w, xAt(dotSrc.ts)).toFixed(1);
+        const dotOpacity = smoothRef.current ? '0' : '1';
         dotInRef.current?.setAttribute('cx', dX);
         dotInRef.current?.setAttribute('cy', dotInYRef.current.toFixed(2));
-        dotInRef.current?.setAttribute('opacity', '1');
+        dotInRef.current?.setAttribute('opacity', dotOpacity);
         dotOutRef.current?.setAttribute('cx', dX);
         dotOutRef.current?.setAttribute('cy', dotOutYRef.current.toFixed(2));
-        dotOutRef.current?.setAttribute('opacity', '1');
+        dotOutRef.current?.setAttribute('opacity', dotOpacity);
       }
 
       // Y-axis grid + labels — show/hide placeholder groups
