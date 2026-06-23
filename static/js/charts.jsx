@@ -8,198 +8,325 @@ const { useState, useEffect, useLayoutEffect, useRef, useMemo } = React;
 // Maps range labels to milliseconds — mirrors TRAFFIC_RANGES in data.jsx
 const CHART_RANGE_MS = { '10s': 10000, '30s': 30000, '1m': 60000, '5m': 300000, '1h': 3600000, '24h': 86400000, '2m': 120000 };
 
-function ThroughputChart({ dataIn, dataOut, width = 900, height = 280, accent = 'var(--accent)', accent2 = 'var(--accent-2)', range = '2m', spline = false, smoothScroll = false }) {
+const PAD = { l: 70, r: 16, t: 18, b: 28 };
+
+function ThroughputChart({ dataIn, dataOut, width: widthProp = 900, height = 280, accent = 'var(--accent)', accent2 = 'var(--accent-2)', range = '2m', spline = false, smoothScroll = false }) {
   const uid = useRef(`tc-${Math.random().toString(36).slice(2)}`).current;
-  const n = Math.max(dataIn.length, dataOut.length);
-  const pad = { l: 70, r: 16, t: 18, b: 28 };
-  const w = width - pad.l - pad.r;
-  const h = height - pad.t - pad.b;
+  const containerRef = useRef(null);
+  const [containerWidth, setContainerWidth] = useState(widthProp);
 
-  const rafRef = useRef(null);
-  const innerGroupRef = useRef(null);
+  // targetWidthRef: latest measured container width (written by ResizeObserver)
+  // displayWidthRef: current animated width (lerps toward target in RAF tick)
+  const targetWidthRef = useRef(widthProp);
+  const displayWidthRef = useRef(widthProp);
 
-  // Smooth-scroll: each data poll shifts the content left by one slot.
-  // We animate with accumulated delta-time so a hidden-tab resume never causes
-  // a large position jump.  Resetting offset to 0 on each data update means the
-  // incoming slot always scrolls in from exactly the right edge.
-  // useLayoutEffect fires synchronously before paint, so the transform is always
-  // cleared in the same frame that new SVG content lands — no teleport flash.
-  useLayoutEffect(() => {
-    cancelAnimationFrame(rafRef.current);
-    if (innerGroupRef.current) innerGroupRef.current.setAttribute('transform', '');
-    if (!smoothScroll || n < 2) return;
-
-    const rangeMs = CHART_RANGE_MS[range] || 60000;
-    const slotW = w / (n - 1);
-    const pxPerMs = w / rangeMs;
-    let offset = 0;
-    let lastTime = performance.now();
-
-    const tick = (now) => {
-      const dt = Math.min(now - lastTime, 100); // cap prevents jump after hidden-tab resume
-      lastTime = now;
-      offset = Math.min(offset + dt * pxPerMs, slotW);
-      if (innerGroupRef.current) innerGroupRef.current.setAttribute('transform', `translate(${-offset}, 0)`);
-      rafRef.current = requestAnimationFrame(tick);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const measure = (cw) => {
+      if (cw > 0) { targetWidthRef.current = cw; setContainerWidth(cw); }
     };
-    rafRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [smoothScroll, dataIn, dataOut, n, w, range]);
+    measure(Math.round(el.getBoundingClientRect().width));
+    const ro = new ResizeObserver(entries => {
+      const cw = entries[0]?.contentRect.width;
+      if (cw > 0) measure(Math.round(cw));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
-  // One extra point repeating the latest value keeps the right edge filled while
-  // the chart scrolls toward it.  xAt is keyed on n so this extra point sits
-  // exactly one slotW beyond the right edge, ready to scroll into view.
-  const extIn  = smoothScroll && n > 0 ? [...dataIn,  dataIn[dataIn.length - 1]   || 0] : dataIn;
-  const extOut = smoothScroll && n > 0 ? [...dataOut, dataOut[dataOut.length - 1] || 0] : dataOut;
-  const extN   = smoothScroll ? n + 1 : n;
+  const n = Math.max(dataIn.length, dataOut.length);
+  const width = containerWidth;
+  const w = width - PAD.l - PAD.r;
+  const h = height - PAD.t - PAD.b;
+
+  // ── SVG element refs (RAF writes to these directly) ──────────────────────
+  const svgRef        = useRef(null);
+  const innerGroupRef = useRef(null);
+  const clipRectRef   = useRef(null);
+  const pathAreaOutRef  = useRef(null);
+  const pathAreaInRef   = useRef(null);
+  const pathLineOutRef  = useRef(null);
+  const pathLineInRef   = useRef(null);
+  const dotInRef      = useRef(null);
+  const dotOutRef     = useRef(null);
+  const vGridRef      = useRef(null);   // <g> containing vertical grid lines
+  const hGridRef      = useRef(null);   // <g> containing horizontal tick lines+labels
+  const lblLeft       = useRef(null);
+  const lblMid        = useRef(null);
+  const lblRight      = useRef(null);
+
+  // ── Per-frame animation state ─────────────────────────────────────────────
+  const rafRef     = useRef(null);
+  const offsetRef  = useRef(0);
+  const dotInYRef  = useRef(null);  // null = uninitialised (snaps on first tick)
+  const dotOutYRef = useRef(null);
+  const prevDataRef = useRef({ dataIn, dataOut });
+
+  // ── Live data snapshot — written every render, read inside RAF tick ───────
+  const snap = useRef({});
 
   const { maxVal, ticks } = useMemo(() => {
     let m = 0;
     for (let i = 0; i < n; i++) m = Math.max(m, dataIn[i] || 0, dataOut[i] || 0);
-
-    // Work in KB/s or MB/s to get nice round labels
-    const raw = Math.max(m, 10 * 1024); // at least 10 KB/s so the idle chart looks sane
+    const raw = Math.max(m, 10 * 1024);
     const unitBytes = raw < 1024 * 1024 ? 1024 : 1024 * 1024;
-    const unitName = unitBytes === 1024 ? 'KB/s' : 'MB/s';
+    const unitName  = unitBytes === 1024 ? 'KB/s' : 'MB/s';
     const rawInUnit = raw / unitBytes;
-
-    // Nice step: target 4 intervals
     const roughStep = rawInUnit / 4;
-    const mag = Math.pow(10, Math.floor(Math.log10(Math.max(roughStep, 0.001))));
+    const mag  = Math.pow(10, Math.floor(Math.log10(Math.max(roughStep, 0.001))));
     const norm = roughStep / mag;
     const niceStep = norm < 1.5 ? mag : norm < 3 ? 2 * mag : norm < 7 ? 5 * mag : 10 * mag;
-
     const niceMaxInUnit = Math.ceil(rawInUnit / niceStep) * niceStep;
     const niceMax = niceMaxInUnit * unitBytes;
-    const hInner = height - pad.t - pad.b;
-
+    const hInner  = height - PAD.t - PAD.b;
     const ticksArr = [];
     for (let s = 0; s <= niceMaxInUnit + niceStep * 0.01; s += niceStep) {
-      const v = s * unitBytes;
-      const y = pad.t + hInner - (v / niceMax) * hInner;
-      const label = s === 0 ? '0 B/s' : `${Number(s.toFixed(4))} ${unitName}`;
-      ticksArr.push({ v, y, label });
+      const v  = s * unitBytes;
+      const y  = PAD.t + hInner - (v / niceMax) * hInner;
+      const lbl = s === 0 ? '0 B/s' : `${Number(s.toFixed(4))} ${unitName}`;
+      ticksArr.push({ v, y, label: lbl });
     }
-
     return { maxVal: niceMax, ticks: ticksArr };
   }, [dataIn, dataOut, n, height]);
 
-  // Uniform slot width — x-coords are always evenly spaced.
-  const slotW = n <= 1 ? w : w / (n - 1);
-  const xAt = (i) => pad.l + i * slotW;
-  const yAt = (v) => pad.t + h - (v / maxVal) * h;
+  const extIn  = smoothScroll && n > 0 ? [...dataIn,  dataIn[dataIn.length - 1]   || 0] : dataIn;
+  const extOut = smoothScroll && n > 0 ? [...dataOut, dataOut[dataOut.length - 1] || 0] : dataOut;
+  const extN   = smoothScroll ? n + 1 : n;
 
-  // Linear path (M L L …).
-  const linePath = (data, count) => {
-    let d = '';
-    for (let i = 0; i < count; i++) {
-      d += (i === 0 ? 'M' : 'L') + xAt(i).toFixed(1) + ',' + yAt(data[i] || 0).toFixed(1) + ' ';
-    }
-    return d;
-  };
-
-  // Catmull-Rom spline converted to cubic Bezier.
-  // Because x-coords are uniformly spaced the x control-point offset is always
-  // spanPx/6, where span = slotW at clamped endpoints and 2×slotW in the interior.
-  // This avoids looking up p0x/p3x on every iteration.
-  const splinePath = (data, count) => {
-    let d = `M${xAt(0).toFixed(1)},${yAt(data[0] || 0).toFixed(1)}`;
-    for (let i = 1; i < count; i++) {
-      const y0 = yAt(data[Math.max(0, i - 2)]         || 0);
-      const y1 = yAt(data[i - 1]                       || 0);
-      const y2 = yAt(data[i]                           || 0);
-      const y3 = yAt(data[Math.min(count - 1, i + 1)] || 0);
-      const x1 = xAt(i - 1), x2 = xAt(i);
-      const spanL = i === 1         ? slotW : 2 * slotW;
-      const spanR = i === count - 1 ? slotW : 2 * slotW;
-      d += ` C${(x1 + spanL / 6).toFixed(1)},${(y1 + (y2 - y0) / 6).toFixed(1)} ${(x2 - spanR / 6).toFixed(1)},${(y2 - (y3 - y1) / 6).toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
-    }
-    return d;
-  };
-
-  const buildLine = (data, count) => (spline && count >= 2) ? splinePath(data, count) : linePath(data, count);
-  const buildArea = (data, count) =>
-    buildLine(data, count) +
-    `L${xAt(count - 1).toFixed(1)},${(pad.t + h).toFixed(1)} L${xAt(0).toFixed(1)},${(pad.t + h).toFixed(1)} Z`;
-
-  const lastIn = dataIn[n - 1] || 0;
+  const lastIn  = dataIn[n - 1]  || 0;
   const lastOut = dataOut[n - 1] || 0;
+
   const rangeLabels = {
     '10s': ['-10s', '-5s', 'now'],
     '30s': ['-30s', '-15s', 'now'],
-    '1m': ['-1m', '-30s', 'now'],
-    '5m': ['-5m', '-2.5m', 'now'],
-    '1h': ['-1h', '-30m', 'now'],
+    '1m':  ['-1m', '-30s', 'now'],
+    '5m':  ['-5m', '-2.5m', 'now'],
+    '1h':  ['-1h', '-30m', 'now'],
     '24h': ['-24h', '-12h', 'now'],
-    '2m': ['-2m', '-1m', 'now'],
+    '2m':  ['-2m', '-1m', 'now'],
   };
   const labels = rangeLabels[range] || rangeLabels['2m'];
 
+  // Update snapshot every render (safe: RAF reads after commit)
+  snap.current = { extIn, extOut, extN, n, maxVal, lastIn, lastOut, range, labels, h, spline };
+
+  // React-computed helpers for the initial/non-smooth render pass
+  const slotW = n <= 1 ? w : w / (n - 1);
+  const xAt = (i) => PAD.l + i * slotW;
+  const yAt = (v) => PAD.t + h - (v / maxVal) * h;
+
+  const linePath = (data, count, xFn, yFn) => {
+    let d = '';
+    for (let i = 0; i < count; i++) d += (i === 0 ? 'M' : 'L') + xFn(i).toFixed(1) + ',' + yFn(data[i] || 0).toFixed(1) + ' ';
+    return d;
+  };
+  const splinePath = (data, count, xFn, yFn, sW) => {
+    let d = `M${xFn(0).toFixed(1)},${yFn(data[0] || 0).toFixed(1)}`;
+    for (let i = 1; i < count; i++) {
+      const y0 = yFn(data[Math.max(0, i - 2)]         || 0);
+      const y1 = yFn(data[i - 1]                       || 0);
+      const y2 = yFn(data[i]                           || 0);
+      const y3 = yFn(data[Math.min(count - 1, i + 1)] || 0);
+      const x1 = xFn(i - 1), x2 = xFn(i);
+      const spL = i === 1         ? sW : 2 * sW;
+      const spR = i === count - 1 ? sW : 2 * sW;
+      d += ` C${(x1 + spL / 6).toFixed(1)},${(y1 + (y2 - y0) / 6).toFixed(1)} ${(x2 - spR / 6).toFixed(1)},${(y2 - (y3 - y1) / 6).toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
+    }
+    return d;
+  };
+  const buildLine = (data, count, xFn = xAt, yFn = yAt, sW = slotW) =>
+    (spline && count >= 2) ? splinePath(data, count, xFn, yFn, sW) : linePath(data, count, xFn, yFn);
+  const buildArea = (data, count, xFn = xAt, yFn = yAt, sW = slotW) =>
+    buildLine(data, count, xFn, yFn, sW) +
+    `L${xFn(count - 1).toFixed(1)},${(PAD.t + h).toFixed(1)} L${xFn(0).toFixed(1)},${(PAD.t + h).toFixed(1)} Z`;
+
+  // ── Main animation loop ───────────────────────────────────────────────────
+  useLayoutEffect(() => {
+    const dataChanged = prevDataRef.current.dataIn !== dataIn || prevDataRef.current.dataOut !== dataOut;
+    prevDataRef.current = { dataIn, dataOut };
+
+    cancelAnimationFrame(rafRef.current);
+
+    if (!smoothScroll || n < 2) {
+      if (innerGroupRef.current) innerGroupRef.current.setAttribute('transform', '');
+      offsetRef.current  = 0;
+      dotInYRef.current  = null;
+      dotOutYRef.current = null;
+      return;
+    }
+
+    if (dataChanged) {
+      if (innerGroupRef.current) innerGroupRef.current.setAttribute('transform', '');
+      offsetRef.current = 0;
+    }
+
+    let lastTime = performance.now();
+
+    const tick = (now) => {
+      const dt = Math.min(now - lastTime, 100);
+      lastTime = now;
+
+      const { extIn, extOut, extN, n: dN, maxVal, lastIn, lastOut, range, h: dh, spline: sp } = snap.current;
+      if (!dN || dN < 2) { rafRef.current = requestAnimationFrame(tick); return; }
+
+      // ── 1. Spring-lerp display width toward measured target ──────────────
+      const tw  = targetWidthRef.current;
+      const gap = tw - displayWidthRef.current;
+      displayWidthRef.current = Math.abs(gap) > 0.3
+        ? displayWidthRef.current + gap * (1 - Math.exp(-dt / 80))
+        : tw;
+      const dW = displayWidthRef.current;
+      const cW = dW - PAD.l - PAD.r;
+
+      svgRef.current?.setAttribute('viewBox', `0 0 ${dW.toFixed(1)} ${height}`);
+
+      // ── 2. Scroll offset ─────────────────────────────────────────────────
+      const rangeMs = CHART_RANGE_MS[range] || 60000;
+      const sW      = dN <= 1 ? cW : cW / (dN - 1);
+      offsetRef.current = Math.min(offsetRef.current + dt * cW / rangeMs, sW);
+      innerGroupRef.current?.setAttribute('transform', `translate(${(-offsetRef.current).toFixed(2)}, 0)`);
+
+      // ── 3. Geometry helpers based on animated width ───────────────────────
+      const xA = (i) => PAD.l + i * sW;
+      const yA = (v) => PAD.t + dh - (v / maxVal) * dh;
+
+      // ── 4. Rebuild and apply path data ───────────────────────────────────
+      const mkLine = (data, count) => {
+        if (sp && count >= 2) {
+          let d = `M${xA(0).toFixed(1)},${yA(data[0] || 0).toFixed(1)}`;
+          for (let i = 1; i < count; i++) {
+            const y0 = yA(data[Math.max(0, i - 2)]         || 0);
+            const y1 = yA(data[i - 1]                       || 0);
+            const y2 = yA(data[i]                           || 0);
+            const y3 = yA(data[Math.min(count - 1, i + 1)] || 0);
+            const x1 = xA(i - 1), x2 = xA(i);
+            const spL = i === 1         ? sW : 2 * sW;
+            const spR = i === count - 1 ? sW : 2 * sW;
+            d += ` C${(x1 + spL / 6).toFixed(1)},${(y1 + (y2 - y0) / 6).toFixed(1)} ${(x2 - spR / 6).toFixed(1)},${(y2 - (y3 - y1) / 6).toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
+          }
+          return d;
+        }
+        let d = '';
+        for (let i = 0; i < count; i++) d += (i === 0 ? 'M' : 'L') + xA(i).toFixed(1) + ',' + yA(data[i] || 0).toFixed(1) + ' ';
+        return d;
+      };
+      const mkArea = (data, count) =>
+        mkLine(data, count) + `L${xA(count - 1).toFixed(1)},${(PAD.t + dh).toFixed(1)} L${xA(0).toFixed(1)},${(PAD.t + dh).toFixed(1)} Z`;
+
+      pathAreaOutRef.current?.setAttribute('d', mkArea(extOut, extN));
+      pathAreaInRef.current?.setAttribute('d',  mkArea(extIn,  extN));
+      pathLineOutRef.current?.setAttribute('d', mkLine(extOut, extN));
+      pathLineInRef.current?.setAttribute('d',  mkLine(extIn,  extN));
+
+      // ── 5. Clip rect width ───────────────────────────────────────────────
+      clipRectRef.current?.setAttribute('width', cW.toFixed(1));
+
+      // ── 6. Dots: spring-lerp Y toward current value ──────────────────────
+      const tInY  = yA(lastIn);
+      const tOutY = yA(lastOut);
+      if (dotInYRef.current  === null) dotInYRef.current  = tInY;
+      if (dotOutYRef.current === null) dotOutYRef.current = tOutY;
+      const lf = 1 - Math.exp(-dt / 120);   // ~120 ms time-constant
+      dotInYRef.current  += (tInY  - dotInYRef.current)  * lf;
+      dotOutYRef.current += (tOutY - dotOutYRef.current) * lf;
+      const dX = xA(dN - 1).toFixed(1);
+      dotInRef.current?.setAttribute('cx',  dX);
+      dotInRef.current?.setAttribute('cy',  dotInYRef.current.toFixed(2));
+      dotOutRef.current?.setAttribute('cx', dX);
+      dotOutRef.current?.setAttribute('cy', dotOutYRef.current.toFixed(2));
+
+      // ── 7. Vertical grid lines ───────────────────────────────────────────
+      if (vGridRef.current) {
+        const lines = vGridRef.current.children;
+        const fracs = [0, 0.25, 0.5, 0.75, 1];
+        for (let i = 0; i < Math.min(lines.length, fracs.length); i++) {
+          const x = (PAD.l + cW * fracs[i]).toFixed(1);
+          lines[i].setAttribute('x1', x);
+          lines[i].setAttribute('x2', x);
+        }
+      }
+
+      // ── 8. Horizontal tick line right endpoints ──────────────────────────
+      if (hGridRef.current) {
+        const x2 = (PAD.l + cW).toFixed(1);
+        hGridRef.current.querySelectorAll('line').forEach(l => l.setAttribute('x2', x2));
+      }
+
+      // ── 9. Time-axis labels ──────────────────────────────────────────────
+      lblLeft.current?.setAttribute('x',  PAD.l.toString());
+      lblMid.current?.setAttribute('x',   (PAD.l + cW / 2).toFixed(1));
+      lblRight.current?.setAttribute('x', (PAD.l + cW).toFixed(1));
+
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [smoothScroll, dataIn, dataOut, n, range, spline, height]);
+
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ width: '100%', height, display: 'block' }}>
-      <defs>
-        <linearGradient id={`${uid}-gIn`} x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor={accent} stopOpacity="0.35" />
-          <stop offset="100%" stopColor={accent} stopOpacity="0.02" />
-        </linearGradient>
-        <linearGradient id={`${uid}-gOut`} x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor={accent2} stopOpacity="0.28" />
-          <stop offset="100%" stopColor={accent2} stopOpacity="0.01" />
-        </linearGradient>
-        <clipPath id={`${uid}-clip`}>
-          <rect x={pad.l} y={pad.t} height={h}>
-            <animate attributeName="width" from="0" to={w} dur="1.1s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />
-          </rect>
-        </clipPath>
-      </defs>
+    <div ref={containerRef} style={{ width: '100%' }}>
+      <svg ref={svgRef} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ width: '100%', height, display: 'block' }}>
+        <defs>
+          <linearGradient id={`${uid}-gIn`} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor={accent} stopOpacity="0.35" />
+            <stop offset="100%" stopColor={accent} stopOpacity="0.02" />
+          </linearGradient>
+          <linearGradient id={`${uid}-gOut`} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor={accent2} stopOpacity="0.28" />
+            <stop offset="100%" stopColor={accent2} stopOpacity="0.01" />
+          </linearGradient>
+          <clipPath id={`${uid}-clip`}>
+            {/* In smooth mode: RAF manages clip width; no SMIL animate needed */}
+            <rect ref={clipRectRef} x={PAD.l} y={PAD.t} width={w} height={h}>
+              {!smoothScroll && <animate attributeName="width" from="0" to={w} dur="1.1s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />}
+            </rect>
+          </clipPath>
+        </defs>
 
-      {ticks.map((t, i) => (
-        <g key={i}>
-          <line x1={pad.l} x2={pad.l + w} y1={t.y} y2={t.y} stroke="var(--border)" strokeDasharray={i === 0 ? '' : '2 3'} strokeWidth="1" opacity="0.6" />
-          <text x={pad.l - 8} y={t.y + 3} textAnchor="end" fontSize="10" fill="var(--muted)" fontFamily="var(--mono)">{t.label}</text>
+        {/* Horizontal tick lines + Y labels — React-rendered (y-coords are data-driven, not width-driven).
+            RAF updates the x2 endpoint of each line during resize. */}
+        <g ref={hGridRef}>
+          {ticks.map((t, i) => (
+            <g key={i}>
+              <line x1={PAD.l} x2={PAD.l + w} y1={t.y} y2={t.y} stroke="var(--border)" strokeDasharray={i === 0 ? '' : '2 3'} strokeWidth="1" opacity="0.6" />
+              <text x={PAD.l - 8} y={t.y + 3} textAnchor="end" fontSize="10" fill="var(--muted)" fontFamily="var(--mono)">{t.label}</text>
+            </g>
+          ))}
         </g>
-      ))}
 
-      {[0, 0.25, 0.5, 0.75, 1].map((f, i) => (
-        <line key={i} x1={pad.l + w * f} x2={pad.l + w * f} y1={pad.t} y2={pad.t + h} stroke="var(--border)" strokeDasharray="2 3" strokeWidth="1" opacity="0.35" />
-      ))}
-
-      <g clipPath={`url(#${uid}-clip)`}>
-        <g ref={innerGroupRef}>
-          <path d={buildArea(extOut, extN)} fill={`url(#${uid}-gOut)`} />
-          <path d={buildArea(extIn, extN)} fill={`url(#${uid}-gIn)`} />
-          <path d={buildLine(extOut, extN)} fill="none" stroke={accent2} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" opacity="0.8" />
-          <path d={buildLine(extIn, extN)} fill="none" stroke={accent} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        {/* Vertical grid lines — initial positions from React, RAF updates x on resize */}
+        <g ref={vGridRef}>
+          {[0, 0.25, 0.5, 0.75, 1].map((f, i) => (
+            <line key={i} x1={PAD.l + w * f} x2={PAD.l + w * f} y1={PAD.t} y2={PAD.t + h} stroke="var(--border)" strokeDasharray="2 3" strokeWidth="1" opacity="0.35" />
+          ))}
         </g>
-        {/* Dots pinned at the right edge (outside the scrolling group).
-            In smooth mode, CSS-transition the cy so the dot glides vertically
-            instead of snapping when a new value arrives. */}
-        <circle
-          cx={xAt(n - 1)}
-          cy={yAt(lastIn)}
-          r="3"
-          fill={accent}
-          opacity={smoothScroll ? 1 : 0}
-          style={smoothScroll ? { transition: 'cy 0.35s cubic-bezier(0,0,0.2,1)' } : undefined}
-        >
-          {!smoothScroll && <animate attributeName="opacity" from="0" to="1" begin="0.9s" dur="0.3s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />}
-        </circle>
-        <circle
-          cx={xAt(n - 1)}
-          cy={yAt(lastOut)}
-          r="3"
-          fill={accent2}
-          opacity={smoothScroll ? 1 : 0}
-          style={smoothScroll ? { transition: 'cy 0.35s cubic-bezier(0,0,0.2,1)' } : undefined}
-        >
-          {!smoothScroll && <animate attributeName="opacity" from="0" to="1" begin="0.9s" dur="0.3s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />}
-        </circle>
-      </g>
 
-      <text x={pad.l} y={height - 8} fontSize="10" fill="var(--muted)" fontFamily="var(--mono)">{labels[0]}</text>
-      <text x={pad.l + w / 2} y={height - 8} fontSize="10" fill="var(--muted)" fontFamily="var(--mono)" textAnchor="middle">{labels[1]}</text>
-      <text x={pad.l + w} y={height - 8} fontSize="10" fill="var(--muted)" fontFamily="var(--mono)" textAnchor="end">{labels[2]}</text>
-    </svg>
+        <g clipPath={`url(#${uid}-clip)`}>
+          <g ref={innerGroupRef}>
+            {/* In smooth mode d="" — RAF fills on first tick (~1 frame). Non-smooth: React-rendered. */}
+            <path ref={pathAreaOutRef} d={smoothScroll ? '' : buildArea(extOut, extN)} fill={`url(#${uid}-gOut)`} />
+            <path ref={pathAreaInRef}  d={smoothScroll ? '' : buildArea(extIn,  extN)} fill={`url(#${uid}-gIn)`} />
+            <path ref={pathLineOutRef} d={smoothScroll ? '' : buildLine(extOut, extN)} fill="none" stroke={accent2} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" opacity="0.8" />
+            <path ref={pathLineInRef}  d={smoothScroll ? '' : buildLine(extIn,  extN)} fill="none" stroke={accent}  strokeWidth="2"   strokeLinejoin="round" strokeLinecap="round" />
+          </g>
+
+          {/* Dots: RAF spring-lerps cy each frame in smooth mode */}
+          <circle ref={dotInRef}  cx={xAt(n - 1)} cy={yAt(lastIn)}  r="3" fill={accent}  opacity={smoothScroll ? 1 : 0}>
+            {!smoothScroll && <animate attributeName="opacity" from="0" to="1" begin="0.9s" dur="0.3s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />}
+          </circle>
+          <circle ref={dotOutRef} cx={xAt(n - 1)} cy={yAt(lastOut)} r="3" fill={accent2} opacity={smoothScroll ? 1 : 0}>
+            {!smoothScroll && <animate attributeName="opacity" from="0" to="1" begin="0.9s" dur="0.3s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />}
+          </circle>
+        </g>
+
+        {/* Time-axis labels — RAF updates x on resize */}
+        <text ref={lblLeft}  x={PAD.l}           y={height - 8} fontSize="10" fill="var(--muted)" fontFamily="var(--mono)">{labels[0]}</text>
+        <text ref={lblMid}   x={PAD.l + w / 2}   y={height - 8} fontSize="10" fill="var(--muted)" fontFamily="var(--mono)" textAnchor="middle">{labels[1]}</text>
+        <text ref={lblRight} x={PAD.l + w}        y={height - 8} fontSize="10" fill="var(--muted)" fontFamily="var(--mono)" textAnchor="end">{labels[2]}</text>
+      </svg>
+    </div>
   );
 }
 
