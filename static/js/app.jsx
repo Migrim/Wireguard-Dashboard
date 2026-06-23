@@ -245,20 +245,42 @@ function App({ tweaks, setTweaks, onLogout }) {
     return () => { cancelled = true; clearInterval(id); };
   }, [connectedPeerKey]);
 
+  // Fetch initial history once on mount (5 minutes covers all short ranges)
   uE(() => {
     let cancelled = false;
-    const fetchTrafficHistory = async () => {
-      try {
-        const h = await window.WG.apiCall(`/api/traffic/history?range=${trafficRange}&max_points=1800`);
+    window.WG.apiCall('/api/traffic/history?range=5m&max_points=3000')
+      .then(h => {
         if (cancelled) return;
         setTrafficHistory((h.samples || []).map(s => ({
           ts: Number(s.ts) * 1000,
           rx: Math.max(0, Number(s.rx_bps) || 0),
           tx: Math.max(0, Number(s.tx_bps) || 0),
         })));
-      } catch (_) {}
-    };
-    fetchTrafficHistory();
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  // When switching to 1h or 24h, extend the buffer with server history (merge, don't replace)
+  uE(() => {
+    if (trafficRange !== '1h' && trafficRange !== '24h') return;
+    let cancelled = false;
+    window.WG.apiCall(`/api/traffic/history?range=${trafficRange}&max_points=3600`)
+      .then(h => {
+        if (cancelled) return;
+        const fetched = (h.samples || []).map(s => ({
+          ts: Number(s.ts) * 1000,
+          rx: Math.max(0, Number(s.rx_bps) || 0),
+          tx: Math.max(0, Number(s.tx_bps) || 0),
+        }));
+        setTrafficHistory(prev => {
+          const existingTs = new Set(prev.map(s => s.ts));
+          const toAdd = fetched.filter(s => !existingTs.has(s.ts));
+          if (!toAdd.length) return prev;
+          return [...prev, ...toAdd].sort((a, b) => a.ts - b.ts);
+        });
+      })
+      .catch(() => {});
     return () => { cancelled = true; };
   }, [trafficRange]);
 
@@ -276,8 +298,7 @@ function App({ tweaks, setTweaks, onLogout }) {
           tx: Math.max(0, Number(t.tx_bps) || 0),
         };
         setTrafficHistory(prev => {
-          const rangeMs = window.WG.TRAFFIC_RANGES[trafficRange] || window.WG.TRAFFIC_RANGES['1m'];
-          const cutoff = Date.now() - rangeMs;
+          const cutoff = Date.now() - 24 * 60 * 60 * 1000; // keep up to 24h in memory
           const next = prev.length && sample.ts <= prev[prev.length - 1].ts
             ? [...prev.slice(0, -1), sample]
             : [...prev, sample];
@@ -288,7 +309,7 @@ function App({ tweaks, setTweaks, onLogout }) {
     fetchTraffic();
     const id = setInterval(fetchTraffic, interval);
     return () => { cancelled = true; clearInterval(id); };
-  }, [trafficRange, tweaks.refreshInterval]);
+  }, [tweaks.refreshInterval]);
 
   // Poll /api/logs every 8s
   uE(() => {
@@ -535,7 +556,7 @@ function App({ tweaks, setTweaks, onLogout }) {
               </div>
             </div>
           </div>
-          <ThroughputChart dataIn={chartTraffic.rx} dataOut={chartTraffic.tx} width={900} height={240} range={trafficRange} spline={tweaks.splineChart} smoothScroll={tweaks.smoothThroughput} />
+          <ThroughputChart samples={trafficHistory} width={900} height={240} range={trafficRange} spline={tweaks.splineChart} />
         </div>
 
         <div className="logs-card-shell">
