@@ -309,9 +309,8 @@ function NotifIcon({ level }) {
   return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 11v5M12 8h.01"/></svg>;
 }
 
-function LogsPanel({ logs, notifications = [], onExpand }) {
+function LogsPanel({ logs, notifications = [], onExpand, onDismiss = () => {} }) {
   const scrollRef = _useRef(null);
-  const [dismissed, setDismissed] = _useState([]);
   const [idx, setIdx] = _useState(0);
   const [leaving, setLeaving] = _useState(false);
 
@@ -319,7 +318,7 @@ function LogsPanel({ logs, notifications = [], onExpand }) {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [logs.length]);
 
-  const visible = notifications.filter(n => !dismissed.includes(n.title));
+  const visible = notifications;
   const safeIdx = visible.length ? idx % visible.length : 0;
   const current = visible[safeIdx];
 
@@ -355,7 +354,7 @@ function LogsPanel({ logs, notifications = [], onExpand }) {
                 <button
                   className="notif-dismiss"
                   aria-label="Dismiss notification"
-                  onClick={e => { e.stopPropagation(); setDismissed(d => [...d, current.title]); }}
+                  onClick={e => { e.stopPropagation(); onDismiss(current.key); }}
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
                 </button>

@@ -567,7 +567,7 @@ function App({ tweaks, setTweaks, onLogout }) {
         </div>
 
         <div className="logs-card-shell">
-          <LogsPanel logs={logs} notifications={alerts} onExpand={() => setLogsDrawerOpen(true)} />
+          <LogsPanel logs={logs} notifications={alerts} onExpand={() => setLogsDrawerOpen(true)} onDismiss={dismissAlert} />
         </div>
       </section>
 
@@ -719,7 +719,7 @@ function KPIServiceControl({ serviceActive, serviceEnabled, unit, startedAt, ser
           window.WG.toast?.confirm?.(
             'Restart the server?',
             'Peers will briefly disconnect during the restart.',
-            { confirmLabel: 'Restart', onConfirm: () => doService('restart') }
+            { confirmLabel: 'Restart', onConfirm: () => doService('restart'), dedup: 'confirm-restart' }
           );
         }}>
           {serviceLoading === 'restart' ? <span className="pc-spinner" /> : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-9-9c2.5 0 4.7 1 6.4 2.6L21 3v6h-6"/></svg>}
@@ -729,7 +729,7 @@ function KPIServiceControl({ serviceActive, serviceEnabled, unit, startedAt, ser
           window.WG.toast?.confirm?.(
             'Stop the server?',
             'All connected peers will be disconnected.',
-            { confirmLabel: 'Stop server', onConfirm: () => doService('stop') }
+            { confirmLabel: 'Stop server', onConfirm: () => doService('stop'), dedup: 'confirm-stop' }
           );
         }}>
           {serviceLoading === 'stop' ? <span className="pc-spinner" /> : <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>}

@@ -65,6 +65,18 @@
 
     const itemRef = _tR(null);
     const szRef   = _tR(null);
+    const icoRef  = _tR(null);
+
+    _tE(() => {
+      if (!t._shakeAt) return;
+      const el = icoRef.current;
+      if (!el) return;
+      el.classList.remove('t-bounce');
+      void el.offsetWidth;
+      el.classList.add('t-bounce');
+      const id = setTimeout(() => el.classList.remove('t-bounce'), 420);
+      return () => clearTimeout(id);
+    }, [t._shakeAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // FLIP resize — must be declared BEFORE size-capture so szRef still holds the OLD size
     _tL(() => {
@@ -149,7 +161,7 @@
         aria-live="polite"
       >
         <div className="toast-row">
-          <span className={`toast-ico toast-ico-${t.type}`}><ToastIcon type={t.type} /></span>
+          <span ref={icoRef} className={`toast-ico toast-ico-${t.type}`}><ToastIcon type={t.type} /></span>
           <div className="toast-txt">
             <div className="toast-ttl">{t.title}</div>
             {t.desc && <div className="toast-dsc">{t.desc}</div>}
@@ -189,7 +201,13 @@
 
     _tE(() => _sub(ev => {
       setList(p => {
-        if (ev.type === 'add')     return [...p.slice(-4), ev.toast]; // max 5 visible
+        if (ev.type === 'add') {
+          if (ev.toast.dedup) {
+            const existing = p.find(t => t.dedup === ev.toast.dedup);
+            if (existing) return p.map(t => t.id === existing.id ? { ...t, _shakeAt: Date.now() } : t);
+          }
+          return [...p.slice(-4), ev.toast];
+        }
         if (ev.type === 'dismiss') return p.filter(t => t.id !== ev.id);
         if (ev.type === 'update')  return p.map(t => t.id === ev.id ? { ...t, ...ev.patch } : t);
         return p;

@@ -2862,6 +2862,17 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
 .toast-ico-info,
 .toast-ico-loading { color: var(--accent); }
 
+@keyframes toastIcoBounce {
+  0%   { transform: scale(1) translateY(0); }
+  28%  { transform: scale(1.45) translateY(-3px); }
+  55%  { transform: scale(0.88) translateY(2px); }
+  78%  { transform: scale(1.15) translateY(-1px); }
+  100% { transform: scale(1) translateY(0); }
+}
+.toast-ico.t-bounce {
+  animation: toastIcoBounce 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
 .toast-spin {
   display: block;
   width: 15px; height: 15px;
