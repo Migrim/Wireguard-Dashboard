@@ -331,13 +331,18 @@ function App({ tweaks, setTweaks, onLogout }) {
 
   const doService = async (action) => {
     setServiceLoading(action);
+    const startLabel  = { start: 'Starting',   restart: 'Restarting', stop: 'Stopping'  }[action] ?? action;
+    const doneLabel   = { start: 'Server started', restart: 'Server restarted', stop: 'Server stopped' }[action] ?? 'Done';
+    const t = window.WG.toast?.loading?.(`${startLabel} server…`);
     try {
       await window.WG.apiCall('/api/service', { method: 'POST', body: JSON.stringify({ action }) });
-      // Force a status refresh
       const j = await window.WG.apiCall('/api/status');
       setServiceActive(!!j.service.active);
       setServiceEnabled(!!j.service.enabled);
-    } catch (_) {}
+      t?.success?.(doneLabel);
+    } catch (e) {
+      t?.error?.('Action failed', e?.message || 'API error');
+    }
     setServiceLoading(null);
   };
 
@@ -431,6 +436,7 @@ function App({ tweaks, setTweaks, onLogout }) {
 
   const density = tweaks.density || 'dense';
   const accent = tweaks.accent || 'terracotta';
+  const WGToaster = window.Toaster;
 
   return (
     <div className={`app density-${density} accent-${accent}`}>
@@ -674,9 +680,11 @@ function App({ tweaks, setTweaks, onLogout }) {
               setPeers(mapped);
               ensurePeerState(mapped);
             }).catch(() => {});
+            window.WG.toast?.success?.('Peer added', 'New peer is ready to connect');
           }}
         />
       )}
+      {WGToaster && <WGToaster />}
     </div>
   );
 }

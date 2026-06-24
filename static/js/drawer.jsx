@@ -71,9 +71,10 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated,
         document.body.appendChild(a);
         a.click();
         a.remove();
+        window.WG.toast?.success?.('Config downloaded', `${peer.name}.conf`);
       }
     } catch (e) {
-      alert('Failed to download config: ' + (e.message || 'API error'));
+      window.WG.toast?.error?.('Download failed', e.message || 'API error');
     } finally {
       setDownloading(false);
     }
@@ -82,12 +83,14 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated,
   const revokePeer = async () => {
     if (!confirm(`Revoke peer "${peer.name}"? This will disconnect the peer immediately.`)) return;
     setRevoking(true);
+    const t = window.WG.toast?.loading?.(`Revoking "${peer.name}"…`);
     try {
       await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/revoke', { method: 'POST' });
+      t?.success?.('Peer revoked', `"${peer.name}" has been removed`);
       onClose();
       if (onRevoke) onRevoke();
     } catch (e) {
-      alert('Failed to revoke peer: ' + (e.message || 'API error'));
+      t?.error?.('Revoke failed', e.message || 'API error');
     } finally {
       setRevoking(false);
     }
@@ -96,11 +99,14 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated,
   const togglePause = async () => {
     setPausing(true);
     const action = peer.paused ? 'resume' : 'pause';
+    const t = window.WG.toast?.loading?.(`${peer.paused ? 'Resuming' : 'Pausing'} "${peer.name}"…`);
     try {
       await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/' + action, { method: 'POST' });
       if (onPeerUpdated) onPeerUpdated();
+      t?.success?.(peer.paused ? 'Peer resumed' : 'Peer paused',
+        peer.paused ? `"${peer.name}" is active again` : `"${peer.name}" is now blocked`);
     } catch (e) {
-      alert('Failed to ' + action + ' peer: ' + (e.message || 'API error'));
+      t?.error?.(`Failed to ${action} peer`, e.message || 'API error');
     } finally {
       setPausing(false);
     }
