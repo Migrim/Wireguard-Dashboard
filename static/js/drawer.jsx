@@ -5,7 +5,7 @@ const { useState: _useState, useEffect: _useEffect, useRef: _useRef, useMemo: _u
 // ============================================================
 // PeerDrawer — slide-out detail with charts + controls
 // ============================================================
-function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated, tweaks = {} }) {
+function PeerDrawer({ peer, onClose, throughputBuffers, peerPings = {}, onRevoke, onPeerUpdated, tweaks = {} }) {
   const [copied, setCopied] = _useState('');
   const [downloading, setDownloading] = _useState(false);
   const [revoking, setRevoking] = _useState(false);
@@ -15,6 +15,13 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated,
     try { return !!localStorage.getItem('WG_PEER_DRAFT_' + peer?.name); } catch { return false; }
   });
   const [diag, setDiag] = _useState({ loading: true, pingMs: null, pingStatus: '', location: null, endpointIp: '', pingIp: '' });
+  const [pingHistory, setPingHistory] = _useState(() => new Array(24).fill(0));
+
+  const latestPing = peerPings[peer?.name];
+  _useEffect(() => {
+    if (latestPing == null) return;
+    setPingHistory(prev => [...prev.slice(1), latestPing]);
+  }, [latestPing]);
 
   _useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -186,6 +193,16 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated,
               ) : (
                 <div className="empty-chart">No recent activity</div>
               )}
+            </div>
+          </section>
+
+          <section className="drawer-section">
+            <div className="section-head">
+              <span className="section-label">PING LATENCY</span>
+              <span className="section-meta">{latestPing != null ? `${latestPing} ms` : '—'}</span>
+            </div>
+            <div className="drawer-chart" style={{ padding: '6px 8px' }}>
+              <MiniBars data={pingHistory} height={44} color="var(--accent-2)" />
             </div>
           </section>
 

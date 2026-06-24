@@ -636,6 +636,7 @@ function App({ tweaks, setTweaks, onLogout }) {
           peer={peers.find(p => p.id === selectedPeer)}
           onClose={() => setSelectedPeer(null)}
           throughputBuffers={peerThr}
+          peerPings={peerPings}
           tweaks={tweaks}
           onRevoke={() => {
             // Re-fetch peers after revoke
