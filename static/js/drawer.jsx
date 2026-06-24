@@ -80,20 +80,28 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated,
     }
   };
 
-  const revokePeer = async () => {
-    if (!confirm(`Revoke peer "${peer.name}"? This will disconnect the peer immediately.`)) return;
-    setRevoking(true);
-    const t = window.WG.toast?.loading?.(`Revoking "${peer.name}"…`);
-    try {
-      await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/revoke', { method: 'POST' });
-      t?.success?.('Peer revoked', `"${peer.name}" has been removed`);
-      onClose();
-      if (onRevoke) onRevoke();
-    } catch (e) {
-      t?.error?.('Revoke failed', e.message || 'API error');
-    } finally {
-      setRevoking(false);
-    }
+  const revokePeer = () => {
+    window.WG.toast?.confirm?.(
+      'Revoke this peer?',
+      `"${peer.name}" will be permanently removed and disconnected.`,
+      {
+        confirmLabel: 'Revoke',
+        onConfirm: async () => {
+          setRevoking(true);
+          const t = window.WG.toast?.loading?.(`Revoking "${peer.name}"…`);
+          try {
+            await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/revoke', { method: 'POST' });
+            t?.success?.('Peer revoked', `"${peer.name}" has been removed`);
+            onClose();
+            if (onRevoke) onRevoke();
+          } catch (e) {
+            t?.error?.('Revoke failed', e.message || 'API error');
+          } finally {
+            setRevoking(false);
+          }
+        },
+      }
+    );
   };
 
   const togglePause = async () => {
