@@ -43,6 +43,7 @@
       warning: <><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/><path d="M12 9v4M12 17h.01"/></>,
       info:    <><circle cx="12" cy="12" r="10"/><path d="M12 11v5M12 8h.01"/></>,
       confirm: <><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/><path d="M12 9v4M12 17h.01"/></>,
+      pause:   <><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></>,
     };
     return (
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"

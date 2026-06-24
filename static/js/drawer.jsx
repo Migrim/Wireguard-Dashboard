@@ -9,7 +9,7 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated,
   const [copied, setCopied] = _useState('');
   const [downloading, setDownloading] = _useState(false);
   const [revoking, setRevoking] = _useState(false);
-  const [pausing, setPausing] = _useState(false);
+  const [pendingAction, setPendingAction] = _useState(null); // 'pause' | 'resume' | null
   const [tab, setTab] = _useState('overview');
   const [settingsDirty, setSettingsDirty] = _useState(() => {
     try { return !!localStorage.getItem('WG_PEER_DRAFT_' + peer?.name); } catch { return false; }
@@ -97,18 +97,22 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated,
   };
 
   const togglePause = async () => {
-    setPausing(true);
-    const action = peer.paused ? 'resume' : 'pause';
-    const t = window.WG.toast?.loading?.(`${peer.paused ? 'Resuming' : 'Pausing'} "${peer.name}"…`);
+    const wasPaused = peer.paused;
+    const action = wasPaused ? 'resume' : 'pause';
+    setPendingAction(action);
+    const t = window.WG.toast?.loading?.(wasPaused ? `Resuming "${peer.name}"…` : `Pausing "${peer.name}"…`);
     try {
       await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/' + action, { method: 'POST' });
       if (onPeerUpdated) onPeerUpdated();
-      t?.success?.(peer.paused ? 'Peer resumed' : 'Peer paused',
-        peer.paused ? `"${peer.name}" is active again` : `"${peer.name}" is now blocked`);
+      if (wasPaused) {
+        t?.success?.('Peer resumed', `"${peer.name}" is active again`);
+      } else {
+        t?.update?.({ type: 'pause', title: 'Peer paused', desc: `"${peer.name}" is now blocked`, duration: 4000 });
+      }
     } catch (e) {
       t?.error?.(`Failed to ${action} peer`, e.message || 'API error');
     } finally {
-      setPausing(false);
+      setPendingAction(null);
     }
   };
 
@@ -247,19 +251,27 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated,
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
                 {downloading ? 'Downloading…' : 'Download config'}
               </button>
-              <button className="btn btn-ghost" onClick={togglePause} disabled={pausing} title={peer.paused ? 'Re-enable this peer on the server' : 'Block this peer server-side without revoking it'}>
-                {peer.paused ? (
-                  <>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M5 3l14 9-14 9V3z"/></svg>
-                    {pausing ? 'Resuming…' : 'Resume'}
-                  </>
-                ) : (
-                  <>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-                    {pausing ? 'Pausing…' : 'Pause'}
-                  </>
-                )}
-              </button>
+              {(() => {
+                // Use pendingAction to determine display so background status polls
+                // can't flip the icon/text mid-operation.
+                const showAsResuming = pendingAction === 'resume' || (!pendingAction && peer.paused);
+                return (
+                  <button className="btn btn-ghost" onClick={togglePause} disabled={!!pendingAction}
+                    title={showAsResuming ? 'Re-enable this peer on the server' : 'Block this peer server-side without revoking it'}>
+                    {showAsResuming ? (
+                      <>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M5 3l14 9-14 9V3z"/></svg>
+                        {pendingAction === 'resume' ? 'Resuming…' : 'Resume'}
+                      </>
+                    ) : (
+                      <>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+                        {pendingAction === 'pause' ? 'Pausing…' : 'Pause'}
+                      </>
+                    )}
+                  </button>
+                );
+              })()}
               <button className="btn btn-danger" onClick={revokePeer} disabled={revoking}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/></svg>
                 {revoking ? 'Revoking…' : 'Revoke'}
