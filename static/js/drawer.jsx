@@ -1338,7 +1338,7 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
   const accents = [
     { id: 'terracotta', c: 'oklch(62% 0.14 45)',  name: 'Terracotta' },
     { id: 'forest',     c: 'oklch(55% 0.11 150)', name: 'Forest' },
-    { id: 'amber',      c: 'oklch(70% 0.15 75)',  name: 'Amber' },
+    { id: 'blue',       c: 'oklch(55% 0.22 235)', name: 'Iris'  },
     { id: 'plum',       c: 'oklch(48% 0.12 330)', name: 'Plum' },
     { id: 'ink',        c: 'oklch(55% 0.19 27)',  name: 'Ember' },
   ];
@@ -1394,13 +1394,14 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
                 <div className="setting-control" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div className={`tension-slider-wrap${tweaks.splineChart ? ' visible' : ''}`}>
                     <span style={{ fontSize: 10, color: 'var(--muted)', fontFamily: 'var(--mono)', minWidth: 26, textAlign: 'right' }}>
-                      {Math.round((tweaks.splineTension ?? 1) * 100)}%
+                      {(tweaks.splineTension ?? 1).toFixed(1)}
                     </span>
                     <input
-                      type="range" min="0.1" max="1" step="0.1"
+                      type="range" min="0" max="3" step="0.1"
                       value={tweaks.splineTension ?? 1}
                       onChange={e => setTweaks({ ...tweaks, splineTension: parseFloat(e.target.value) })}
                       className="tension-slider"
+                      style={{ background: `linear-gradient(to right, var(--accent) ${((tweaks.splineTension ?? 1) / 3) * 100}%, var(--border) ${((tweaks.splineTension ?? 1) / 3) * 100}%)` }}
                     />
                   </div>
                   <button

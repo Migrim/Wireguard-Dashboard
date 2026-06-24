@@ -11,7 +11,7 @@
       document.documentElement.setAttribute('data-theme', savedTheme);
     }
     const savedAccent = localStorage.getItem('WG_ACCENT');
-    const validAccents = ['terracotta', 'forest', 'ink', 'plum', 'amber'];
+    const validAccents = ['terracotta', 'forest', 'ink', 'plum', 'blue'];
     if (savedAccent && savedAccent !== 'terracotta' && validAccents.includes(savedAccent)) {
       document.documentElement.classList.add('accent-' + savedAccent);
     }
@@ -90,8 +90,8 @@
 [data-theme="dark"].accent-ink { --accent: oklch(67% 0.21 27); --accent-soft: oklch(30% 0.11 27); --accent-2: oklch(70% 0.15 48); }
 .accent-plum { --accent: oklch(48% 0.12 330); --accent-soft: oklch(88% 0.05 330); --accent-2: oklch(64% 0.16 350); }
 [data-theme="dark"].accent-plum { --accent: oklch(70% 0.13 330); --accent-soft: oklch(30% 0.08 330); --accent-2: oklch(75% 0.15 350); }
-.accent-amber { --accent: oklch(70% 0.15 75); --accent-soft: oklch(92% 0.06 75); --accent-2: oklch(55% 0.09 215); }
-[data-theme="dark"].accent-amber { --accent: oklch(75% 0.15 75); --accent-soft: oklch(30% 0.09 75); --accent-2: oklch(71% 0.10 215); }
+.accent-blue { --accent: oklch(52% 0.22 235); --accent-soft: oklch(91% 0.05 235); --accent-2: oklch(56% 0.10 195); }
+[data-theme="dark"].accent-blue { --accent: oklch(67% 0.20 235); --accent-soft: oklch(28% 0.10 235); --accent-2: oklch(68% 0.10 195); }
 
 * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
 html.theme-switching,
@@ -654,10 +654,11 @@ html.theme-switching .theme-toggle-icon {
 .toggle.on .toggle-knob { transform: translateX(16px); }
 .tension-slider-wrap { display: flex; align-items: center; gap: 6px; overflow: hidden; max-width: 0; opacity: 0; pointer-events: none; transition: max-width 0.22s ease, opacity 0.18s ease; }
 .tension-slider-wrap.visible { max-width: 120px; opacity: 1; pointer-events: auto; }
-.tension-slider { -webkit-appearance: none; appearance: none; width: 72px; height: 2px; background: var(--border); border-radius: 99px; outline: none; cursor: pointer; }
-.tension-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); border: none; cursor: pointer; }
-.tension-slider::-moz-range-track { height: 2px; background: var(--border); border-radius: 99px; border: none; }
-.tension-slider::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); border: none; cursor: pointer; }
+.tension-slider { -webkit-appearance: none; appearance: none; width: 72px; height: 4px; border-radius: 99px; outline: none; cursor: pointer; }
+.tension-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 0; height: 0; }
+.tension-slider::-moz-range-track { height: 4px; background: transparent; border-radius: 99px; border: none; }
+.tension-slider::-moz-range-progress { height: 4px; background: var(--accent); border-radius: 99px; }
+.tension-slider::-moz-range-thumb { width: 0; height: 0; border: none; }
 
 /* Port check drawer */
 .pc-hero { background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
