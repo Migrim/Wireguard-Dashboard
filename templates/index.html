@@ -15,6 +15,9 @@
     if (savedAccent && savedAccent !== 'terracotta' && validAccents.includes(savedAccent)) {
       document.documentElement.classList.add('accent-' + savedAccent);
     }
+    if (!localStorage.getItem('WG_WELCOMED')) {
+      window.location.replace('/welcome');
+    }
   })();
 </script>
 <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='icons/favicon.svg') }}">
@@ -2795,6 +2798,7 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
   .login-input { padding: 13px 16px; }
   .login-btn   { padding: 13px 18px; font-size: 15px; }
 }
+
 </style>
 </head>
 <body data-base="{{ request.script_root or '' }}">

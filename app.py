@@ -85,7 +85,7 @@ def _sudo(args: List[str], input_data: bytes = None) -> Tuple[str,int]:
 def _log_request():
     app.logger.info("%s %s", request.method, request.path)
 
-_AUTH_OPEN = {"/", "/api/auth/check", "/api/auth/login", "/api/auth/logout"}
+_AUTH_OPEN = {"/", "/welcome", "/api/auth/check", "/api/auth/login", "/api/auth/logout"}
 
 @app.before_request
 def _require_auth():
@@ -1225,6 +1225,10 @@ def home():
     }
     iface,_,_=read_bytes()
     return render_template("index.html",data=data,users=issued,iface=iface,app_version=_local_version())
+
+@app.route("/welcome")
+def welcome():
+    return render_template("welcome.html")
 
 @app.route("/action/<what>")
 def action(what: str):

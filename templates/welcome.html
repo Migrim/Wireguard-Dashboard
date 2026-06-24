@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Welcome · WG-Quick</title>
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='icons/favicon.svg') }}">
+<link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='icons/favicon.ico') }}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+  (() => {
+    try {
+      const th = localStorage.getItem('WG_THEME');
+      if (th === 'dark' || th === 'light') document.documentElement.setAttribute('data-theme', th);
+    } catch (e) {}
+  })();
+</script>
+<style>
+:root {
+  --serif: 'Instrument Serif', Georgia, serif;
+  --sans: 'Inter', -apple-system, system-ui, sans-serif;
+  --mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+
+  --bg: #F5EEE2;
+  --bg-2: #EFE7D8;
+  --card: #FBF6EC;
+  --card-raised: #FFFCF4;
+  --ink: #2A2520;
+  --ink-2: #4A4238;
+  --muted: #8A7F72;
+  --muted-2: #A89C8C;
+  --border: #E6DCC8;
+  --border-strong: #D6C9B0;
+  --accent: oklch(62% 0.14 45);
+  --accent-soft: oklch(88% 0.06 45);
+  --accent-2: oklch(55% 0.09 150);
+  --success: oklch(58% 0.12 150);
+  --warn: oklch(68% 0.14 70);
+  --danger: oklch(56% 0.17 25);
+  --success-soft: oklch(90% 0.06 150);
+  --warn-soft: oklch(92% 0.07 70);
+  --danger-soft: oklch(92% 0.05 25);
+  --shadow-sm: 0 1px 2px rgba(80, 60, 30, 0.04), 0 1px 0 rgba(255,255,255,0.5) inset;
+  --shadow: 0 1px 3px rgba(80, 60, 30, 0.06), 0 4px 14px rgba(80, 60, 30, 0.04), 0 1px 0 rgba(255,255,255,0.7) inset;
+  --shadow-lg: 0 2px 4px rgba(80, 60, 30, 0.08), 0 30px 80px rgba(80, 60, 30, 0.18);
+  --radius: 10px;
+  --radius-sm: 6px;
+  --radius-lg: 16px;
+}
+[data-theme="dark"] {
+  --bg: #14100C;
+  --bg-2: #1C1611;
+  --card: #241D16;
+  --card-raised: #2F2619;
+  --ink: #EFE6D8;
+  --ink-2: #C8BEAE;
+  --muted: #8A7F72;
+  --muted-2: #6B6256;
+  --border: #3A2F24;
+  --border-strong: #4D3E2C;
+  --accent: oklch(70% 0.14 45);
+  --accent-soft: oklch(32% 0.08 45);
+  --accent-2: oklch(70% 0.10 150);
+  --success: oklch(72% 0.13 150);
+  --success-soft: oklch(30% 0.07 150);
+  --warn-soft: oklch(32% 0.08 70);
+  --danger-soft: oklch(30% 0.07 25);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow: 0 1px 3px rgba(0,0,0,0.4), 0 4px 14px rgba(0,0,0,0.3);
+  --shadow-lg: 0 2px 4px rgba(0,0,0,0.4), 0 30px 80px rgba(0,0,0,0.6);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background-image:
+    radial-gradient(1200px 600px at 15% -10%, color-mix(in oklab, var(--accent) 9%, transparent), transparent 60%),
+    radial-gradient(900px 500px at 100% 10%, color-mix(in oklab, var(--accent-2) 7%, transparent), transparent 60%);
+}
+
+/* ============================================================
+   WINDOW
+============================================================ */
+.oobe {
+  width: 100%;
+  max-width: 1040px;
+  height: min(672px, calc(100vh - 56px));
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  display: grid;
+  grid-template-columns: 264px 1fr;
+  overflow: hidden;
+  animation: winIn 0.5s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+@keyframes winIn { from { transform: translateY(14px) scale(0.99); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ---- Left rail ---- */
+.rail {
+  background: var(--bg-2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 22px 18px 18px;
+}
+.rail-brand { display: flex; align-items: center; gap: 11px; margin-bottom: 4px; }
+.brand-mark {
+  width: 38px; height: 38px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  display: grid; place-items: center;
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+.brand-name { font-family: var(--serif); font-size: 22px; line-height: 1; letter-spacing: -0.01em; }
+.brand-sub { font-family: var(--mono); font-size: 9.5px; color: var(--muted); margin-top: 4px; letter-spacing: 0.06em; text-transform: uppercase; }
+
+.rail-kicker {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--muted-2);
+  margin: 26px 6px 12px;
+}
+.steps { display: flex; flex-direction: column; gap: 1px; flex: 1; }
+.step {
+  display: flex; align-items: center; gap: 11px;
+  padding: 9px 10px; border-radius: 9px;
+  cursor: pointer; color: var(--muted);
+  border: 1px solid transparent;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  text-align: left; background: transparent; font-family: var(--sans); font-size: 12.5px;
+}
+.step:hover { color: var(--ink-2); background: color-mix(in oklab, var(--ink) 4%, transparent); }
+.step.active { background: var(--card); color: var(--ink); border-color: var(--border); box-shadow: var(--shadow-sm); font-weight: 500; }
+.step-dot {
+  width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+  display: grid; place-items: center;
+  font-family: var(--mono); font-size: 10.5px;
+  background: var(--card); border: 1px solid var(--border-strong); color: var(--muted);
+  transition: all 0.2s;
+}
+.step.active .step-dot { background: var(--accent); border-color: var(--accent); color: #fff; }
+.step.done .step-dot { background: var(--success); border-color: var(--success); color: #fff; }
+[data-theme="dark"] .step.active .step-dot, [data-theme="dark"] .step.done .step-dot { color: var(--bg); }
+.step-dot svg { display: block; }
+.step-label { line-height: 1.2; }
+
+.rail-foot { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.rail-status { display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 10px; color: var(--muted); }
+.live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 0 color-mix(in oklab, var(--success) 50%, transparent); animation: pulse 1.8s infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--success) 45%, transparent); } 70% { box-shadow: 0 0 0 5px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+.rail-status .live-dot { animation: none; box-shadow: none; }
+.theme-btn {
+  width: 28px; height: 28px; display: grid; place-items: center;
+  background: var(--card); border: 1px solid var(--border); border-radius: 7px;
+  cursor: pointer; color: var(--muted); transition: all 0.12s;
+}
+.theme-btn:hover { color: var(--ink); border-color: var(--border-strong); }
+
+/* ---- Main ---- */
+.main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.main-body { flex: 1; min-height: 0; padding: 38px 44px 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
+.copy { display: flex; flex-direction: column; min-width: 0; }
+.copy-kicker { font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; }
+.copy-title { font-family: var(--serif); font-size: 40px; line-height: 1.02; letter-spacing: -0.02em; color: var(--ink); margin: 0 0 14px; font-weight: 400; }
+.copy-title em { font-style: italic; }
+.copy-desc { font-size: 14px; line-height: 1.6; color: var(--ink-2); margin: 0; max-width: 38ch; text-wrap: pretty; }
+.copy-list { list-style: none; margin: 20px 0 0; padding: 0; display: flex; flex-direction: column; gap: 11px; }
+.copy-list li { display: flex; gap: 10px; align-items: flex-start; font-size: 12.5px; color: var(--ink-2); }
+.copy-list .tick { flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; margin-top: 1px; }
+
+/* demo stage */
+.stage {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+  padding: 20px;
+  height: 360px;
+  display: flex; flex-direction: column;
+  position: relative; overflow: hidden;
+}
+.stage-tag { position: absolute; top: 12px; right: 14px; font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted-2); display: inline-flex; align-items: center; gap: 5px; }
+.stage-tag .live-dot { width: 5px; height: 5px; }
+
+.panel { display: none; height: 100%; flex-direction: column; }
+.panel.on { display: flex; }
+
+.mini-label { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+
+/* footer */
+.main-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 44px 22px; gap: 16px;
+}
+.dots { display: flex; gap: 7px; }
+.dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--border-strong); transition: all 0.25s; cursor: pointer; }
+.dots i.on { background: var(--accent); width: 22px; border-radius: 4px; }
+.foot-btns { display: flex; gap: 9px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 0 16px; height: 38px;
+  font-family: var(--sans); font-size: 13px; font-weight: 500;
+  color: var(--ink); background: var(--card); border: 1px solid var(--border);
+  border-radius: 9px; cursor: pointer; transition: all 0.12s; box-shadow: var(--shadow-sm);
+}
+.btn:hover { background: var(--card-raised); border-color: var(--border-strong); }
+.btn-ghost { background: transparent; box-shadow: none; border-color: transparent; color: var(--muted); }
+.btn-ghost:hover { background: color-mix(in oklab, var(--ink) 5%, transparent); color: var(--ink); border-color: transparent; }
+.btn-primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn-primary:hover { background: var(--ink-2); border-color: var(--ink-2); }
+.btn[disabled] { opacity: 0.4; pointer-events: none; }
+
+/* ============================================================
+   DEMO 0 — system check
+============================================================ */
+.sc-wrap { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 18px; }
+.sc-shield {
+  align-self: center; width: 64px; height: 64px; border-radius: 18px;
+  display: grid; place-items: center; color: var(--accent);
+  background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow);
+  position: relative;
+}
+.sc-shield::after {
+  content: ""; position: absolute; inset: -6px; border-radius: 22px;
+  border: 2px solid var(--accent); opacity: 0;
+}
+.playing .sc-shield::after { animation: scRing 1.2s ease-out 1.6s; }
+@keyframes scRing { 0% { opacity: 0.5; transform: scale(1); } 100% { opacity: 0; transform: scale(1.25); } }
+.sc-rows { display: flex; flex-direction: column; gap: 9px; }
+.sc-row {
+  display: flex; align-items: center; gap: 11px;
+  padding: 11px 14px; background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; font-size: 12.5px; color: var(--ink-2);
+  opacity: 0; transform: translateY(6px);
+}
+.playing .sc-row { animation: scRowIn 0.4s ease forwards; }
+.playing .sc-row:nth-child(1) { animation-delay: 0.15s; }
+.playing .sc-row:nth-child(2) { animation-delay: 0.55s; }
+.playing .sc-row:nth-child(3) { animation-delay: 0.95s; }
+@keyframes scRowIn { to { opacity: 1; transform: none; } }
+.sc-ico { width: 20px; height: 20px; flex-shrink: 0; position: relative; }
+.sc-spin { position: absolute; inset: 0; border: 2px solid color-mix(in oklab, var(--accent) 25%, transparent); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.sc-check { position: absolute; inset: 0; color: var(--success); opacity: 0; display: grid; place-items: center; }
+.sc-row b { color: var(--ink); font-weight: 600; }
+.sc-row .sc-meta { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+.playing .sc-row:nth-child(1) .sc-spin { animation: spin 0.7s linear infinite, fade 0.01s linear 0.7s forwards; }
+.playing .sc-row:nth-child(2) .sc-spin { animation: spin 0.7s linear infinite, fade 0.01s linear 1.1s forwards; }
+.playing .sc-row:nth-child(3) .sc-spin { animation: spin 0.7s linear infinite, fade 0.01s linear 1.5s forwards; }
+.playing .sc-row:nth-child(1) .sc-check { animation: scPop 0.3s ease 0.7s forwards; }
+.playing .sc-row:nth-child(2) .sc-check { animation: scPop 0.3s ease 1.1s forwards; }
+.playing .sc-row:nth-child(3) .sc-check { animation: scPop 0.3s ease 1.5s forwards; }
+@keyframes fade { to { opacity: 0; } }
+@keyframes scPop { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
+
+/* ============================================================
+   DEMO 1 — live chart
+============================================================ */
+.chart-head { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 14px; }
+.chart-readout { display: flex; align-items: baseline; gap: 5px; }
+.chart-big { font-family: var(--serif); font-size: 38px; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.chart-unit { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.chart-legend { display: flex; gap: 14px; }
+.lg { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.lg i { width: 8px; height: 8px; border-radius: 2px; }
+.chart-svg { flex: 1; align-self: stretch; min-width: 0; margin: 0 -20px -20px; }
+.chart-reveal { clip-path: inset(0 100% 0 0); }
+.playing .chart-reveal { animation: chartReveal 1.6s cubic-bezier(0.4,0,0.1,1) forwards; }
+@keyframes chartReveal { to { clip-path: inset(0 0 0 0); } }
+.chart-cursor { opacity: 0; }
+.playing .chart-cursor { animation: fadeIn 0.4s ease 1.5s forwards; }
+@keyframes fadeIn { to { opacity: 1; } }
+
+/* ============================================================
+   DEMO 2 — peers
+============================================================ */
+.pr-list { display: flex; flex-direction: column; gap: 9px; flex: 1; justify-content: center; }
+.pr-row {
+  display: grid; grid-template-columns: 10px 32px 1fr; gap: 12px; align-items: center;
+  padding: 11px 13px; background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  opacity: 0; transform: translateX(-8px);
+}
+.playing .pr-row { animation: prIn 0.45s cubic-bezier(0.2,0.9,0.3,1) forwards; }
+.playing .pr-row:nth-child(1) { animation-delay: 0.1s; }
+.playing .pr-row:nth-child(2) { animation-delay: 0.25s; }
+.playing .pr-row:nth-child(3) { animation-delay: 0.4s; }
+.playing .pr-row:nth-child(4) { animation-delay: 0.55s; }
+@keyframes prIn { to { opacity: 1; transform: none; } }
+.pr-av { width: 32px; height: 32px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-family: var(--mono); font-size: 11px; font-weight: 600; }
+.pr-off .pr-av { background: var(--bg-2); color: var(--muted); }
+.pr-name { font-size: 12.5px; font-weight: 500; color: var(--ink); }
+.pr-dev { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 1px; }
+.pr-hs { font-family: var(--mono); font-size: 10.5px; color: var(--muted); text-align: right; }
+.pr-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--success); font-weight: 500; }
+.pr-off .pr-pill { color: var(--muted); font-weight: 400; }
+.pr-sdot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
+.pr-on .pr-sdot { box-shadow: 0 0 0 0 color-mix(in oklab, var(--success) 60%, transparent); animation: pulse 1.6s infinite; }
+.pr-off .pr-sdot { background: var(--muted-2); }
+
+/* ============================================================
+   DEMO 3 — add device (QR + config)
+============================================================ */
+.adev-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
+.qr {
+  width: 132px; height: 132px; padding: 9px; background: #fff; border: 1px solid var(--border);
+  border-radius: 12px; box-shadow: var(--shadow); display: grid; gap: 0;
+  grid-template-columns: repeat(21, 1fr); grid-template-rows: repeat(21, 1fr);
+}
+.qr i { background: transparent; border-radius: 0; }
+.qr i.on { background: #16110c; animation: qrPop 0.3s ease both; }
+@keyframes qrPop { from { transform: scale(0.4); } to { transform: scale(1); } }
+.dv-side { display: flex; flex-direction: column; gap: 10px; width: 100%; align-items: stretch; }
+.dv-cfg {
+  font-family: var(--mono); font-size: 10.5px; line-height: 1.65; color: var(--ink-2);
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px;
+}
+.dv-cfg .ln { display: block; white-space: nowrap; opacity: 0; }
+.dv-cfg .k { color: var(--muted); }
+.dv-cfg .v { color: var(--accent); }
+.playing .dv-cfg .ln { animation: fadeIn 0.3s ease forwards; }
+.playing .dv-cfg .ln:nth-child(1) { animation-delay: 0.5s; }
+.playing .dv-cfg .ln:nth-child(2) { animation-delay: 0.7s; }
+.playing .dv-cfg .ln:nth-child(3) { animation-delay: 0.9s; }
+.playing .dv-cfg .ln:nth-child(4) { animation-delay: 1.1s; }
+.playing .dv-cfg .ln:nth-child(5) { animation-delay: 1.3s; }
+.dv-scan { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 11.5px; color: var(--muted); }
+.dv-scan svg { color: var(--accent); }
+
+/* ============================================================
+   DEMO 4 — traffic map
+============================================================ */
+.map { flex: 1; position: relative; }
+.map svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.map-node { fill: var(--card); stroke: var(--border-strong); stroke-width: 1.5; }
+.map-node-on { fill: var(--accent-soft); stroke: var(--accent); }
+.map-server { fill: var(--accent); stroke: none; }
+.map-link { fill: none; stroke: var(--border-strong); stroke-width: 1.5; stroke-dasharray: 3 4; opacity: 0; }
+.playing .map-link { animation: fadeIn 0.6s ease 0.3s forwards; }
+.map-srv-ring { fill: none; stroke: var(--accent); stroke-width: 1.5; opacity: 0; }
+.playing .map-srv-ring { animation: srvRing 2.4s ease-out infinite; }
+@keyframes srvRing { 0% { r: 14px; opacity: 0.55; } 100% { r: 46px; opacity: 0; } }
+.pkt { fill: var(--accent); opacity: 0; }
+.pkt-out { fill: var(--accent-2); }
+.playing .pkt { animation-name: pktMove; animation-timing-function: linear; animation-iteration-count: infinite; }
+@keyframes pktMove { 0% { opacity: 0; } 8% { opacity: 1; } 92% { opacity: 1; } 100% { opacity: 0; } }
+.map-cap { position: absolute; bottom: 0; left: 0; font-family: var(--mono); font-size: 10px; color: var(--muted); }
+
+/* ============================================================
+   DEMO 5 — budgets & alerts
+============================================================ */
+.ba-wrap { flex: 1; display: flex; flex-direction: column; gap: 16px; justify-content: center; }
+.ba-budget { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 15px 16px; }
+.ba-budget-top { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+.ba-num { display: flex; align-items: baseline; gap: 4px; }
+.ba-big { font-family: var(--serif); font-size: 30px; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.ba-unit { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.ba-cap { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+.ba-bar { height: 9px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+.ba-fill { height: 100%; width: 0; border-radius: 5px 0 0 5px; background: linear-gradient(90deg, color-mix(in oklab, var(--accent) 80%, var(--accent-2)), var(--accent)); }
+.playing .ba-fill { animation: baFill 1.3s cubic-bezier(0.3,0.9,0.3,1) 0.3s forwards; }
+@keyframes baFill { to { width: 64%; } }
+.ba-alert { display: flex; gap: 10px; align-items: flex-start; padding: 11px 13px; border-radius: 10px; opacity: 0; transform: translateY(8px); }
+.ba-warn { background: var(--warn-soft); border: 1px solid color-mix(in oklab, var(--warn) 25%, var(--border)); }
+.ba-info { background: var(--card); border: 1px solid var(--border); }
+.playing .ba-alert { animation: scRowIn 0.45s ease forwards; }
+.playing .ba-warn { animation-delay: 1.3s; }
+.playing .ba-info { animation-delay: 1.6s; }
+.ba-alert-ico { flex-shrink: 0; margin-top: 1px; }
+.ba-warn .ba-alert-ico { color: var(--warn); }
+.ba-info .ba-alert-ico { color: var(--accent-2); }
+.ba-alert-t { font-size: 12px; font-weight: 600; color: var(--ink); }
+.ba-alert-d { font-size: 11px; color: var(--ink-2); margin-top: 1px; }
+
+/* ============================================================
+   DEMO 6 — all set recap
+============================================================ */
+.recap { flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(3, 1fr); gap: 9px; }
+.recap-item {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  opacity: 0; transform: scale(0.95);
+}
+.playing .recap-item { animation: rcIn 0.4s cubic-bezier(0.2,0.9,0.3,1) forwards; }
+.playing .recap-item:nth-child(1) { animation-delay: 0.05s; }
+.playing .recap-item:nth-child(2) { animation-delay: 0.12s; }
+.playing .recap-item:nth-child(3) { animation-delay: 0.19s; }
+.playing .recap-item:nth-child(4) { animation-delay: 0.26s; }
+.playing .recap-item:nth-child(5) { animation-delay: 0.33s; }
+.playing .recap-item:nth-child(6) { animation-delay: 0.40s; }
+@keyframes rcIn { to { opacity: 1; transform: none; } }
+.recap-ico { width: 30px; height: 30px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; flex-shrink: 0; }
+.recap-t { font-size: 12px; font-weight: 500; color: var(--ink); }
+.recap-d { font-family: var(--mono); font-size: 9.5px; color: var(--muted); margin-top: 1px; }
+
+/* ============================================================
+   SETTLED FALLBACK
+============================================================ */
+.panel.done .sc-row { opacity: 1; transform: none; animation: none; }
+.panel.done .sc-spin { display: none; }
+.panel.done .sc-check { opacity: 1; animation: none; }
+.panel.done .chart-reveal { clip-path: none; animation: none; }
+.panel.done .chart-cursor { opacity: 1; animation: none; }
+.panel.done .pr-row { opacity: 1; transform: none; animation: none; }
+.panel.done .dv-cfg .ln { opacity: 1; animation: none; }
+.panel.done .map-link { opacity: 1; animation: none; }
+.panel.done .ba-fill { width: 64%; animation: none; }
+.panel.done .ba-alert { opacity: 1; transform: none; animation: none; }
+.panel.done .recap-item { opacity: 1; transform: none; animation: none; }
+
+@media (max-width: 900px) {
+  body { padding: 0; }
+  .oobe { height: 100vh; max-width: 100%; border-radius: 0; border: none; grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .rail { flex-direction: row; align-items: center; padding: 12px 16px; overflow-x: auto; }
+  .rail-kicker, .steps .step-label, .rail-foot { display: none; }
+  .steps { flex-direction: row; gap: 6px; flex: 0 0 auto; margin-left: 16px; }
+  .step { padding: 7px; }
+  .main-body { grid-template-columns: 1fr; padding: 22px 22px 4px; gap: 18px; overflow-y: auto; }
+  .stage { height: 280px; }
+  .copy-title { font-size: 30px; }
+  .copy-list { display: none; }
+  .main-foot { padding: 14px 22px 18px; }
+}
+</style>
+</head>
+<body>
+<div class="oobe" id="oobe">
+  <!-- LEFT RAIL -->
+  <aside class="rail">
+    <div class="rail-brand">
+      <div class="brand-mark">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2L3 7v6c0 5 4 9 9 10 5-1 9-5 9-10V7l-9-5z"/>
+          <path d="M9 12l2 2 4-4"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-name">WG-Quick</div>
+      </div>
+    </div>
+
+    <div class="rail-kicker">WG-Quick tour</div>
+    <nav class="steps" id="steps"></nav>
+
+    <div class="rail-foot">
+      <span class="rail-status"><span class="live-dot"></span>wg0</span>
+      <button class="theme-btn" id="themeBtn" title="Toggle theme" aria-label="Toggle theme">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <section class="main">
+    <div class="main-body">
+      <div class="copy">
+        <div class="copy-kicker" id="copyKicker">LIVE THROUGHPUT</div>
+        <h1 class="copy-title" id="copyTitle"></h1>
+        <p class="copy-desc" id="copyDesc"></p>
+        <ul class="copy-list" id="copyList"></ul>
+      </div>
+
+      <div class="stage" id="stage">
+
+        <!-- 0: system check -->
+        <div class="panel" data-panel="0">
+          <div class="sc-wrap">
+            <div class="sc-shield">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L3 7v6c0 5 4 9 9 10 5-1 9-5 9-10V7l-9-5z"/><path d="M9 12l2 2 4-4"/></svg>
+            </div>
+            <div class="sc-rows">
+              <div class="sc-row"><span class="sc-ico"><span class="sc-spin"></span><span class="sc-check"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span></span><span>Interface <b>wg0</b> is up</span><span class="sc-meta">10.8.0.1/24</span></div>
+              <div class="sc-row"><span class="sc-ico"><span class="sc-spin"></span><span class="sc-check"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span></span><span>Listening on UDP</span><span class="sc-meta">:51820</span></div>
+              <div class="sc-row"><span class="sc-ico"><span class="sc-spin"></span><span class="sc-check"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span></span><span>Config loaded</span><span class="sc-meta">1 peer</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 1: live chart -->
+        <div class="panel" data-panel="1">
+          <div class="chart-head">
+            <div class="chart-readout"><span class="chart-big" id="thrputNum">0.0</span><span class="chart-unit">MB/s</span></div>
+            <div class="chart-legend">
+              <span class="lg"><i style="background:var(--accent)"></i>In</span>
+              <span class="lg"><i style="background:var(--accent-2)"></i>Out</span>
+            </div>
+          </div>
+          <svg class="chart-svg" id="chartSvg" viewBox="0 0 320 200" preserveAspectRatio="none"></svg>
+        </div>
+
+        <!-- 2: peers -->
+        <div class="panel" data-panel="2">
+          <div class="pr-list">
+            <div class="pr-row pr-on"><span class="pr-pill"><span class="pr-sdot"></span></span><div class="pr-av">AM</div><div><div class="pr-name">Aurora-Mac</div><div class="pr-dev">MacBook Pro · 10.8.0.4</div></div></div>
+            <div class="pr-row pr-on"><span class="pr-pill"><span class="pr-sdot"></span></span><div class="pr-av">LL</div><div><div class="pr-name">London-Laptop</div><div class="pr-dev">Dell XPS · 10.8.0.7</div></div></div>
+            <div class="pr-row pr-on"><span class="pr-pill"><span class="pr-sdot"></span></span><div class="pr-av">TS</div><div><div class="pr-name">Tokyo-Server</div><div class="pr-dev">Ubuntu VPS · 10.8.0.10</div></div></div>
+            <div class="pr-row pr-off"><span class="pr-pill"><span class="pr-sdot"></span></span><div class="pr-av">CP</div><div><div class="pr-name">Cobalt-PC</div><div class="pr-dev">ThinkPad X1 · 10.8.0.2</div></div></div>
+          </div>
+        </div>
+
+        <!-- 3: add device -->
+        <div class="panel" data-panel="3">
+          <div class="adev-wrap">
+            <div>
+              <div class="qr" id="qr"></div>
+            </div>
+            <div class="dv-side">
+              <div class="dv-cfg"><span class="ln"><span class="k">[Interface]</span></span><span class="ln"><span class="k">Address</span> = <span class="v">10.8.0.16/32</span></span><span class="ln"><span class="k">[Peer]</span></span><span class="ln"><span class="k">Endpoint</span> = <span class="v">vpn.home:51820</span></span><span class="ln"><span class="k">AllowedIPs</span> = <span class="v">0.0.0.0/0</span></span></div>
+              <div class="dv-scan">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v.01M14 21h3M21 18v3"/></svg>
+                Scan with the WireGuard app
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4: traffic map -->
+        <div class="panel" data-panel="4">
+          <div class="map" id="map">
+            <svg id="mapSvg" viewBox="0 0 320 300" preserveAspectRatio="xMidYMid meet"></svg>
+          </div>
+        </div>
+
+        <!-- 5: budgets & alerts -->
+        <div class="panel" data-panel="5">
+          <div class="ba-wrap">
+            <div class="ba-budget">
+              <div class="ba-budget-top">
+                <div class="ba-num"><span class="ba-big" id="baNum">0</span><span class="ba-unit">GB</span></div>
+                <span class="ba-cap">of 200 GB / day</span>
+              </div>
+              <div class="ba-bar"><div class="ba-fill"></div></div>
+            </div>
+            <div class="ba-alert ba-warn">
+              <span class="ba-alert-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+              <div><div class="ba-alert-t">Cobalt-PC nearing budget</div><div class="ba-alert-d">92% of 50 GB used this month</div></div>
+            </div>
+            <div class="ba-alert ba-info">
+              <span class="ba-alert-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8h.01M11 12h1v4h1"/><circle cx="12" cy="12" r="9"/></svg></span>
+              <div><div class="ba-alert-t">Update available</div><div class="ba-alert-d">v1.4.2 · ready to install</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 6: all set -->
+        <div class="panel" data-panel="6">
+          <div class="recap">
+            <div class="recap-item"><span class="recap-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg></span><div><div class="recap-t">Live traffic</div><div class="recap-d">Real-time</div></div></div>
+            <div class="recap-item"><span class="recap-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0M16 7a3 3 0 0 1 0 6M21 20a5 5 0 0 0-4-4.9"/></svg></span><div><div class="recap-t">Peers</div><div class="recap-d">14 devices</div></div></div>
+            <div class="recap-item"><span class="recap-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg></span><div><div class="recap-t">Add peers</div><div class="recap-d">QR / config</div></div></div>
+            <div class="recap-item"><span class="recap-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/></svg></span><div><div class="recap-t">Traffic map</div><div class="recap-d">Global view</div></div></div>
+            <div class="recap-item"><span class="recap-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="7"/><rect x="13" y="7" width="3" height="11"/></svg></span><div><div class="recap-t">Budgets</div><div class="recap-d">Per peer</div></div></div>
+            <div class="recap-item"><span class="recap-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a2 2 0 0 0 3.4 0"/></svg></span><div><div class="recap-t">Alerts</div><div class="recap-d">Always on</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="main-foot">
+      <div class="dots" id="dots"></div>
+      <div class="foot-btns">
+        <button class="btn btn-ghost" id="skipBtn">Skip tour</button>
+        <button class="btn" id="backBtn">Back</button>
+        <button class="btn btn-primary" id="nextBtn">Next</button>
+      </div>
+    </footer>
+  </section>
+</div>
+
+<script>
+const STEPS = [
+  { nav: "Welcome", kicker: "Installation complete", title: "WireGuard is <em>up and running</em>", desc: "WG-Quick is already fully set up for you. This quick tour walks through the main features — or skip straight to the dashboard to start adding your first peer.", list: [], tag: "Status check" },
+  { nav: "Live traffic", kicker: "Live throughput chart", title: "Watch traffic live!", desc: "The live throughput chart streams inbound and outbound traffic for all connected peers in real time. Filter the view to the last 10s, 30s, 1m, 5m, 12h, or 24h, and customize the chart to your liking in the dashboard settings.", list: ["Inbound & outbound on one chart", "10s / 30s / 1m / 5m / 12h / 24h ranges", "Clean animations"], tag: "Live" },
+  { nav: "Your peers", kicker: "Devices on the tunnel", title: "Every device, <em>at a glance</em>", desc: "The peer table shows a live sparkline, tunnel IP, in and out bytes, and current connection state for every device. Open the peer drawer for ping, geo location, and more detail.", list: ["Live sparkline, IP & byte counts", "Connected state at a glance", "Open the drawer for ping & geo"], tag: "14 peers" },
+  { nav: "Add a device", kicker: "Onboarding in seconds", title: "Add a new peer <em>in seconds</em>", desc: "Adding a peer takes seconds and you never have to touch the command line. Download the ready-made .conf file for a laptop, or scan the QR code straight into the WireGuard app on your phone — keys, routing, and DNS are all configured for you.", list: ["Add a peer in one click", "Advanced settings when you need them"], tag: "New peer" },
+  { nav: "Traffic map", kicker: "Where your peers are", title: "Live <em>Traffic Map</em>", desc: "Open Traffic Map to watch connected devices orbit your server — each peer shows its handshakes, rx, and geo location as text. Peers drift closer to the hub when ping is good and further out when it's bad, so latency is visible at a glance.", list: ["Handshakes, rx & geo per peer", "Distance shows ping quality"], tag: "Worldwide" },
+  { nav: "Budgets & alerts", kicker: "Stay in control", title: "Caps, alerts, <em>and a log</em>", desc: "Set daily data budgets per peer and automatically throttle or disconnect them when limits are exceeded. Get notifications about your VPN node health, backed by a fully implemented event log and updater.", list: ["Per-peer daily budgets", "Auto throttle or disconnect", "Node health alerts, log & updater"], tag: "Notifications" },
+  { nav: "You're all set", kicker: "Ready to go", title: "That's the <em>whole dashboard</em>", desc: "You've seen the essentials. Jump in whenever you're ready — every feature here is one click away from the main view.", list: [], tag: "Done" },
+];
+
+let cur = 0;
+try { const s = +localStorage.getItem('wgq_oobe_step'); if (s >= 0 && s < STEPS.length) cur = s; } catch (e) {}
+
+const $ = (id) => document.getElementById(id);
+const stepsEl = $('steps'), dotsEl = $('dots');
+
+// build rail steps
+STEPS.forEach((s, i) => {
+  const b = document.createElement('button');
+  b.className = 'step';
+  b.innerHTML = `<span class="step-dot" data-n="${i+1}">${i+1}</span><span class="step-label">${s.nav}</span>`;
+  b.onclick = () => go(i);
+  stepsEl.appendChild(b);
+  const d = document.createElement('i');
+  d.onclick = () => go(i);
+  dotsEl.appendChild(d);
+});
+const stepEls = [...stepsEl.children];
+const dotEls = [...dotsEl.children];
+const panels = [...document.querySelectorAll('.panel')];
+const CHECK = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+
+let tickTimers = [];
+function clearTimers() { tickTimers.forEach(t => { clearInterval(t); clearTimeout(t); }); tickTimers = []; }
+
+function go(i) {
+  if (i < 0 || i >= STEPS.length) return;
+  cur = i;
+  try { localStorage.setItem('wgq_oobe_step', i); } catch (e) {}
+  render();
+}
+
+function render() {
+  const s = STEPS[cur];
+  $('copyKicker').textContent = s.kicker;
+  $('copyTitle').innerHTML = s.title;
+  $('copyDesc').textContent = s.desc;
+  $('copyList').innerHTML = s.list.map(t => `<li><span class="tick">${CHECK}</span><span>${t}</span></li>`).join('');
+
+  stepEls.forEach((el, i) => {
+    el.classList.toggle('active', i === cur);
+    el.classList.toggle('done', i < cur);
+    const dot = el.querySelector('.step-dot');
+    dot.innerHTML = i < cur ? CHECK : (i + 1);
+  });
+  dotEls.forEach((el, i) => el.classList.toggle('on', i === cur));
+
+  $('backBtn').disabled = cur === 0;
+  $('skipBtn').style.visibility = cur === STEPS.length - 1 ? 'hidden' : 'visible';
+  const next = $('nextBtn');
+  next.textContent = cur === STEPS.length - 1 ? 'Open Dashboard' : 'Next';
+
+  // panels
+  clearTimers();
+  panels.forEach(p => { p.classList.remove('on'); p.classList.remove('playing'); p.classList.remove('done'); });
+  const panel = panels[cur];
+  panel.classList.add('on');
+  void panel.offsetWidth;
+  setTimeout(() => { panel.classList.add('playing'); playDemo(cur); }, 30);
+  tickTimers.push(setTimeout(() => panel.classList.add('done'), 2600));
+}
+
+// ---------- demo drivers ----------
+function playDemo(i) {
+  if (i === 1) driveChart();
+  if (i === 3) buildQR();
+  if (i === 4) buildMap();
+  if (i === 5) driveBudget();
+}
+
+// chart
+function buildChartPath() {
+  const svg = $('chartSvg');
+  const W = 320, H = 200;
+  const N = 13;
+  const TOP = 34, BOT = 168;
+  function series(seed, amp, mid) {
+    let s = seed, pts = [];
+    for (let x = 0; x <= N; x++) {
+      s = (s * 9301 + 49297) % 233280;
+      const r = s / 233280;
+      let y = mid - (r - 0.5) * amp - Math.sin(x / 2.4) * amp * 0.4;
+      y = Math.max(TOP, Math.min(BOT, y));
+      pts.push([x / N * W, y]);
+    }
+    return pts;
+  }
+  function toSmooth(pts) {
+    if (pts.length < 2) return '';
+    let d = `M${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] || pts[i];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[i + 2] || p2;
+      const c1x = p1[0] + (p2[0] - p0[0]) / 6;
+      const c1y = p1[1] + (p2[1] - p0[1]) / 6;
+      const c2x = p2[0] - (p3[0] - p1[0]) / 6;
+      const c2y = p2[1] - (p3[1] - p1[1]) / 6;
+      d += ` C${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+    }
+    return d;
+  }
+  function toArea(pts) { return toSmooth(pts) + ` L ${W} ${H} L 0 ${H} Z`; }
+  const inPts = series(42, 70, 92);
+  const outPts = series(99, 48, 140);
+  svg.innerHTML = `
+    <defs>
+      <linearGradient id="gIn" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity="0.28"/><stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></linearGradient>
+      <linearGradient id="gOut" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--accent-2)" stop-opacity="0.22"/><stop offset="1" stop-color="var(--accent-2)" stop-opacity="0"/></linearGradient>
+    </defs>
+    <g class="chart-reveal">
+      <path d="${toArea(outPts)}" fill="url(#gOut)"/>
+      <path d="${toSmooth(outPts)}" fill="none" stroke="var(--accent-2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="${toArea(inPts)}" fill="url(#gIn)"/>
+      <path d="${toSmooth(inPts)}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <g class="chart-cursor">
+      <circle cx="${inPts[N][0]}" cy="${inPts[N][1]}" r="4" fill="var(--accent)" stroke="var(--card)" stroke-width="2"/>
+    </g>`;
+}
+function driveChart() {
+  buildChartPath();
+  const el = $('thrputNum');
+  let v = 0; const target = 12.4;
+  const t = setInterval(() => {
+    v += (target - v) * 0.16;
+    if (target - v < 0.05) { v = target; el.textContent = v.toFixed(1); clearInterval(t); return; }
+    el.textContent = v.toFixed(1);
+  }, 90);
+  tickTimers.push(t);
+}
+
+// QR
+function buildQR() {
+  const qr = $('qr');
+  qr.innerHTML = '';
+  const N = 21;
+  const cells = [];
+  let s = 7;
+  const rng = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+  function isFinder(r, c) {
+    const inBox = (br, bc) => r >= br && r < br + 7 && c >= bc && c < bc + 7;
+    return inBox(0,0) || inBox(0,N-7) || inBox(N-7,0);
+  }
+  function finderOn(r, c) {
+    const local = (br, bc) => { const rr = r-br, cc = c-bc; if (rr<0||cc<0||rr>6||cc>6) return null; const edge = rr===0||rr===6||cc===0||cc===6; const core = rr>=2&&rr<=4&&cc>=2&&cc<=4; return edge||core; };
+    return local(0,0) ?? local(0,N-7) ?? local(N-7,0);
+  }
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const i = document.createElement('i');
+    let on;
+    if (isFinder(r, c)) on = finderOn(r, c);
+    else on = rng() > 0.5;
+    if (on) { i.classList.add('willon'); cells.push(i); }
+    qr.appendChild(i);
+  }
+  let k = 0;
+  const t = setInterval(() => {
+    for (let j = 0; j < 18 && k < cells.length; j++, k++) cells[k].classList.add('on');
+    if (k >= cells.length) clearInterval(t);
+  }, 30);
+  tickTimers.push(t);
+}
+
+// map
+function buildMap() {
+  const svg = $('mapSvg');
+  const cx = 160, cy = 150;
+  const peers = [
+    { x: 60, y: 70, on: 1 }, { x: 255, y: 60, on: 1 }, { x: 280, y: 150, on: 1 },
+    { x: 240, y: 235, on: 1 }, { x: 70, y: 220, on: 1 }, { x: 40, y: 150, on: 0 },
+  ];
+  let links = '', nodes = '', pkts = '';
+  peers.forEach((p, i) => {
+    const mx = (p.x + cx) / 2 + (p.y - cy) * 0.12;
+    const my = (p.y + cy) / 2 - (p.x - cx) * 0.12;
+    const d = `M${cx} ${cy} Q${mx} ${my} ${p.x} ${p.y}`;
+    links += `<path class="map-link" d="${d}"/>`;
+    if (p.on) {
+      const dur = (2.6 + i * 0.45).toFixed(2);
+      const delay = (i * 0.5).toFixed(2);
+      pkts += `<circle class="pkt" r="3" style="offset-path:path('${d}');animation-duration:${dur}s;animation-delay:${delay}s"/>`;
+    }
+    nodes += `<circle class="map-node ${p.on ? 'map-node-on' : ''}" cx="${p.x}" cy="${p.y}" r="7"/>`;
+  });
+  svg.innerHTML = `
+    <ellipse cx="${cx}" cy="${cy}" rx="135" ry="120" fill="none" stroke="var(--border)" stroke-width="1" stroke-dasharray="2 5"/>
+    <ellipse cx="${cx}" cy="${cy}" rx="135" ry="60" fill="none" stroke="var(--border)" stroke-width="1" stroke-dasharray="2 5"/>
+    <line x1="25" y1="${cy}" x2="295" y2="${cy}" stroke="var(--border)" stroke-width="1" stroke-dasharray="2 5"/>
+    ${links}
+    <circle class="map-srv-ring" cx="${cx}" cy="${cy}"/>
+    ${nodes}
+    <circle class="map-server" cx="${cx}" cy="${cy}" r="9"/>
+    ${pkts}`;
+  svg.querySelectorAll('.pkt').forEach(p => { p.style.animationName = 'pktMove'; p.style.animationTimingFunction = 'linear'; p.style.animationIterationCount = 'infinite'; });
+}
+
+// budget count up
+function driveBudget() {
+  const el = $('baNum');
+  let v = 0; const target = 128;
+  const t = setInterval(() => {
+    v += (target - v) * 0.16 + 0.8;
+    if (v >= target) { v = target; clearInterval(t); }
+    el.textContent = Math.round(v);
+  }, 28);
+  tickTimers.push(t);
+}
+
+// ---------- nav ----------
+function goToDashboard() {
+  try { localStorage.setItem('WG_WELCOMED', '1'); } catch (e) {}
+  try { localStorage.removeItem('wgq_oobe_step'); } catch (e) {}
+  window.location.href = '/';
+}
+
+$('nextBtn').onclick = () => {
+  if (cur === STEPS.length - 1) { goToDashboard(); return; }
+  go(cur + 1);
+};
+$('backBtn').onclick = () => go(cur - 1);
+$('skipBtn').onclick = () => goToDashboard();
+
+$('themeBtn').onclick = () => {
+  const th = document.documentElement.getAttribute('data-theme');
+  const next = th === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('WG_THEME', next); } catch (e) {}
+};
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight') $('nextBtn').click();
+  if (e.key === 'ArrowLeft' && cur > 0) $('backBtn').click();
+});
+
+render();
+</script>
+</body>
+</html>
