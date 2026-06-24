@@ -65,26 +65,28 @@
 
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #1A1613;
-  --bg-2: #221C17;
-  --card: #211B16;
-  --card-raised: #2A231C;
+  --bg: #14100C;
+  --bg-2: #1C1611;
+  --card: #241D16;
+  --card-raised: #2F2619;
   --ink: #EFE6D8;
   --ink-2: #C8BEAE;
   --muted: #8A7F72;
   --muted-2: #6B6256;
-  --border: #332A22;
-  --border-strong: #433628;
+  --border: #3A2F24;
+  --border-strong: #4D3E2C;
   --accent: oklch(70% 0.14 45);
   --accent-soft: oklch(32% 0.08 45);
   --accent-2: oklch(70% 0.10 150);
   --success: oklch(72% 0.13 150);
   --success-soft: oklch(30% 0.07 150);
+  --warn: oklch(72% 0.14 70);
   --warn-soft: oklch(32% 0.08 70);
+  --danger: oklch(64% 0.17 25);
   --danger-soft: oklch(30% 0.07 25);
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
-  --shadow: 0 1px 3px rgba(0,0,0,0.4), 0 4px 14px rgba(0,0,0,0.3);
-  --shadow-lg: 0 2px 4px rgba(0,0,0,0.4), 0 16px 40px rgba(0,0,0,0.5);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+  --shadow: 0 1px 3px rgba(0,0,0,0.5), 0 4px 14px rgba(0,0,0,0.4);
+  --shadow-lg: 0 2px 4px rgba(0,0,0,0.5), 0 16px 40px rgba(0,0,0,0.6);
 }
 
 .accent-forest { --accent: oklch(55% 0.11 150); --accent-soft: oklch(88% 0.05 150); --accent-2: oklch(58% 0.12 42); }
@@ -945,9 +947,7 @@ html.theme-switching .theme-toggle-icon {
 .status-dot {
   width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
 }
-.status-connected .status-dot {
-  box-shadow: 0 0 4px 1px color-mix(in oklab, var(--success) 40%, transparent);
-}
+.status-connected .status-dot {}
 .status-paused .status-dot {
   animation: pausedBlink 1.4s steps(1) infinite;
 }
