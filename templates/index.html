@@ -2820,7 +2820,6 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
   width: 100%;
   background: var(--card-raised);
   border: 1px solid var(--border-strong);
-  border-left: 3px solid var(--accent);
   border-radius: 12px;
   overflow: hidden;
   box-shadow: var(--shadow-lg);
@@ -2838,13 +2837,6 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
   from { opacity: 1; transform: translateX(0) scale(1); }
   to   { opacity: 0; transform: translateX(calc(100% + 28px)) scale(0.92); }
 }
-
-/* Left accent by type */
-.toast-success { border-left-color: var(--success); }
-.toast-error   { border-left-color: var(--danger); }
-.toast-warning { border-left-color: var(--warn); }
-.toast-info,
-.toast-loading { border-left-color: var(--accent); }
 
 .toast-row {
   display: flex;
@@ -2898,9 +2890,6 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
   background: var(--accent);
   transition: width 0.08s linear;
 }
-.toast-success .toast-bar-fill { background: var(--success); }
-.toast-error   .toast-bar-fill { background: var(--danger); }
-.toast-warning .toast-bar-fill { background: var(--warn); }
 
 </style>
 </head>
