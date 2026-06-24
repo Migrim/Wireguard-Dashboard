@@ -68,6 +68,8 @@ function App({ tweaks, setTweaks, onLogout }) {
   const [peerGeo, setPeerGeo] = uS({});
   // Per-peer ping in ms — filled from /diag responses
   const [peerPings, setPeerPings] = uS({});
+  // Per-peer ping history: { [name]: number[] } newest-first, 24 slots
+  const [peerPingHistory, setPeerPingHistory] = uS({});
 
   // Previous cumulative bytes per peer — used to compute sparkline deltas
   const prevBytesRef = uR({});
@@ -247,7 +249,17 @@ function App({ tweaks, setTweaks, onLogout }) {
             newGeo[r.name] = { lat: loc.lat, lng: loc.lng, country: loc.label || loc.country || '' };
           }
         });
-        if (Object.keys(newPings).length > 0) setPeerPings(prev => ({ ...prev, ...newPings }));
+        if (Object.keys(newPings).length > 0) {
+          setPeerPings(prev => ({ ...prev, ...newPings }));
+          setPeerPingHistory(prev => {
+            const out = { ...prev };
+            Object.entries(newPings).forEach(([name, ms]) => {
+              const buf = out[name] || new Array(24).fill(0);
+              out[name] = [ms, ...buf.slice(0, 23)];
+            });
+            return out;
+          });
+        }
         if (Object.keys(newGeo).length > 0) setPeerGeo(prev => ({ ...prev, ...newGeo }));
       } catch (_) {}
     };
@@ -636,7 +648,7 @@ function App({ tweaks, setTweaks, onLogout }) {
           peer={peers.find(p => p.id === selectedPeer)}
           onClose={() => setSelectedPeer(null)}
           throughputBuffers={peerThr}
-          peerPings={peerPings}
+          peerPingHistory={peerPingHistory}
           tweaks={tweaks}
           onRevoke={() => {
             // Re-fetch peers after revoke

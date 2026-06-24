@@ -3,9 +3,68 @@
 const { useState: _useState, useEffect: _useEffect, useRef: _useRef, useMemo: _useMemo } = React;
 
 // ============================================================
+// PingBars — thin bar chart with Y-axis, newest bar on the left
+// ============================================================
+function PingBars({ data, height = 68, color = 'var(--accent-2)' }) {
+  const containerRef = _useRef(null);
+  const [cw, setCw] = _useState(500);
+
+  _useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    setCw(Math.round(el.getBoundingClientRect().width) || 500);
+    const ro = new ResizeObserver(entries => {
+      const w = entries[0]?.contentRect.width;
+      if (w > 0) setCw(Math.round(w));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const PL = 40, PR = 8, PT = 8, PB = 14;
+  const iw = cw - PL - PR;
+  const ih = height - PT - PB;
+  const n = data.length;
+
+  const maxRaw = Math.max(...data, 10);
+  const mag = Math.pow(10, Math.floor(Math.log10(maxRaw)));
+  const norm = maxRaw / mag;
+  const niceMax = norm <= 1 ? mag : norm <= 2 ? 2 * mag : norm <= 5 ? 5 * mag : 10 * mag;
+
+  const ticks = [0, Math.round(niceMax / 2), niceMax];
+  const yAt = v => PT + ih - (v / niceMax) * ih;
+  const gap = 2;
+  const barW = Math.max(2, (iw - gap * (n - 1)) / n);
+  const fmt = v => v === 0 ? '0' : v >= 1000 ? `${(v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}s` : `${v}ms`;
+
+  return (
+    <div ref={containerRef} style={{ width: '100%' }}>
+      <svg viewBox={`0 0 ${cw} ${height}`} preserveAspectRatio="none" style={{ width: '100%', height, display: 'block' }}>
+        {ticks.map((t, i) => {
+          const y = yAt(t);
+          return (
+            <g key={i}>
+              <line x1={PL} x2={cw - PR} y1={y} y2={y} stroke="var(--border)" strokeWidth="1"
+                strokeDasharray={t === 0 ? '' : '2 3'} opacity="0.6" />
+              <text x={PL - 5} y={y + 3.5} textAnchor="end" fontSize="9" fill="var(--muted)" fontFamily="var(--mono)">{fmt(t)}</text>
+            </g>
+          );
+        })}
+        {data.map((v, i) => {
+          const x = PL + i * (barW + gap);
+          const bh = (v / niceMax) * ih;
+          return <rect key={i} x={x} y={yAt(v)} width={barW} height={bh}
+            fill={color} opacity={0.25 + 0.75 * (1 - i / n)} rx="1" />;
+        })}
+      </svg>
+    </div>
+  );
+}
+
+// ============================================================
 // PeerDrawer — slide-out detail with charts + controls
 // ============================================================
-function PeerDrawer({ peer, onClose, throughputBuffers, peerPings = {}, onRevoke, onPeerUpdated, tweaks = {} }) {
+function PeerDrawer({ peer, onClose, throughputBuffers, peerPingHistory = {}, onRevoke, onPeerUpdated, tweaks = {} }) {
   const [copied, setCopied] = _useState('');
   const [downloading, setDownloading] = _useState(false);
   const [revoking, setRevoking] = _useState(false);
@@ -15,13 +74,8 @@ function PeerDrawer({ peer, onClose, throughputBuffers, peerPings = {}, onRevoke
     try { return !!localStorage.getItem('WG_PEER_DRAFT_' + peer?.name); } catch { return false; }
   });
   const [diag, setDiag] = _useState({ loading: true, pingMs: null, pingStatus: '', location: null, endpointIp: '', pingIp: '' });
-  const [pingHistory, setPingHistory] = _useState(() => new Array(24).fill(0));
-
-  const latestPing = peerPings[peer?.name];
-  _useEffect(() => {
-    if (latestPing == null) return;
-    setPingHistory(prev => [...prev.slice(1), latestPing]);
-  }, [latestPing]);
+  const pingHistory = peerPingHistory[peer?.name] || new Array(24).fill(0);
+  const latestPing = pingHistory[0] > 0 ? pingHistory[0] : null;
 
   _useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -201,8 +255,8 @@ function PeerDrawer({ peer, onClose, throughputBuffers, peerPings = {}, onRevoke
               <span className="section-label">PING LATENCY</span>
               <span className="section-meta">{latestPing != null ? `${latestPing} ms` : '—'}</span>
             </div>
-            <div className="drawer-chart" style={{ padding: '6px 8px' }}>
-              <MiniBars data={pingHistory} height={44} color="var(--accent-2)" />
+            <div className="drawer-chart">
+              <PingBars data={pingHistory} height={68} color="var(--accent-2)" />
             </div>
           </section>
 
