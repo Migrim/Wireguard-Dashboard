@@ -335,7 +335,8 @@ function App({ tweaks, setTweaks, onLogout }) {
     const doneLabel   = { start: 'Server started', restart: 'Server restarted', stop: 'Server stopped' }[action] ?? 'Done';
     const t = window.WG.toast?.loading?.(`${startLabel} server…`);
     try {
-      await window.WG.apiCall('/api/service', { method: 'POST', body: JSON.stringify({ action }) });
+      const r = await window.WG.apiCall('/api/service', { method: 'POST', body: JSON.stringify({ action }) });
+      if (!r.ok) throw new Error(r.out || 'Service action failed');
       const j = await window.WG.apiCall('/api/status');
       setServiceActive(!!j.service.active);
       setServiceEnabled(!!j.service.enabled);
