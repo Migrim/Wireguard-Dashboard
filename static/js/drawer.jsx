@@ -130,7 +130,7 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated,
       <aside className="drawer" role="dialog" aria-label={`Peer ${peer.name}`}>
         <header className="drawer-head">
           <div className="drawer-head-left">
-            <div className="peer-avatar" style={{ background: peer.status === 'connected' ? 'var(--accent)' : 'var(--border-strong)' }}>
+            <div className="peer-avatar" style={{ background: peer.status === 'connected' ? 'var(--avatar-bg)' : 'var(--border-strong)' }}>
               {peer.name.split('-').map(s => s[0]).join('').slice(0, 2).toUpperCase()}
             </div>
             <div>
@@ -464,7 +464,7 @@ function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets
       <aside className="drawer" role="dialog" aria-label="Data budget">
         <header className="drawer-head">
           <div className="drawer-head-left">
-            <div className="peer-avatar" style={{ background: 'var(--accent)' }}>
+            <div className="peer-avatar" style={{ background: 'var(--avatar-bg)' }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg>
             </div>
             <div>
@@ -763,7 +763,7 @@ function LogsDrawer({ alerts, onClose, verbose, setVerbose, onDismiss }) {
       <aside className="drawer drawer-wide" role="dialog" aria-label="Logs">
         <header className="drawer-head">
           <div className="drawer-head-left">
-            <div className="peer-avatar" style={{ background: 'var(--accent)' }}>
+            <div className="peer-avatar" style={{ background: 'var(--avatar-bg)' }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
             </div>
             <div>
@@ -991,7 +991,7 @@ function PortCheckDrawer({ peers, onClose }) {
       <aside className="drawer" role="dialog" aria-label="Port check">
         <header className="drawer-head">
           <div className="drawer-head-left">
-            <div className="peer-avatar" style={{ background: 'var(--accent)' }}>
+            <div className="peer-avatar" style={{ background: 'var(--avatar-bg)' }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg>
             </div>
             <div>
@@ -1374,7 +1374,7 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
       <aside className="drawer" role="dialog" aria-label="Dashboard settings">
         <header className="drawer-head">
           <div className="drawer-head-left">
-            <div className="peer-avatar" style={{ background: 'var(--accent)' }}>
+            <div className="peer-avatar" style={{ background: 'var(--avatar-bg)' }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
             </div>
             <div>
