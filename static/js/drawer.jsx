@@ -50,6 +50,16 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated,
   if (!peer) return null;
 
   const thr = throughputBuffers[peer.id] || { rx: [], tx: [] };
+  const thrSamples = _useMemo(() => {
+    const { rx, tx } = thr;
+    const n = Math.min(rx.length, tx.length);
+    const now = Date.now();
+    return Array.from({ length: n }, (_, i) => ({
+      ts: now - (n - 1 - i) * 3000,
+      rx: rx[i] || 0,
+      tx: tx[i] || 0,
+    }));
+  }, [thr]);
   const pingLabel = diag.pingMs != null ? `${diag.pingMs} ms` : (diag.pingStatus || 'timeout');
   const locationLabel = (diag.location && diag.location.label) || peer.country || '—';
 
@@ -171,8 +181,8 @@ function PeerDrawer({ peer, onClose, throughputBuffers, onRevoke, onPeerUpdated,
               </span>
             </div>
             <div className="drawer-chart">
-              {thr.rx.length > 0 ? (
-                <ThroughputChart dataIn={thr.rx} dataOut={thr.tx} width={500} height={180} smoothScroll={tweaks.smoothThroughput} />
+              {thrSamples.some(s => s.rx > 0 || s.tx > 0) ? (
+                <ThroughputChart samples={thrSamples} height={180} range="1m" spline={tweaks.splineChart} splineTension={tweaks.splineTension ?? 1} smoothScroll={tweaks.smoothThroughput} smoothScale={tweaks.smoothScale} />
               ) : (
                 <div className="empty-chart">No recent activity</div>
               )}
