@@ -2805,19 +2805,20 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
 .toaster {
   position: fixed;
   bottom: 24px;
-  right: 24px;
+  left: 24px;
   z-index: 9000;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  align-items: flex-end;
+  align-items: flex-start;
   pointer-events: none;
-  width: min(400px, calc(100vw - 48px));
+  max-width: min(400px, calc(100vw - 48px));
 }
 
 .toast-item {
   pointer-events: all;
-  width: 100%;
+  width: max-content;
+  max-width: min(400px, calc(100vw - 48px));
   background: var(--card-raised);
   border: 1px solid var(--border-strong);
   border-radius: 12px;
@@ -2830,12 +2831,12 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
   animation: toastOut 0.24s ease forwards;
 }
 @keyframes toastIn {
-  from { opacity: 0; transform: translateX(calc(100% + 28px)) scale(0.92); }
+  from { opacity: 0; transform: translateX(calc(-100% - 28px)) scale(0.92); }
   to   { opacity: 1; transform: translateX(0) scale(1); }
 }
 @keyframes toastOut {
   from { opacity: 1; transform: translateX(0) scale(1); }
-  to   { opacity: 0; transform: translateX(calc(100% + 28px)) scale(0.92); }
+  to   { opacity: 0; transform: translateX(calc(-100% - 28px)) scale(0.92); }
 }
 
 .toast-row {
@@ -2855,7 +2856,8 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
 }
 .toast-ico-success { color: var(--success); }
 .toast-ico-error   { color: var(--danger); }
-.toast-ico-warning { color: var(--warn); }
+.toast-ico-warning,
+.toast-ico-confirm { color: var(--warn); }
 .toast-ico-info,
 .toast-ico-loading { color: var(--accent); }
 
@@ -2882,6 +2884,35 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
   transition: opacity 0.12s, background 0.12s, color 0.12s;
 }
 .toast-x:hover { opacity: 1; background: var(--bg-2); color: var(--ink); }
+
+/* Confirm action buttons */
+.toast-actions {
+  display: flex;
+  gap: 6px;
+  padding: 0 11px 10px 42px;
+}
+.toast-act {
+  flex: 1;
+  padding: 3px 10px;
+  border: none;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.12s, background 0.12s;
+  line-height: 1;
+}
+.toast-act-cancel {
+  background: var(--bg-2);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+.toast-act-cancel:hover { background: var(--border); color: var(--ink); }
+.toast-act-ok {
+  background: var(--accent);
+  color: #fff;
+}
+.toast-act-ok:hover { filter: brightness(0.88); }
 
 /* Progress bar (shows remaining auto-dismiss time) */
 .toast-bar { height: 2px; background: color-mix(in oklab, var(--border) 70%, transparent); }

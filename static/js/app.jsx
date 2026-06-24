@@ -714,11 +714,23 @@ function KPIServiceControl({ serviceActive, serviceEnabled, unit, startedAt, ser
           {serviceLoading === 'start' ? <span className="pc-spinner" /> : <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l14 8-14 8V4z"/></svg>}
           Start
         </button>
-        <button className={`svc-btn ${serviceLoading ? 'disabled' : ''}`} disabled={!!serviceLoading} onClick={() => doService('restart')}>
+        <button className={`svc-btn ${serviceLoading ? 'disabled' : ''}`} disabled={!!serviceLoading} onClick={() => {
+          window.WG.toast?.confirm?.(
+            'Restart the server?',
+            'Peers will briefly disconnect during the restart.',
+            { confirmLabel: 'Restart', onConfirm: () => doService('restart') }
+          );
+        }}>
           {serviceLoading === 'restart' ? <span className="pc-spinner" /> : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 11-9-9c2.5 0 4.7 1 6.4 2.6L21 3v6h-6"/></svg>}
           Restart
         </button>
-        <button className={`svc-btn ${!serviceActive || serviceLoading ? 'disabled' : ''}`} disabled={!serviceActive || !!serviceLoading} onClick={() => doService('stop')}>
+        <button className={`svc-btn ${!serviceActive || serviceLoading ? 'disabled' : ''}`} disabled={!serviceActive || !!serviceLoading} onClick={() => {
+          window.WG.toast?.confirm?.(
+            'Stop the server?',
+            'All connected peers will be disconnected.',
+            { confirmLabel: 'Stop server', onConfirm: () => doService('stop') }
+          );
+        }}>
           {serviceLoading === 'stop' ? <span className="pc-spinner" /> : <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>}
           Stop
         </button>
