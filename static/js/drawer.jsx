@@ -1633,6 +1633,21 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
                       </button>
                     </div>
                   </div>
+                  <div className="setting-row">
+                    <div>
+                      <div className="setting-title">Welcome tour</div>
+                      <div className="setting-desc">Re-open the setup walkthrough from the beginning</div>
+                    </div>
+                    <div className="setting-control">
+                      <button
+                        className="btn"
+                        onClick={() => {
+                          try { localStorage.removeItem('WG_WELCOMED'); localStorage.removeItem('wgq_oobe_step'); } catch (e) {}
+                          window.location.href = '/welcome';
+                        }}
+                      >Show</button>
+                    </div>
+                  </div>
                 </>
               )}
             </div>
