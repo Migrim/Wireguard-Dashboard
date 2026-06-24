@@ -54,7 +54,7 @@ function PingBars({ data, height = 68, color = 'var(--accent-2)' }) {
           const x = PL + i * (barW + gap);
           const bh = (v / niceMax) * ih;
           return <rect key={i} x={x} y={yAt(v)} width={barW} height={bh}
-            fill={color} opacity={0.25 + 0.75 * (1 - i / n)} rx="1" />;
+            fill={color} opacity={0.2 + 0.8 * (i / Math.max(n - 1, 1))} rx="1" />;
         })}
       </svg>
     </div>
@@ -75,7 +75,7 @@ function PeerDrawer({ peer, onClose, throughputBuffers, peerPingHistory = {}, on
   });
   const [diag, setDiag] = _useState({ loading: true, pingMs: null, pingStatus: '', location: null, endpointIp: '', pingIp: '' });
   const pingHistory = peerPingHistory[peer?.name] || new Array(24).fill(0);
-  const latestPing = pingHistory[0] > 0 ? pingHistory[0] : null;
+  const latestPing = pingHistory[pingHistory.length - 1] > 0 ? pingHistory[pingHistory.length - 1] : null;
 
   _useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };

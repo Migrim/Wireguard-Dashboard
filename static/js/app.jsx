@@ -68,8 +68,10 @@ function App({ tweaks, setTweaks, onLogout }) {
   const [peerGeo, setPeerGeo] = uS({});
   // Per-peer ping in ms — filled from /diag responses
   const [peerPings, setPeerPings] = uS({});
-  // Per-peer ping history: { [name]: number[] } newest-first, 24 slots
-  const [peerPingHistory, setPeerPingHistory] = uS({});
+  // Per-peer ping history: { [name]: number[] } oldest-first, 24 slots, persisted
+  const [peerPingHistory, setPeerPingHistory] = uS(() => {
+    try { return JSON.parse(localStorage.getItem('WG_PEER_PING_HISTORY') || 'null') || {}; } catch { return {}; }
+  });
 
   // Previous cumulative bytes per peer — used to compute sparkline deltas
   const prevBytesRef = uR({});
@@ -255,8 +257,9 @@ function App({ tweaks, setTweaks, onLogout }) {
             const out = { ...prev };
             Object.entries(newPings).forEach(([name, ms]) => {
               const buf = out[name] || new Array(24).fill(0);
-              out[name] = [ms, ...buf.slice(0, 23)];
+              out[name] = [...buf.slice(1), ms]; // oldest at 0, newest at end
             });
+            try { localStorage.setItem('WG_PEER_PING_HISTORY', JSON.stringify(out)); } catch (_) {}
             return out;
           });
         }
