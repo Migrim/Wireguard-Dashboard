@@ -27,6 +27,7 @@ def _detect_public_ip() -> str:
 PUBLIC_IP = _detect_public_ip()
 
 PEERS_DB=os.path.join(WG_DIR,"peers.json")
+WELCOME_FLAG=os.path.join(WG_DIR,"welcomed.flag")
 DATA_BUDGET_DB=os.environ.get("DATA_BUDGET_DB", os.path.join(WG_DIR, "data_budget.json"))
 TRAFFIC_HISTORY=os.environ.get("TRAFFIC_HISTORY", os.path.join(WG_DIR, "traffic_history.json"))
 TRAFFIC_RETENTION_SECONDS=24*60*60
@@ -85,7 +86,7 @@ def _sudo(args: List[str], input_data: bytes = None) -> Tuple[str,int]:
 def _log_request():
     app.logger.info("%s %s", request.method, request.path)
 
-_AUTH_OPEN = {"/", "/welcome", "/api/auth/check", "/api/auth/login", "/api/auth/logout"}
+_AUTH_OPEN = {"/", "/welcome", "/api/auth/check", "/api/auth/login", "/api/auth/logout", "/api/welcome/dismiss"}
 
 @app.before_request
 def _require_auth():
@@ -1207,8 +1208,37 @@ def auth_logout():
     session.clear()
     return jsonify({"ok": True})
 
+def _is_welcomed() -> bool:
+    if session.get("welcomed"):
+        return True
+    try:
+        return os.path.isfile(WELCOME_FLAG)
+    except Exception:
+        return True
+
+def _set_welcomed() -> None:
+    session["welcomed"] = True
+    try:
+        with open(WELCOME_FLAG, "a"):
+            pass
+        return
+    except Exception:
+        pass
+    import tempfile
+    fd, tmp = tempfile.mkstemp(prefix="welcomed.", dir="/tmp")
+    try:
+        os.close(fd)
+        _sudo(["/usr/bin/install", "-m", "640", "-o", "root", "-g", "www-data", tmp, WELCOME_FLAG])
+    finally:
+        try:
+            os.remove(tmp)
+        except Exception:
+            pass
+
 @app.route("/")
 def home():
+    if not _is_welcomed():
+        return redirect(url_for("welcome"))
     issued,live=list_clients()
     data={
         "service_active":service_active(),
@@ -1229,6 +1259,11 @@ def home():
 @app.route("/welcome")
 def welcome():
     return render_template("welcome.html")
+
+@app.route("/api/welcome/dismiss", methods=["POST"])
+def api_welcome_dismiss():
+    _set_welcomed()
+    return jsonify({"ok": True})
 
 @app.route("/action/<what>")
 def action(what: str):

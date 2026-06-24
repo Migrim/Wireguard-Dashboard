@@ -1747,10 +1747,7 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
                     <div className="setting-control">
                       <button
                         className="btn"
-                        onClick={() => {
-                          try { localStorage.removeItem('WG_WELCOMED'); localStorage.removeItem('wgq_oobe_step'); } catch (e) {}
-                          window.location.href = '/welcome';
-                        }}
+                        onClick={() => window.location.href = '/welcome'}
                       >Show</button>
                     </div>
                   </div>

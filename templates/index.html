@@ -15,9 +15,6 @@
     if (savedAccent && savedAccent !== 'terracotta' && validAccents.includes(savedAccent)) {
       document.documentElement.classList.add('accent-' + savedAccent);
     }
-    if (!localStorage.getItem('WG_WELCOMED')) {
-      window.location.replace('/welcome');
-    }
   })();
 </script>
 <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='icons/favicon.svg') }}">

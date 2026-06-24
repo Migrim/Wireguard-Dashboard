@@ -73,7 +73,7 @@
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; height: 100%; }
+html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
 body {
   font-family: var(--sans);
   background: var(--bg);
@@ -81,7 +81,7 @@ body {
   font-size: 13px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-  min-height: 100vh;
+  height: 100vh;
   display: grid;
   place-items: center;
   padding: 28px;
@@ -428,7 +428,7 @@ body {
   .rail-kicker, .steps .step-label, .rail-foot { display: none; }
   .steps { flex-direction: row; gap: 6px; flex: 0 0 auto; margin-left: 16px; }
   .step { padding: 7px; }
-  .main-body { grid-template-columns: 1fr; padding: 22px 22px 4px; gap: 18px; overflow-y: auto; }
+  .main-body { grid-template-columns: 1fr; padding: 22px 22px 4px; gap: 18px; overflow: hidden; }
   .stage { height: 280px; }
   .copy-title { font-size: 30px; }
   .copy-list { display: none; }
@@ -592,7 +592,6 @@ const STEPS = [
 ];
 
 let cur = 0;
-try { const s = +localStorage.getItem('wgq_oobe_step'); if (s >= 0 && s < STEPS.length) cur = s; } catch (e) {}
 
 const $ = (id) => document.getElementById(id);
 const stepsEl = $('steps'), dotsEl = $('dots');
@@ -803,9 +802,10 @@ function driveBudget() {
 
 // ---------- nav ----------
 function goToDashboard() {
-  try { localStorage.setItem('WG_WELCOMED', '1'); } catch (e) {}
   try { localStorage.removeItem('wgq_oobe_step'); } catch (e) {}
-  window.location.href = '/';
+  fetch('/api/welcome/dismiss', { method: 'POST' }).finally(() => {
+    window.location.href = '/';
+  });
 }
 
 $('nextBtn').onclick = () => {
