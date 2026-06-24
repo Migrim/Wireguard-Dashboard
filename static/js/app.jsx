@@ -3,6 +3,7 @@
 const { useState: uS, useEffect: uE, useRef: uR, useMemo: uM, useCallback: uC } = React;
 const LOG_VERBOSE_KEY = 'WG_LOG_VERBOSE';
 const DISMISSED_ALERTS_KEY = 'WG_DISMISSED_ALERTS';
+const AVG_PING_HISTORY_KEY = 'WG_AVG_PING_HISTORY';
 
 
 function App({ tweaks, setTweaks, onLogout }) {
@@ -52,7 +53,13 @@ function App({ tweaks, setTweaks, onLogout }) {
 
   // Per-peer sparklines (values = byte delta per poll cycle)
   const [sparks, setSparks] = uS({});
-  const [avgPingHistory, setAvgPingHistory] = uS(() => new Array(20).fill(0));
+  const [avgPingHistory, setAvgPingHistory] = uS(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(AVG_PING_HISTORY_KEY) || 'null');
+      if (Array.isArray(saved) && saved.length === 20) return saved;
+    } catch (_) {}
+    return new Array(20).fill(0);
+  });
 
   // Per-peer drawer throughput buffer
   const [peerThr, setPeerThr] = uS({});
@@ -84,6 +91,10 @@ function App({ tweaks, setTweaks, onLogout }) {
   uE(() => {
     localStorage.setItem(DISMISSED_ALERTS_KEY, JSON.stringify([...dismissedAlerts]));
   }, [dismissedAlerts]);
+
+  uE(() => {
+    localStorage.setItem(AVG_PING_HISTORY_KEY, JSON.stringify(avgPingHistory));
+  }, [avgPingHistory]);
 
   uE(() => {
     const check = () => fetch('/api/update/check').then(r => r.json()).then(j => {
@@ -964,7 +975,7 @@ function TweaksPanel({ tweaks, setTweaks }) {
           <label>Accent</label>
           <div className="swatches">
             {[
-              { id: 'terracotta', c: 'oklch(62% 0.13 45)' },
+              { id: 'terracotta', c: 'oklch(59% 0.15 33)' },
               { id: 'forest', c: 'oklch(55% 0.11 150)' },
               { id: 'ink', c: 'oklch(40% 0.04 250)' },
               { id: 'plum', c: 'oklch(48% 0.12 330)' },

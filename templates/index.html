@@ -46,8 +46,8 @@
   --muted-2: #A89C8C;
   --border: #E6DCC8;
   --border-strong: #D6C9B0;
-  --accent: oklch(62% 0.14 45);
-  --accent-soft: oklch(88% 0.06 45);
+  --accent: oklch(59% 0.15 33);
+  --accent-soft: oklch(89% 0.06 33);
   --accent-2: oklch(55% 0.09 150);
   --success: oklch(58% 0.12 150);
   --warn: oklch(68% 0.14 70);
@@ -75,8 +75,8 @@
   --muted-2: #6B6256;
   --border: #3A2F24;
   --border-strong: #4D3E2C;
-  --accent: oklch(70% 0.14 45);
-  --accent-soft: oklch(32% 0.08 45);
+  --accent: oklch(68% 0.15 33);
+  --accent-soft: oklch(32% 0.08 33);
   --accent-2: oklch(70% 0.10 150);
   --success: oklch(72% 0.13 150);
   --success-soft: oklch(30% 0.07 150);
@@ -959,8 +959,8 @@ html.theme-switching .theme-toggle-icon {
 .peer-name-cell { display: flex; align-items: center; gap: 10px; }
 .peer-avatar-sm {
   width: 28px; height: 28px;
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--accent);
+  color: oklch(97% 0.015 60);
   border-radius: 7px;
   display: grid; place-items: center;
   font-family: var(--mono);
@@ -969,7 +969,7 @@ html.theme-switching .theme-toggle-icon {
   letter-spacing: 0.02em;
   flex-shrink: 0;
 }
-.row-offline .peer-avatar-sm { background: var(--bg-2); color: var(--muted); }
+.row-offline .peer-avatar-sm { background: var(--border-strong); color: var(--muted); }
 .peer-name { font-weight: 500; color: var(--ink); line-height: 1.2; }
 .peer-device { font-size: 10.5px; color: var(--muted); margin-top: 1px; }
 .handshake-cell { line-height: 1.3; }
@@ -1014,7 +1014,7 @@ html.theme-switching .theme-toggle-icon {
   font-family: var(--mono);
   font-size: 13px;
   font-weight: 600;
-  color: var(--accent);
+  color: oklch(97% 0.015 60);
 }
 .drawer-title { font-family: var(--serif); font-size: 26px; margin: 0; color: var(--ink); line-height: 1; font-weight: 400; letter-spacing: -0.01em; }
 .drawer-sub { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
