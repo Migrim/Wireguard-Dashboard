@@ -40,6 +40,7 @@
   --border-strong: #D6C9B0;
   --accent:      oklch(59% 0.15 33);
   --accent-soft: oklch(89% 0.06 33);
+  --accent-2:    oklch(55% 0.09 150);
   --success:     oklch(58% 0.12 150);
   --warn:        oklch(68% 0.14 70);
   --danger:      oklch(56% 0.17 25);
@@ -67,6 +68,7 @@
   --border-strong: #4D3E2C;
   --accent:      oklch(68% 0.15 33);
   --accent-soft: oklch(32% 0.08 33);
+  --accent-2:    oklch(70% 0.10 150);
   --success:     oklch(72% 0.13 150);
   --success-soft: oklch(30% 0.07 150);
   --warn:        oklch(72% 0.14 70);
@@ -194,16 +196,16 @@ body {
 .m-stat-val { font-family: var(--serif); font-size: 30px; color: var(--ink); letter-spacing: -0.02em; line-height: 1; margin-top: 6px; }
 .m-stat-sub { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
 
-/* ── Traffic card ── */
-.m-traffic-card { padding: 16px; }
-.m-traffic-row { display: flex; justify-content: space-around; }
-.m-traffic-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.m-traffic-arrow { font-size: 16px; }
-.m-traffic-arrow.rx { color: var(--success); }
-.m-traffic-arrow.tx { color: var(--accent); }
-.m-traffic-rate { font-family: var(--mono); font-size: 16px; font-weight: 600; color: var(--ink); }
-.m-traffic-lbl { font-family: var(--mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
-.m-traffic-div { width: 1px; background: var(--border); align-self: stretch; }
+/* ── Traffic chart card ── */
+.m-traffic-card { padding: 16px 16px 0; overflow: hidden; }
+.m-traffic-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.m-traffic-total { display: flex; align-items: baseline; gap: 5px; margin-bottom: 10px; }
+.m-traffic-big { font-family: var(--serif); font-size: 42px; letter-spacing: -0.02em; color: var(--ink); font-weight: 400; line-height: 1; font-variant-numeric: tabular-nums; }
+.m-traffic-unit { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.m-traffic-breakdown { display: flex; gap: 18px; margin-bottom: 10px; }
+.m-legend-item { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.m-legend-sq { width: 7px; height: 7px; border-radius: 2px; flex-shrink: 0; }
+.m-range-badge { display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 11px; color: var(--success); }
 
 /* ── Budget bar ── */
 .m-budget-card { padding: 16px; }
@@ -380,6 +382,7 @@ body {
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="{{ url_for('static', filename='js/charts.jsx') }}?v={{ app_version }}"></script>
 
 <script type="text/babel">
 {% raw %}
@@ -560,7 +563,7 @@ function Login({ onAuth }) {
 }
 
 /* ─── Home tab ─── */
-function HomeTab({ status, rxBps, txBps, onService, svcBusy }) {
+function HomeTab({ status, rxBps, txBps, trafficSamples, onService, svcBusy }) {
   const svc    = status?.service || {};
   const net    = status?.network || {};
   const budget = status?.data_budget || {};
@@ -588,50 +591,51 @@ function HomeTab({ status, rxBps, txBps, onService, svcBusy }) {
               {uptime && active && <div className="m-svc-uptime">Uptime: {uptime}</div>}
               {!active && <div className="m-svc-uptime" style={{color:'var(--danger)'}}>Inactive</div>}
             </div>
-            <div className={`m-status-pill ${active ? 'active' : 'inactive'}`}>
-              <div className="m-status-dot"/>
-              {active ? 'Active' : 'Stopped'}
-            </div>
+            {!active && (
+              <button className="m-btn success" onClick={() => onService('start')} disabled={!!svcBusy} style={{flex:'0 0 auto', minWidth:100}}>
+                <Icon n="play" size={14}/> Start
+              </button>
+            )}
           </div>
-          <div className="m-svc-btns">
-            {active ? (<>
+          {active && (
+            <div className="m-svc-btns">
               <button className="m-btn danger" onClick={() => onService('stop')} disabled={!!svcBusy}>
                 <Icon n="pause" size={14}/> Stop
               </button>
               <button className="m-btn" onClick={() => onService('restart')} disabled={!!svcBusy}>
                 <Icon n="refresh" size={14}/> Restart
               </button>
-            </>) : (
-              <button className="m-btn success" onClick={() => onService('start')} disabled={!!svcBusy} style={{flex:'0 0 auto', minWidth:100}}>
-                <Icon n="play" size={14}/> Start
-              </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Traffic */}
       <div className="m-section" style={{marginTop:14}}>
-        <div className="m-section-label">Live Traffic</div>
         <div className="m-card m-traffic-card">
-          <div className="m-traffic-row">
-            <div className="m-traffic-item">
-              <span className="m-traffic-arrow rx">↓</span>
-              <span className="m-traffic-rate">{fmtRate(rxBps)}</span>
-              <span className="m-traffic-lbl">Download</span>
-            </div>
-            <div className="m-traffic-div"/>
-            <div className="m-traffic-item">
-              <span className="m-traffic-arrow tx">↑</span>
-              <span className="m-traffic-rate">{fmtRate(txBps)}</span>
-              <span className="m-traffic-lbl">Upload</span>
-            </div>
-            <div className="m-traffic-div"/>
-            <div className="m-traffic-item">
-              <span className="m-traffic-arrow" style={{color:'var(--muted)'}}>⇅</span>
-              <span className="m-traffic-rate">{fmtBytes(net.rx || 0)}</span>
-              <span className="m-traffic-lbl">Total Rx</span>
-            </div>
+          <div className="m-traffic-head">
+            <span className="m-section-label" style={{marginBottom:0}}>Live Throughput</span>
+            <span className="m-range-badge">
+              <svg width="6" height="6" viewBox="0 0 6 6"><circle cx="3" cy="3" r="3" fill="currentColor"/></svg>
+              1m
+            </span>
+          </div>
+          <div className="m-traffic-total">
+            <span className="m-traffic-big">{fmtRate(rxBps + txBps).split(' ')[0]}</span>
+            <span className="m-traffic-unit">{fmtRate(rxBps + txBps).split(' ')[1]}</span>
+          </div>
+          <div className="m-traffic-breakdown">
+            <span className="m-legend-item">
+              <span className="m-legend-sq" style={{background:'var(--accent)'}}/>
+              ↓ {fmtRate(rxBps)}
+            </span>
+            <span className="m-legend-item">
+              <span className="m-legend-sq" style={{background:'var(--accent-2)'}}/>
+              ↑ {fmtRate(txBps)}
+            </span>
+          </div>
+          <div style={{marginLeft:-16, marginRight:-16}}>
+            <ThroughputChart samples={trafficSamples} height={130} range="1m" />
           </div>
         </div>
       </div>
@@ -967,6 +971,7 @@ function MobileApp() {
   const [status, setStatus] = useState(null);
   const [rxBps, setRxBps] = useState(0);
   const [txBps, setTxBps] = useState(0);
+  const [trafficSamples, setTrafficSamples] = useState([]);
   const [logs, setLogs] = useState([]);
   const [peers, setPeers] = useState([]);
   const [svcBusy, setSvcBusy] = useState(false);
@@ -1009,6 +1014,40 @@ function MobileApp() {
     fetch();
     const id = setInterval(fetch, 3000);
     return () => clearInterval(id);
+  }, [authState]);
+
+  /* Poll /api/traffic + load history */
+  useEffect(() => {
+    if (authState !== 'ok') return;
+    let cancelled = false;
+    api('/api/traffic/history?range=5m&max_points=3000').then(h => {
+      if (cancelled) return;
+      setTrafficSamples((h.samples || []).map(s => ({
+        ts: Number(s.ts) * 1000,
+        rx: Math.max(0, Number(s.rx_bps) || 0),
+        tx: Math.max(0, Number(s.tx_bps) || 0),
+      })));
+    }).catch(() => {});
+    const poll = () => {
+      api('/api/traffic').then(t => {
+        if (cancelled) return;
+        const sample = {
+          ts: Number(t.ts) * 1000,
+          rx: Math.max(0, Number(t.rx_bps) || 0),
+          tx: Math.max(0, Number(t.tx_bps) || 0),
+        };
+        setRxBps(sample.rx);
+        setTxBps(sample.tx);
+        setTrafficSamples(prev => {
+          if (prev.length && sample.ts <= prev[prev.length - 1].ts) return prev;
+          const cutoff = Date.now() - 5 * 60 * 1000;
+          return [...prev.filter(s => s.ts >= cutoff), sample];
+        });
+      }).catch(() => {});
+    };
+    poll();
+    const id = setInterval(poll, 3000);
+    return () => { cancelled = true; clearInterval(id); };
   }, [authState]);
 
   /* Poll /api/logs */
@@ -1091,7 +1130,7 @@ function MobileApp() {
         {!status && tab !== 'logs' ? (
           <div className="m-spinner"><div className="m-spinner-ring"/></div>
         ) : tab === 'home' ? (
-          <HomeTab status={status} rxBps={rxBps} txBps={txBps} onService={handleService} svcBusy={svcBusy}/>
+          <HomeTab status={status} rxBps={rxBps} txBps={txBps} trafficSamples={trafficSamples} onService={handleService} svcBusy={svcBusy}/>
         ) : tab === 'peers' ? (
           <PeersTab peers={peers} onAction={handlePeerAction} toast={toast}/>
         ) : (
