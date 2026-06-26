@@ -664,23 +664,17 @@ function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService,
 
       {/* Active Sessions */}
       <div className="m-section" style={{marginTop:14}}>
-        <div className="m-card m-traffic-card">
-          <div className="m-traffic-head">
-            <span className="m-section-label" style={{marginBottom:0}}>Active Sessions</span>
-            <span className="m-range-badge">
-              <svg width="6" height="6" viewBox="0 0 6 6"><circle cx="3" cy="3" r="3" fill="currentColor"/></svg>
-              live
-            </span>
+        <div className="m-card" style={{display:'flex', overflow:'hidden', minHeight:112}}>
+          <div style={{padding:'16px', flex:'0 0 auto', display:'flex', flexDirection:'column', justifyContent:'center', zIndex:1}}>
+            <div className="m-section-label" style={{marginBottom:8}}>Active Sessions</div>
+            <div style={{display:'flex', alignItems:'baseline', gap:5}}>
+              <span className="m-traffic-big">{onlinePeers}</span>
+              <span className="m-traffic-unit" style={{fontSize:16}}>/ {totalPeers}</span>
+            </div>
+            <div style={{fontFamily:'var(--mono)', fontSize:12, color:'var(--muted)', marginTop:4}}>{pct}% online</div>
           </div>
-          <div className="m-traffic-total">
-            <span className="m-traffic-big">{onlinePeers}</span>
-            <span className="m-traffic-unit">/ {totalPeers}</span>
-          </div>
-          <div className="m-traffic-breakdown">
-            <span className="m-legend-item">{pct}% online</span>
-          </div>
-          <div style={{marginLeft:-16, marginRight:-16}}>
-            <SteppedOnlineChart samples={peerOnlineSamples} height={100}/>
+          <div style={{flex:1, minWidth:0}}>
+            <SteppedOnlineChart samples={peerOnlineSamples} height={112}/>
           </div>
         </div>
       </div>
@@ -906,7 +900,7 @@ function HomePeerRow({ peer, history }) {
         <div style={{fontFamily:'var(--mono)', fontSize:11, color:'var(--muted)', marginTop:2}}>↓ {fmtBytes(peer.bytesIn)} &nbsp;↑ {fmtBytes(peer.bytesOut)}</div>
       </div>
       {sparkLine ? (
-        <svg viewBox="0 0 100 50" preserveAspectRatio="none" style={{width:80, height:44, flexShrink:0}}>
+        <svg viewBox="0 0 100 50" preserveAspectRatio="none" style={{width:110, height:44, flexShrink:0}}>
           <defs>
             <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.3"/>
@@ -916,7 +910,7 @@ function HomePeerRow({ peer, history }) {
           <path d={sparkFill} fill={`url(#${gid})`}/>
           <path d={sparkLine} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
-      ) : <div style={{width:80, height:44, flexShrink:0}}/>}
+      ) : <div style={{width:110, height:44, flexShrink:0}}/>}
     </div>
   );
 }
