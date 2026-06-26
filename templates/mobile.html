@@ -634,7 +634,7 @@ function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService,
           </div>
           {active && (
             <div className="m-svc-btns">
-              <button className="m-btn primary" onClick={() => onService('stop')} disabled={!!svcBusy}>
+              <button className="m-btn primary" onClick={() => onService('stop')} disabled={!!svcBusy} style={{flex:'0 0 auto', minWidth:100}}>
                 <Icon n="pause" size={14}/> Stop
               </button>
             </div>
