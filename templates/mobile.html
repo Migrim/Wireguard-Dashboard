@@ -757,6 +757,9 @@ function ConfigModal({ peerName, onClose, toast }) {
 function PeerDrawer({ peer, history, onClose, onAction, toast }) {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(null);
+  const [dragY, setDragY] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const startYRef = useRef(0);
 
   const chartSamples = history.length >= 2
     ? history.slice(1).map((s, i) => {
@@ -789,11 +792,29 @@ function PeerDrawer({ peer, history, onClose, onAction, toast }) {
     } catch { toast('Copy failed', 'err'); }
   };
 
+  const onTouchStart = e => {
+    startYRef.current = e.touches[0].clientY;
+    setIsDragging(true);
+  };
+  const onTouchMove = e => {
+    const dy = Math.max(0, e.touches[0].clientY - startYRef.current);
+    setDragY(dy);
+  };
+  const onTouchEnd = () => {
+    setIsDragging(false);
+    if (dragY > 80) {
+      setDragY(700);
+      setTimeout(onClose, 260);
+    } else {
+      setDragY(0);
+    }
+  };
+
   const statusColor = peer.status === 'online' ? 'var(--success)' : peer.status === 'paused' ? 'var(--warn)' : 'var(--muted-2)';
   const statusText  = peer.status === 'online' ? 'connected'     : peer.status === 'paused' ? 'paused'    : 'offline';
 
-  const InfoCell = ({ label, value, mono, span }) => (
-    <div style={{padding:'12px 16px', ...(span ? {gridColumn:'1 / -1'} : {})}}>
+  const InfoCell = ({ label, value, mono }) => (
+    <div style={{padding:'12px 16px'}}>
       <div style={{fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--muted)', marginBottom:5}}>{label}</div>
       <div style={{fontFamily: mono ? 'var(--mono)' : 'var(--serif)', fontSize: mono ? 13 : 20, color:'var(--ink)', lineHeight:1.2, wordBreak:'break-all'}}>{value}</div>
     </div>
@@ -801,14 +822,30 @@ function PeerDrawer({ peer, history, onClose, onAction, toast }) {
 
   return (
     <div className="m-modal-scrim" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="m-modal" style={{maxHeight:'92dvh', padding:0, display:'flex', flexDirection:'column'}}>
-        <div className="m-modal-handle" style={{margin:'10px auto 0', flexShrink:0}}/>
+      <div
+        className="m-modal"
+        style={{
+          padding: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          transform: `translateY(${dragY}px)`,
+          transition: isDragging ? 'none' : 'transform 0.28s cubic-bezier(0.2,0.9,0.3,1)',
+          touchAction: 'none',
+        }}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
+        {/* Drag handle */}
+        <div style={{padding:'10px 0 4px', display:'flex', justifyContent:'center', flexShrink:0, cursor:'grab'}}>
+          <div className="m-modal-handle" style={{margin:0}}/>
+        </div>
 
-        {/* Scrollable body */}
-        <div style={{flex:1, overflowY:'auto', WebkitOverflowScrolling:'touch', padding:'4px 20px 16px'}}>
+        {/* Body — not scrollable */}
+        <div style={{padding:'4px 20px 16px', overflow:'hidden'}}>
 
           {/* Header */}
-          <div style={{display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:16, marginTop:6}}>
+          <div style={{display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:16, marginTop:4}}>
             <div style={{flex:1, minWidth:0}}>
               <div style={{fontFamily:'var(--serif)', fontSize:26, color:'var(--ink)', lineHeight:1.15}}>{peer.name}</div>
               <div style={{fontFamily:'var(--mono)', fontSize:12, color:'var(--muted)', marginTop:3}}>{peer.addr}</div>
@@ -844,52 +881,45 @@ function PeerDrawer({ peer, history, onClose, onAction, toast }) {
           {/* Per-peer throughput chart */}
           {chartSamples.length >= 4 && (
             <div style={{background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:10, overflow:'hidden', marginBottom:14}}>
-              <ThroughputChart samples={chartSamples} height={140} range="3m" spline={true} smoothScroll={false} smoothScale={false}/>
+              <ThroughputChart samples={chartSamples} height={130} range="3m" spline={true} smoothScroll={false} smoothScale={false}/>
             </div>
           )}
 
           {/* Info grid */}
           <div style={{border:'1px solid var(--border)', borderRadius:10, overflow:'hidden', marginBottom:16}}>
             <div style={{display:'grid', gridTemplateColumns:'1fr 1fr'}}>
-              <div style={{borderRight:'1px solid var(--border)', borderBottom:'1px solid var(--border)'}}>
+              <div style={{borderRight:'1px solid var(--border)', ...(peer.endpoint !== '—' ? {borderBottom:'1px solid var(--border)'} : {})}}>
                 <InfoCell label="Bytes In"  value={fmtBytes(peer.bytesIn)}/>
               </div>
-              <div style={{borderBottom:'1px solid var(--border)'}}>
+              <div style={{...(peer.endpoint !== '—' ? {borderBottom:'1px solid var(--border)'} : {})}}>
                 <InfoCell label="Bytes Out" value={fmtBytes(peer.bytesOut)}/>
               </div>
               {peer.endpoint !== '—' && (
                 <div style={{gridColumn:'1 / -1'}}>
-                  <InfoCell label="Endpoint" value={peer.endpoint} mono span/>
+                  <InfoCell label="Endpoint" value={peer.endpoint} mono/>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Configuration */}
+          {/* Configuration — public key only */}
           {peer.pubKey && (
             <>
               <div style={{fontFamily:'var(--mono)', fontSize:10, letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--muted)', marginBottom:10}}>Configuration</div>
-              <div style={{display:'flex', flexDirection:'column', gap:8, marginBottom:4}}>
-                {[
-                  { key:'pubkey',    label:'Public Key',  value: peer.pubKey },
-                  { key:'allowedip', label:'Allowed IPs', value: peer.addr   },
-                ].map(row => (
-                  <div key={row.key} style={{display:'flex', alignItems:'center', justifyContent:'space-between', background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:10, padding:'12px 14px', gap:12}}>
-                    <div style={{flex:1, minWidth:0}}>
-                      <div style={{fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--muted)', marginBottom:4}}>{row.label}</div>
-                      <div style={{fontFamily:'var(--mono)', fontSize:12, color:'var(--ink)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{row.value}</div>
-                    </div>
-                    <button onClick={() => copyText(row.value, row.key)} style={{background:'none', border:'none', color: copied === row.key ? 'var(--success)' : 'var(--muted)', cursor:'pointer', flexShrink:0, padding:4, display:'grid', placeItems:'center'}}>
-                      <Icon n={copied === row.key ? 'check' : 'copy'} size={16}/>
-                    </button>
-                  </div>
-                ))}
+              <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:10, padding:'12px 14px', gap:12}}>
+                <div style={{flex:1, minWidth:0}}>
+                  <div style={{fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--muted)', marginBottom:4}}>Public Key</div>
+                  <div style={{fontFamily:'var(--mono)', fontSize:12, color:'var(--ink)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{peer.pubKey}</div>
+                </div>
+                <button onClick={() => copyText(peer.pubKey, 'pubkey')} style={{background:'none', border:'none', color: copied === 'pubkey' ? 'var(--success)' : 'var(--muted)', cursor:'pointer', flexShrink:0, padding:4, display:'grid', placeItems:'center'}}>
+                  <Icon n={copied === 'pubkey' ? 'check' : 'copy'} size={16}/>
+                </button>
               </div>
             </>
           )}
         </div>
 
-        {/* Fixed footer buttons */}
+        {/* Footer buttons */}
         <div style={{flexShrink:0, padding:'12px 20px', paddingBottom:'calc(12px + var(--safe-bot))', borderTop:'1px solid var(--border)', display:'flex', gap:10}}>
           <button
             className={`m-btn ${peer.paused ? 'success' : ''}`}
