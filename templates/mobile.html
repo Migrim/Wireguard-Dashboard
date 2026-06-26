@@ -527,6 +527,7 @@ const Icon = ({ n, size=20 }) => {
     copy:    <><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>,
     check:   <polyline points="20 6 9 17 4 12"/>,
     settings:<><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></>,
+    trash:   <><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></>,
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -597,7 +598,7 @@ function Login({ onAuth }) {
 }
 
 /* ─── Home tab ─── */
-function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService, svcBusy, peers, peerOnlineSamples, peerByteHistory, onSeeAllPeers }) {
+function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService, svcBusy, peers, peerOnlineSamples, peerByteHistory, onSeeAllPeers, onPeerClick }) {
   const svc    = status?.service || {};
   const active  = svc.active;
   const uptime  = fmtUptime(svc.started_at);
@@ -692,7 +693,7 @@ function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService,
         ) : (
           <div style={{display:'flex', flexDirection:'column', gap:8}}>
             {topPeers.map(p => (
-              <HomePeerRow key={p.name} peer={p} history={peerByteHistory[p.name] || []}/>
+              <HomePeerRow key={p.name} peer={p} history={peerByteHistory[p.name] || []} onPeerClick={onPeerClick}/>
             ))}
           </div>
         )}
@@ -752,99 +753,198 @@ function ConfigModal({ peerName, onClose, toast }) {
   );
 }
 
-/* ─── Peer card ─── */
-function PeerCard({ peer, onAction, toast }) {
-  const [open, setOpen] = useState(false);
-  const [configOpen, setConfigOpen] = useState(false);
+/* ─── Peer drawer ─── */
+function PeerDrawer({ peer, history, onClose, onAction, toast }) {
   const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(null);
 
-  const initials = peer.name.slice(0,2).toUpperCase();
-  const avatarClass = peer.status === 'paused' ? 'paused' : peer.status === 'offline' ? 'offline' : '';
+  const chartSamples = history.length >= 2
+    ? history.slice(1).map((s, i) => {
+        const dt = (s.ts - history[i].ts) / 1000 || 3;
+        return {
+          ts: s.ts,
+          rx: Math.max(0, (s.bytesIn  - history[i].bytesIn)  / dt),
+          tx: Math.max(0, (s.bytesOut - history[i].bytesOut) / dt),
+        };
+      })
+    : [];
+  const latest = chartSamples[chartSamples.length - 1] || {};
+  const rxBps = latest.rx || 0;
+  const txBps = latest.tx || 0;
 
   const doAction = async (action) => {
     setBusy(true);
     try {
       await onAction(peer.name, action);
       toast(action === 'pause' ? `${peer.name} paused` : `${peer.name} resumed`, 'ok');
-    } catch (e) {
-      toast(e.message, 'err');
-    } finally {
-      setBusy(false);
-    }
+    } catch(e) { toast(e.message, 'err'); }
+    finally { setBusy(false); }
   };
 
+  const copyText = async (text, key) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(key);
+      setTimeout(() => setCopied(null), 2000);
+    } catch { toast('Copy failed', 'err'); }
+  };
+
+  const statusColor = peer.status === 'online' ? 'var(--success)' : peer.status === 'paused' ? 'var(--warn)' : 'var(--muted-2)';
+  const statusText  = peer.status === 'online' ? 'connected'     : peer.status === 'paused' ? 'paused'    : 'offline';
+
+  const InfoCell = ({ label, value, mono, span }) => (
+    <div style={{padding:'12px 16px', ...(span ? {gridColumn:'1 / -1'} : {})}}>
+      <div style={{fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--muted)', marginBottom:5}}>{label}</div>
+      <div style={{fontFamily: mono ? 'var(--mono)' : 'var(--serif)', fontSize: mono ? 13 : 20, color:'var(--ink)', lineHeight:1.2, wordBreak:'break-all'}}>{value}</div>
+    </div>
+  );
+
   return (
-    <>
-      <div className={`m-peer-card ${open ? 'expanded' : ''}`}>
-        <div className="m-peer-head" onClick={() => setOpen(o => !o)}>
-          <div className={`m-peer-avatar ${avatarClass}`}>{initials}</div>
-          <div className="m-peer-main">
-            <div className="m-peer-name">
-              <span className={`m-peer-status-dot ${peer.status}`}/>
-              {peer.name}
-              {peer.paused && <span style={{fontSize:10,padding:'2px 7px',borderRadius:99,background:'var(--warn-soft)',color:'var(--warn)',fontFamily:'var(--mono)'}}>PAUSED</span>}
-            </div>
-            <div className="m-peer-sub">
-              {peer.addr}{peer.lastHs ? ` · ${fmtRel(peer.lastHs)}` : ''}
-            </div>
-          </div>
-          <div className={`m-peer-chev ${open ? 'open' : ''}`}>
-            <Icon n="chev" size={18}/>
-          </div>
-        </div>
+    <div className="m-modal-scrim" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="m-modal" style={{maxHeight:'92dvh', padding:0, display:'flex', flexDirection:'column'}}>
+        <div className="m-modal-handle" style={{margin:'10px auto 0', flexShrink:0}}/>
 
-        <div className="m-peer-stats">
-          <div className="m-peer-stat">
-            <div className="m-peer-stat-lbl">↓ Received</div>
-            <div className="m-peer-stat-val">{fmtBytes(peer.bytesIn)}</div>
-          </div>
-          <div className="m-peer-stat">
-            <div className="m-peer-stat-lbl">↑ Sent</div>
-            <div className="m-peer-stat-val">{fmtBytes(peer.bytesOut)}</div>
-          </div>
-        </div>
+        {/* Scrollable body */}
+        <div style={{flex:1, overflowY:'auto', WebkitOverflowScrolling:'touch', padding:'4px 20px 16px'}}>
 
-        {open && (
-          <div className="m-peer-expand">
-            <div className="m-peer-kv">
+          {/* Header */}
+          <div style={{display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:16, marginTop:6}}>
+            <div style={{flex:1, minWidth:0}}>
+              <div style={{fontFamily:'var(--serif)', fontSize:26, color:'var(--ink)', lineHeight:1.15}}>{peer.name}</div>
+              <div style={{fontFamily:'var(--mono)', fontSize:12, color:'var(--muted)', marginTop:3}}>{peer.addr}</div>
+            </div>
+            <button onClick={onClose} style={{width:38, height:38, borderRadius:10, border:'1px solid var(--border)', background:'var(--bg-2)', display:'grid', placeItems:'center', cursor:'pointer', flexShrink:0, color:'var(--ink-2)', marginLeft:12}}>
+              <Icon n="x" size={16}/>
+            </button>
+          </div>
+
+          <div style={{height:1, background:'var(--border)', margin:'0 -20px 16px'}}/>
+
+          {/* Status row */}
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16}}>
+            <div style={{display:'flex', alignItems:'center', gap:7}}>
+              <span style={{width:8, height:8, borderRadius:'50%', background:statusColor, display:'inline-block', flexShrink:0}}/>
+              <span style={{fontFamily:'var(--mono)', fontSize:13, color:statusColor}}>{statusText}</span>
+            </div>
+            {peer.lastHs && (
+              <span style={{fontFamily:'var(--mono)', fontSize:12, color:'var(--muted)'}}>handshake {fmtRel(peer.lastHs)}</span>
+            )}
+          </div>
+
+          {/* Rate cards */}
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14}}>
+            {[['↓ Down', rxBps], ['↑ Up', txBps]].map(([lbl, bps]) => (
+              <div key={lbl} style={{background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:10, padding:'12px 14px'}}>
+                <div style={{fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--muted)', marginBottom:6}}>{lbl}</div>
+                <div style={{fontFamily:'var(--serif)', fontSize:22, color:'var(--ink)', lineHeight:1}}>{fmtRate(bps)}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Per-peer throughput chart */}
+          {chartSamples.length >= 4 && (
+            <div style={{background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:10, overflow:'hidden', marginBottom:14}}>
+              <ThroughputChart samples={chartSamples} height={140} range="3m" spline={true} smoothScroll={false} smoothScale={false}/>
+            </div>
+          )}
+
+          {/* Info grid */}
+          <div style={{border:'1px solid var(--border)', borderRadius:10, overflow:'hidden', marginBottom:16}}>
+            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr'}}>
+              <div style={{borderRight:'1px solid var(--border)', borderBottom:'1px solid var(--border)'}}>
+                <InfoCell label="Bytes In"  value={fmtBytes(peer.bytesIn)}/>
+              </div>
+              <div style={{borderBottom:'1px solid var(--border)'}}>
+                <InfoCell label="Bytes Out" value={fmtBytes(peer.bytesOut)}/>
+              </div>
               {peer.endpoint !== '—' && (
-                <div className="m-peer-kv-row">
-                  <span className="m-peer-kv-key">Endpoint</span>
-                  <span className="m-peer-kv-val">{peer.endpoint}</span>
+                <div style={{gridColumn:'1 / -1'}}>
+                  <InfoCell label="Endpoint" value={peer.endpoint} mono span/>
                 </div>
               )}
-              {peer.lastHs && (
-                <div className="m-peer-kv-row">
-                  <span className="m-peer-kv-key">Handshake</span>
-                  <span className="m-peer-kv-val">{fmtRel(peer.lastHs)}</span>
-                </div>
-              )}
-            </div>
-            <div className="m-peer-actions">
-              <button
-                className={`m-btn ${peer.paused ? 'success' : ''}`}
-                style={{flex:1}} disabled={busy}
-                onClick={() => doAction(peer.paused ? 'resume' : 'pause')}
-              >
-                <Icon n={peer.paused ? 'play' : 'pause'} size={14}/>
-                {peer.paused ? 'Resume' : 'Pause'}
-              </button>
-              <button className="m-btn" style={{flex:1}} onClick={() => setConfigOpen(true)}>
-                <Icon n="dl" size={14}/> Config
-              </button>
             </div>
           </div>
-        )}
-      </div>
 
-      {configOpen && (
-        <ConfigModal
-          peerName={peer.name}
-          onClose={() => setConfigOpen(false)}
-          toast={toast}
-        />
-      )}
-    </>
+          {/* Configuration */}
+          {peer.pubKey && (
+            <>
+              <div style={{fontFamily:'var(--mono)', fontSize:10, letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--muted)', marginBottom:10}}>Configuration</div>
+              <div style={{display:'flex', flexDirection:'column', gap:8, marginBottom:4}}>
+                {[
+                  { key:'pubkey',    label:'Public Key',  value: peer.pubKey },
+                  { key:'allowedip', label:'Allowed IPs', value: peer.addr   },
+                ].map(row => (
+                  <div key={row.key} style={{display:'flex', alignItems:'center', justifyContent:'space-between', background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:10, padding:'12px 14px', gap:12}}>
+                    <div style={{flex:1, minWidth:0}}>
+                      <div style={{fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--muted)', marginBottom:4}}>{row.label}</div>
+                      <div style={{fontFamily:'var(--mono)', fontSize:12, color:'var(--ink)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{row.value}</div>
+                    </div>
+                    <button onClick={() => copyText(row.value, row.key)} style={{background:'none', border:'none', color: copied === row.key ? 'var(--success)' : 'var(--muted)', cursor:'pointer', flexShrink:0, padding:4, display:'grid', placeItems:'center'}}>
+                      <Icon n={copied === row.key ? 'check' : 'copy'} size={16}/>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Fixed footer buttons */}
+        <div style={{flexShrink:0, padding:'12px 20px', paddingBottom:'calc(12px + var(--safe-bot))', borderTop:'1px solid var(--border)', display:'flex', gap:10}}>
+          <button
+            className={`m-btn ${peer.paused ? 'success' : ''}`}
+            style={{flex:1, height:52, borderRadius:14, fontSize:15}}
+            disabled={busy}
+            onClick={() => doAction(peer.paused ? 'resume' : 'pause')}
+          >
+            <Icon n={peer.paused ? 'play' : 'pause'} size={16}/>
+            {peer.paused ? 'Resume' : 'Pause'}
+          </button>
+          <button
+            className="m-btn danger"
+            style={{flex:1, height:52, borderRadius:14, fontSize:15}}
+            disabled={busy}
+            onClick={() => toast('Remove is not available on mobile', 'warn')}
+          >
+            <Icon n="trash" size={16}/> Remove
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Peer card ─── */
+function PeerCard({ peer, onPeerClick }) {
+  const initials = peer.name.slice(0,2).toUpperCase();
+  const avatarClass = peer.status === 'paused' ? 'paused' : peer.status === 'offline' ? 'offline' : '';
+  return (
+    <div className="m-peer-card" style={{cursor:'pointer'}} onClick={() => onPeerClick(peer.name)}>
+      <div className="m-peer-head" style={{cursor:'pointer'}}>
+        <div className={`m-peer-avatar ${avatarClass}`}>{initials}</div>
+        <div className="m-peer-main">
+          <div className="m-peer-name">
+            <span className={`m-peer-status-dot ${peer.status}`}/>
+            {peer.name}
+            {peer.paused && <span style={{fontSize:10,padding:'2px 7px',borderRadius:99,background:'var(--warn-soft)',color:'var(--warn)',fontFamily:'var(--mono)'}}>PAUSED</span>}
+          </div>
+          <div className="m-peer-sub">
+            {peer.addr}{peer.lastHs ? ` · ${fmtRel(peer.lastHs)}` : ''}
+          </div>
+        </div>
+        <div className="m-peer-chev"><Icon n="chev" size={18}/></div>
+      </div>
+      <div className="m-peer-stats">
+        <div className="m-peer-stat">
+          <div className="m-peer-stat-lbl">↓ Received</div>
+          <div className="m-peer-stat-val">{fmtBytes(peer.bytesIn)}</div>
+        </div>
+        <div className="m-peer-stat">
+          <div className="m-peer-stat-lbl">↑ Sent</div>
+          <div className="m-peer-stat-val">{fmtBytes(peer.bytesOut)}</div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -877,12 +977,12 @@ function SteppedOnlineChart({ samples, height = 100 }) {
 }
 
 /* ─── Home peer row ─── */
-function HomePeerRow({ peer, history }) {
+function HomePeerRow({ peer, history, onPeerClick }) {
   const initials = peer.name.slice(0,2).toUpperCase();
   const avatarClass = peer.status === 'paused' ? 'paused' : peer.status === 'offline' ? 'offline' : '';
   const gid = `ps${peer.name.replace(/[^a-zA-Z0-9]/g,'')}`;
   const deltas = history.length >= 2
-    ? history.slice(1).map((s,i) => Math.max(0, s.total - history[i].total))
+    ? history.slice(1).map((s,i) => Math.max(0, (s.bytesIn + s.bytesOut) - (history[i].bytesIn + history[i].bytesOut)))
     : [];
   const maxD = Math.max(...deltas, 1);
   const toX = i => (i / Math.max(deltas.length - 1, 1)) * 100;
@@ -892,7 +992,7 @@ function HomePeerRow({ peer, history }) {
     : '';
   const sparkFill = sparkLine ? `${sparkLine} L 100 50 L 0 50 Z` : '';
   return (
-    <div className="m-card" style={{padding:'12px 14px', display:'flex', alignItems:'center', gap:12}}>
+    <div className="m-card" style={{padding:'12px 14px', display:'flex', alignItems:'center', gap:12, cursor:'pointer', WebkitTapHighlightColor:'transparent'}} onClick={() => onPeerClick(peer.name)}>
       <div className={`m-peer-avatar ${avatarClass}`} style={{flexShrink:0}}>{initials}</div>
       <div style={{flex:1, minWidth:0}}>
         <div style={{fontSize:14, fontWeight:600, color:'var(--ink)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{peer.name}</div>
@@ -916,7 +1016,7 @@ function HomePeerRow({ peer, history }) {
 }
 
 /* ─── Peers tab ─── */
-function PeersTab({ peers, onAction, toast }) {
+function PeersTab({ peers, onAction, toast, onPeerClick }) {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
   const ref = useRef(null);
@@ -976,7 +1076,7 @@ function PeersTab({ peers, onAction, toast }) {
       ) : (
         <div className="m-peer-list">
           {filtered.map(p => (
-            <PeerCard key={p.name} peer={p} onAction={onAction} toast={toast}/>
+            <PeerCard key={p.name} peer={p} onPeerClick={onPeerClick}/>
           ))}
         </div>
       )}
@@ -1113,6 +1213,7 @@ function MobileApp() {
   const [peers, setPeers] = useState([]);
   const [peerOnlineSamples, setPeerOnlineSamples] = useState([]);
   const [peerByteHistory, setPeerByteHistory] = useState({});
+  const [drawerPeerName, setDrawerPeerName] = useState(null);
   const [svcBusy, setSvcBusy] = useState(false);
   const prevNetRef = useRef(null);
   const { toasts, add: toast } = useToast();
@@ -1172,9 +1273,10 @@ function MobileApp() {
           const next = {};
           (issued||[]).forEach(iss => {
             const lv = _liveByName[iss.name];
-            const total = lv ? ((lv.bytes_recv || 0) + (lv.bytes_sent || 0)) : 0;
+            const bytesIn  = lv ? (lv.bytes_recv || 0) : 0;
+            const bytesOut = lv ? (lv.bytes_sent || 0) : 0;
             const cutoff = _now - 5 * 60 * 1000;
-            next[iss.name] = [...(prev[iss.name] || []).filter(s => s.ts >= cutoff), { ts: _now, total }];
+            next[iss.name] = [...(prev[iss.name] || []).filter(s => s.ts >= cutoff), { ts: _now, bytesIn, bytesOut }];
           });
           return next;
         });
@@ -1301,9 +1403,9 @@ function MobileApp() {
         ) : !status && tab !== 'logs' ? (
           <div className="m-spinner"><div className="m-spinner-ring"/></div>
         ) : tab === 'home' ? (
-          <HomeTab status={status} rxBps={rxBps} txBps={txBps} trafficSamples={trafficSamples} chartTweaks={chartTweaks} onService={handleService} svcBusy={svcBusy} peers={peers} peerOnlineSamples={peerOnlineSamples} peerByteHistory={peerByteHistory} onSeeAllPeers={() => setTab('peers')}/>
+          <HomeTab status={status} rxBps={rxBps} txBps={txBps} trafficSamples={trafficSamples} chartTweaks={chartTweaks} onService={handleService} svcBusy={svcBusy} peers={peers} peerOnlineSamples={peerOnlineSamples} peerByteHistory={peerByteHistory} onSeeAllPeers={() => setTab('peers')} onPeerClick={n => setDrawerPeerName(n)}/>
         ) : tab === 'peers' ? (
-          <PeersTab peers={peers} onAction={handlePeerAction} toast={toast}/>
+          <PeersTab peers={peers} onAction={handlePeerAction} toast={toast} onPeerClick={n => setDrawerPeerName(n)}/>
         ) : (
           <LogsTab logs={logs}/>
         )}
@@ -1318,6 +1420,19 @@ function MobileApp() {
           </button>
         ))}
       </nav>
+
+      {drawerPeerName && (() => {
+        const dp = peers.find(p => p.name === drawerPeerName);
+        return dp ? (
+          <PeerDrawer
+            peer={dp}
+            history={peerByteHistory[dp.name] || []}
+            onClose={() => setDrawerPeerName(null)}
+            onAction={handlePeerAction}
+            toast={toast}
+          />
+        ) : null;
+      })()}
 
       <Toasts toasts={toasts}/>
     </div>
