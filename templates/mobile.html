@@ -598,7 +598,7 @@ function Login({ onAuth }) {
 }
 
 /* ─── Home tab ─── */
-function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService, svcBusy, peers, peerOnlineSamples, peerByteHistory, onSeeAllPeers, onPeerClick }) {
+function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService, svcBusy, peers, sessionStarts, peerByteHistory, onSeeAllPeers, onPeerClick }) {
   const svc    = status?.service || {};
   const active  = svc.active;
   const uptime  = fmtUptime(svc.started_at);
@@ -665,18 +665,15 @@ function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService,
 
       {/* Active Sessions */}
       <div className="m-section" style={{marginTop:14}}>
-        <div className="m-card" style={{display:'flex', overflow:'hidden', minHeight:112}}>
-          <div style={{padding:'16px', flex:'0 0 auto', display:'flex', flexDirection:'column', justifyContent:'center', zIndex:1}}>
-            <div className="m-section-label" style={{marginBottom:8}}>Active Sessions</div>
-            <div style={{display:'flex', alignItems:'baseline', gap:5}}>
-              <span className="m-traffic-big">{onlinePeers}</span>
-              <span className="m-traffic-unit" style={{fontSize:16}}>/ {totalPeers}</span>
-            </div>
-            <div style={{fontFamily:'var(--mono)', fontSize:12, color:'var(--muted)', marginTop:4}}>{pct}% online</div>
+        <div className="m-card" style={{padding:'14px 16px'}}>
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: onlinePeers > 0 ? 14 : 0}}>
+            <span className="m-section-label" style={{marginBottom:0}}>Active Sessions</span>
+            <span style={{fontFamily:'var(--mono)', fontSize:13}}>
+              <span style={{fontWeight:700, color:'var(--ink)'}}>{onlinePeers}</span>
+              <span style={{color:'var(--muted)'}}> / {totalPeers}</span>
+            </span>
           </div>
-          <div style={{flex:1, minWidth:0}}>
-            <SteppedOnlineChart samples={peerOnlineSamples} height={112}/>
-          </div>
+          <SessionDurationBars peers={peers} sessionStarts={sessionStarts} />
         </div>
       </div>
 
@@ -978,31 +975,54 @@ function PeerCard({ peer, onPeerClick }) {
   );
 }
 
-/* ─── Stepped Online Chart ─── */
-function SteppedOnlineChart({ samples, height = 100 }) {
-  if (!samples || samples.length < 2) return <div style={{height, background:'transparent'}}/>;
-  const W = 400, H = height;
-  const minT = samples[0].ts, maxT = samples[samples.length - 1].ts;
-  const range = maxT - minT || 1;
-  const maxC = Math.max(...samples.map(s => s.count), 1);
-  const x = ts => ((ts - minT) / range) * W;
-  const y = c => H - 4 - (c / maxC) * (H - 10);
-  let line = `M ${x(samples[0].ts)} ${y(samples[0].count)}`;
-  for (let i = 1; i < samples.length; i++) {
-    line += ` H ${x(samples[i].ts)} V ${y(samples[i].count)}`;
+/* ─── Session Duration Bars ─── */
+function SessionDurationBars({ peers, sessionStarts }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  const online = peers
+    .filter(p => p.status === 'online')
+    .map(p => ({ ...p, since: sessionStarts[p.name] || now }))
+    .sort((a, b) => a.since - b.since);
+
+  if (online.length === 0) {
+    return (
+      <div style={{padding:'12px 0 4px', textAlign:'center', color:'var(--muted)', fontFamily:'var(--mono)', fontSize:12}}>
+        No active sessions
+      </div>
+    );
   }
-  const fill = `${line} V ${H} H 0 Z`;
+
+  const maxDur = now - online[0].since || 1;
+  const shown = online.slice(0, 5);
+  const extra = online.length - shown.length;
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{width:'100%', height, display:'block'}}>
-      <defs>
-        <linearGradient id="og" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.2"/>
-          <stop offset="100%" stopColor="var(--accent)" stopOpacity="0"/>
-        </linearGradient>
-      </defs>
-      <path d={fill} fill="url(#og)"/>
-      <path d={line} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="square" strokeLinejoin="miter"/>
-    </svg>
+    <div style={{display:'flex', flexDirection:'column', gap:10}}>
+      {shown.map(p => {
+        const pct = Math.max(0.05, (now - p.since) / maxDur);
+        return (
+          <div key={p.name} style={{display:'flex', alignItems:'center', gap:10}}>
+            <span style={{width:7, height:7, borderRadius:'50%', background:'var(--success)', flexShrink:0}}/>
+            <div style={{flex:1, minWidth:0}}>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:4}}>
+                <span style={{fontSize:12, fontWeight:600, color:'var(--ink)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', paddingRight:8}}>{p.name}</span>
+                <span style={{fontFamily:'var(--mono)', fontSize:11, color:'var(--muted)', flexShrink:0}}>{fmtUptime(p.since)}</span>
+              </div>
+              <div style={{height:3, background:'var(--border)', borderRadius:2}}>
+                <div style={{height:'100%', width:`${pct * 100}%`, background:'var(--accent)', borderRadius:2}}/>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+      {extra > 0 && (
+        <div style={{fontFamily:'var(--mono)', fontSize:11, color:'var(--muted)', textAlign:'right'}}>+{extra} more</div>
+      )}
+    </div>
   );
 }
 
@@ -1241,7 +1261,7 @@ function MobileApp() {
   const [trafficSamples, setTrafficSamples] = useState([]);
   const [logs, setLogs] = useState([]);
   const [peers, setPeers] = useState([]);
-  const [peerOnlineSamples, setPeerOnlineSamples] = useState([]);
+  const [sessionStarts, setSessionStarts] = useState({});
   const [peerByteHistory, setPeerByteHistory] = useState({});
   const [drawerPeerName, setDrawerPeerName] = useState(null);
   const [svcBusy, setSvcBusy] = useState(false);
@@ -1285,18 +1305,16 @@ function MobileApp() {
         }
         prevNetRef.current = net;
         const { issued, live } = s.clients || {};
-        setPeers(mapPeers(issued, live));
+        const _mapped = mapPeers(issued, live);
         const _now = Date.now();
-        const _onlineCount = (issued||[]).filter(iss => {
-          if (iss.paused) return false;
-          const lv = (live||[]).find(l => l.name === iss.name);
-          const hs = lv ? (lv.last_handshake || 0) : 0;
-          return hs > 0 && (_now/1000 - hs) < HS_TIMEOUT;
-        }).length;
-        setPeerOnlineSamples(prev => {
-          const cutoff = _now - 10 * 60 * 1000;
-          return [...prev.filter(s => s.ts >= cutoff), { ts: _now, count: _onlineCount }];
+        setSessionStarts(prev => {
+          const next = {};
+          _mapped.forEach(p => {
+            if (p.status === 'online') next[p.name] = prev[p.name] || _now;
+          });
+          return next;
         });
+        setPeers(_mapped);
         const _liveByName = {};
         (live||[]).forEach(l => { _liveByName[l.name] = l; });
         setPeerByteHistory(prev => {
@@ -1385,7 +1403,14 @@ function MobileApp() {
     const s = await api('/api/status');
     setStatus(s);
     const { issued, live } = s.clients || {};
-    setPeers(mapPeers(issued, live));
+    const _mapped = mapPeers(issued, live);
+    const _now = Date.now();
+    setSessionStarts(prev => {
+      const next = {};
+      _mapped.forEach(p => { if (p.status === 'online') next[p.name] = prev[p.name] || _now; });
+      return next;
+    });
+    setPeers(_mapped);
   };
 
   if (authState === 'checking') {
@@ -1433,7 +1458,7 @@ function MobileApp() {
         ) : !status && tab !== 'logs' ? (
           <div className="m-spinner"><div className="m-spinner-ring"/></div>
         ) : tab === 'home' ? (
-          <HomeTab status={status} rxBps={rxBps} txBps={txBps} trafficSamples={trafficSamples} chartTweaks={chartTweaks} onService={handleService} svcBusy={svcBusy} peers={peers} peerOnlineSamples={peerOnlineSamples} peerByteHistory={peerByteHistory} onSeeAllPeers={() => setTab('peers')} onPeerClick={n => setDrawerPeerName(n)}/>
+          <HomeTab status={status} rxBps={rxBps} txBps={txBps} trafficSamples={trafficSamples} chartTweaks={chartTweaks} onService={handleService} svcBusy={svcBusy} peers={peers} sessionStarts={sessionStarts} peerByteHistory={peerByteHistory} onSeeAllPeers={() => setTab('peers')} onPeerClick={n => setDrawerPeerName(n)}/>
         ) : tab === 'peers' ? (
           <PeersTab peers={peers} onAction={handlePeerAction} toast={toast} onPeerClick={n => setDrawerPeerName(n)}/>
         ) : (
