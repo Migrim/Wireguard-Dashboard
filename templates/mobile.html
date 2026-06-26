@@ -626,19 +626,16 @@ function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService,
               {uptime && active && <div className="m-svc-uptime">Uptime: {uptime}</div>}
               {!active && <div className="m-svc-uptime" style={{color:'var(--danger)'}}>Inactive</div>}
             </div>
-            {!active && (
+            {active ? (
+              <button className="m-btn primary" onClick={() => onService('stop')} disabled={!!svcBusy} style={{flex:'0 0 auto', minWidth:100}}>
+                <Icon n="pause" size={14}/> Stop
+              </button>
+            ) : (
               <button className="m-btn primary" onClick={() => onService('start')} disabled={!!svcBusy} style={{flex:'0 0 auto', minWidth:100}}>
                 <Icon n="play" size={14}/> Start
               </button>
             )}
           </div>
-          {active && (
-            <div className="m-svc-btns">
-              <button className="m-btn primary" onClick={() => onService('stop')} disabled={!!svcBusy} style={{flex:'0 0 auto', minWidth:100}}>
-                <Icon n="pause" size={14}/> Stop
-              </button>
-            </div>
-          )}
         </div>
       </div>
 
