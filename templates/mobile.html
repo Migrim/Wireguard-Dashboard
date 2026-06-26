@@ -14,6 +14,8 @@
 (function () {
   var t = localStorage.getItem('WG_THEME');
   if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+  var a = localStorage.getItem('WG_ACCENT');
+  if (a && a !== 'terracotta') document.documentElement.classList.add('accent-' + a);
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/service-worker.js', { scope: '/' }).catch(function () {});
   }
@@ -374,6 +376,38 @@ body {
 .m-filter-row::-webkit-scrollbar { display: none; }
 .m-filter-pill { flex-shrink: 0; padding: 5px 14px; border-radius: 99px; border: 1px solid var(--border); background: var(--card); font-size: 12.5px; color: var(--muted); cursor: pointer; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
 .m-filter-pill.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+/* ── Accent color overrides ── */
+.accent-forest { --accent: oklch(55% 0.11 150); --accent-soft: oklch(88% 0.05 150); --accent-2: oklch(58% 0.12 42); }
+[data-theme="dark"].accent-forest { --accent: oklch(70% 0.12 150); --accent-soft: oklch(30% 0.08 150); --accent-2: oklch(71% 0.13 42); }
+.accent-plum { --accent: oklch(48% 0.12 330); --accent-soft: oklch(88% 0.05 330); --accent-2: oklch(64% 0.16 350); }
+[data-theme="dark"].accent-plum { --accent: oklch(70% 0.13 330); --accent-soft: oklch(30% 0.08 330); --accent-2: oklch(75% 0.15 350); }
+.accent-blue { --accent: oklch(52% 0.22 235); --accent-soft: oklch(91% 0.05 235); --accent-2: oklch(56% 0.10 195); }
+[data-theme="dark"].accent-blue { --accent: oklch(67% 0.20 235); --accent-soft: oklch(28% 0.10 235); --accent-2: oklch(68% 0.10 195); }
+.accent-ink { --accent: oklch(55% 0.19 27); --accent-soft: oklch(89% 0.05 27); --accent-2: oklch(58% 0.15 48); }
+[data-theme="dark"].accent-ink { --accent: oklch(67% 0.21 27); --accent-soft: oklch(30% 0.11 27); --accent-2: oklch(70% 0.15 48); }
+.accent-amber { --accent: oklch(70% 0.15 75); --accent-soft: oklch(93% 0.07 75); --accent-2: oklch(55% 0.12 210); }
+[data-theme="dark"].accent-amber { --accent: oklch(75% 0.16 75); --accent-soft: oklch(30% 0.09 75); --accent-2: oklch(65% 0.11 210); }
+
+/* ── Settings tab ── */
+.m-settings { padding: 16px; display: flex; flex-direction: column; gap: 20px; }
+.m-settings-title { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+.m-settings-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.m-settings-row { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; gap: 12px; }
+.m-settings-row + .m-settings-row { border-top: 1px solid var(--border); }
+.m-settings-lbl { font-size: 14px; color: var(--ink); }
+.m-seg { display: flex; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 2px; gap: 2px; }
+.m-seg-btn { padding: 5px 14px; border-radius: 6px; border: none; background: none; font-family: var(--mono); font-size: 12px; color: var(--muted); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.m-seg-btn.on { background: var(--card); color: var(--ink); box-shadow: var(--shadow-sm); }
+.m-swatches { display: flex; gap: 10px; }
+.m-swatch { width: 28px; height: 28px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; outline: 2px solid transparent; outline-offset: 2px; -webkit-tap-highlight-color: transparent; transition: outline-color 0.15s; }
+.m-swatch.on { outline-color: var(--ink-2); }
+.m-toggle { position: relative; display: inline-block; width: 46px; height: 27px; flex-shrink: 0; cursor: pointer; }
+.m-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+.m-toggle-slot { position: absolute; inset: 0; background: var(--border); border-radius: 14px; transition: background 0.2s; }
+.m-toggle input:checked + .m-toggle-slot { background: var(--accent); }
+.m-toggle-knob { position: absolute; top: 3px; left: 3px; width: 21px; height: 21px; background: white; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.25); transition: transform 0.2s; pointer-events: none; }
+.m-toggle input:checked ~ .m-toggle-knob { transform: translateX(19px); }
 </style>
 </head>
 <body data-base="{{ request.script_root or '' }}">
@@ -492,6 +526,7 @@ const Icon = ({ n, size=20 }) => {
     refresh: <><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></>,
     copy:    <><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>,
     check:   <polyline points="20 6 9 17 4 12"/>,
+    settings:<><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></>,
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -563,7 +598,7 @@ function Login({ onAuth }) {
 }
 
 /* ─── Home tab ─── */
-function HomeTab({ status, rxBps, txBps, trafficSamples, onService, svcBusy }) {
+function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService, svcBusy }) {
   const svc    = status?.service || {};
   const net    = status?.network || {};
   const budget = status?.data_budget || {};
@@ -592,18 +627,15 @@ function HomeTab({ status, rxBps, txBps, trafficSamples, onService, svcBusy }) {
               {!active && <div className="m-svc-uptime" style={{color:'var(--danger)'}}>Inactive</div>}
             </div>
             {!active && (
-              <button className="m-btn success" onClick={() => onService('start')} disabled={!!svcBusy} style={{flex:'0 0 auto', minWidth:100}}>
+              <button className="m-btn primary" onClick={() => onService('start')} disabled={!!svcBusy} style={{flex:'0 0 auto', minWidth:100}}>
                 <Icon n="play" size={14}/> Start
               </button>
             )}
           </div>
           {active && (
             <div className="m-svc-btns">
-              <button className="m-btn danger" onClick={() => onService('stop')} disabled={!!svcBusy}>
+              <button className="m-btn primary" onClick={() => onService('stop')} disabled={!!svcBusy}>
                 <Icon n="pause" size={14}/> Stop
-              </button>
-              <button className="m-btn" onClick={() => onService('restart')} disabled={!!svcBusy}>
-                <Icon n="refresh" size={14}/> Restart
               </button>
             </div>
           )}
@@ -635,7 +667,7 @@ function HomeTab({ status, rxBps, txBps, trafficSamples, onService, svcBusy }) {
             </span>
           </div>
           <div style={{marginLeft:-16, marginRight:-16}}>
-            <ThroughputChart samples={trafficSamples} height={130} range="1m" />
+            <ThroughputChart samples={trafficSamples} height={130} range="1m" spline={chartTweaks.spline} smoothScroll={chartTweaks.smoothScroll} smoothScale={chartTweaks.smoothScale} />
           </div>
         </div>
       </div>
@@ -964,10 +996,78 @@ function LogsTab({ logs }) {
 }
 
 /* ─── Root app ─── */
+function Toggle({ value, onChange }) {
+  return (
+    <label className="m-toggle">
+      <input type="checkbox" checked={!!value} onChange={e => onChange(e.target.checked)} />
+      <span className="m-toggle-slot" />
+      <span className="m-toggle-knob" />
+    </label>
+  );
+}
+
+function SettingsTab({ theme, setTheme, accent, setAccent, chartTweaks, setChartTweaks }) {
+  const accents = [
+    { id: 'terracotta', color: 'oklch(59% 0.15 33)' },
+    { id: 'forest',     color: 'oklch(55% 0.11 150)' },
+    { id: 'plum',       color: 'oklch(48% 0.12 330)' },
+    { id: 'blue',       color: 'oklch(52% 0.22 235)' },
+    { id: 'ink',        color: 'oklch(55% 0.19 27)'  },
+    { id: 'amber',      color: 'oklch(70% 0.15 75)'  },
+  ];
+  const tweak = (k, v) => setChartTweaks(p => ({ ...p, [k]: v }));
+  return (
+    <div className="m-scroll-pad m-settings">
+      <div>
+        <div className="m-settings-title">Appearance</div>
+        <div className="m-settings-card">
+          <div className="m-settings-row">
+            <span className="m-settings-lbl">Theme</span>
+            <div className="m-seg">
+              {['light', 'dark'].map(v => (
+                <button key={v} className={`m-seg-btn ${theme === v ? 'on' : ''}`} onClick={() => setTheme(v)}>
+                  {v.charAt(0).toUpperCase() + v.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="m-settings-row">
+            <span className="m-settings-lbl">Accent</span>
+            <div className="m-swatches">
+              {accents.map(a => (
+                <button key={a.id} className={`m-swatch ${accent === a.id ? 'on' : ''}`} style={{ background: a.color }} onClick={() => setAccent(a.id)} aria-label={a.id} />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div className="m-settings-title">Chart</div>
+        <div className="m-settings-card">
+          <div className="m-settings-row">
+            <span className="m-settings-lbl">Spline curve</span>
+            <Toggle value={chartTweaks.spline} onChange={v => tweak('spline', v)} />
+          </div>
+          <div className="m-settings-row">
+            <span className="m-settings-lbl">Smooth scrolling</span>
+            <Toggle value={chartTweaks.smoothScroll} onChange={v => tweak('smoothScroll', v)} />
+          </div>
+          <div className="m-settings-row">
+            <span className="m-settings-lbl">Smooth scale</span>
+            <Toggle value={chartTweaks.smoothScale} onChange={v => tweak('smoothScale', v)} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MobileApp() {
   const [authState, setAuthState] = useState('checking'); // checking | login | ok
   const [tab, setTab] = useState('home');
   const [theme, setTheme] = useState(() => localStorage.getItem('WG_THEME') || 'light');
+  const [accent, setAccent] = useState(() => localStorage.getItem('WG_ACCENT') || 'terracotta');
+  const [chartTweaks, setChartTweaks] = useState(() => { try { return JSON.parse(localStorage.getItem('WG_CHART_TWEAKS') || '{}'); } catch { return {}; } });
   const [status, setStatus] = useState(null);
   const [rxBps, setRxBps] = useState(0);
   const [txBps, setTxBps] = useState(0);
@@ -978,11 +1078,20 @@ function MobileApp() {
   const prevNetRef = useRef(null);
   const { toasts, add: toast } = useToast();
 
-  /* Theme toggle */
+  /* Theme + accent */
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('WG_THEME', theme);
   }, [theme]);
+  useEffect(() => {
+    const el = document.documentElement;
+    el.className = el.className.replace(/\baccent-\S+/g, '').trim();
+    if (accent !== 'terracotta') el.classList.add('accent-' + accent);
+    localStorage.setItem('WG_ACCENT', accent);
+  }, [accent]);
+  useEffect(() => {
+    localStorage.setItem('WG_CHART_TWEAKS', JSON.stringify(chartTweaks));
+  }, [chartTweaks]);
 
   /* Auth check */
   useEffect(() => {
@@ -1097,9 +1206,10 @@ function MobileApp() {
   }
 
   const tabs = [
-    { id:'home',  label:'Home',  icon:'home'  },
-    { id:'peers', label:'Peers', icon:'users' },
-    { id:'logs',  label:'Logs',  icon:'list'  },
+    { id:'home',     label:'Home',     icon:'home'     },
+    { id:'peers',    label:'Peers',    icon:'users'    },
+    { id:'logs',     label:'Logs',     icon:'list'     },
+    { id:'settings', label:'Settings', icon:'settings' },
   ];
 
   return (
@@ -1119,18 +1229,17 @@ function MobileApp() {
               {status.service?.active ? 'Active' : 'Down'}
             </div>
           )}
-          <button className="m-icon-btn" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} title="Toggle theme">
-            <Icon n={theme === 'dark' ? 'sun' : 'moon'} size={17}/>
-          </button>
         </div>
       </div>
 
       {/* Content */}
       <div className="m-content">
-        {!status && tab !== 'logs' ? (
+        {tab === 'settings' ? (
+          <SettingsTab theme={theme} setTheme={setTheme} accent={accent} setAccent={setAccent} chartTweaks={chartTweaks} setChartTweaks={setChartTweaks} />
+        ) : !status && tab !== 'logs' ? (
           <div className="m-spinner"><div className="m-spinner-ring"/></div>
         ) : tab === 'home' ? (
-          <HomeTab status={status} rxBps={rxBps} txBps={txBps} trafficSamples={trafficSamples} onService={handleService} svcBusy={svcBusy}/>
+          <HomeTab status={status} rxBps={rxBps} txBps={txBps} trafficSamples={trafficSamples} chartTweaks={chartTweaks} onService={handleService} svcBusy={svcBusy}/>
         ) : tab === 'peers' ? (
           <PeersTab peers={peers} onAction={handlePeerAction} toast={toast}/>
         ) : (
