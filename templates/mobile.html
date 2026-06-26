@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="WG Dashboard" />
 <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.svg" />
 <link rel="manifest" href="/manifest.json" />
-<title>WG Dashboard</title>
+<title>WG-Quick</title>
 <script>
 (function () {
   var t = localStorage.getItem('WG_THEME');
@@ -579,9 +579,8 @@ function Login({ onAuth }) {
   return (
     <div className="m-login">
       <div className="m-login-card">
-        <div style={{fontSize:32,marginBottom:12}}>🛡</div>
-        <div className="m-login-title">WG Dashboard</div>
-        <div className="m-login-sub">Enter your password to continue</div>
+        <div className="m-login-title">WG-Quick</div>
+        <div className="m-login-sub">Enter your password to login</div>
         <form onSubmit={submit}>
           <input
             className="m-login-input" type="password" placeholder="Password"
@@ -1217,7 +1216,7 @@ function MobileApp() {
           <div className="m-brand-mark">
             <Icon n="shield" size={16}/>
           </div>
-          WG Dashboard
+          WG-Quick
         </div>
         <div className="m-header-right">
           {status && (
