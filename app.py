@@ -1277,16 +1277,16 @@ def manifest():
         "theme_color": "#924f6f",
         "icons": [
             {
-                "src": "/static/icons/apple-touch-icon.svg",
-                "sizes": "any",
-                "type": "image/svg+xml",
+                "src": "/static/icons/apple-touch-icon.png",
+                "sizes": "180x180",
+                "type": "image/png",
                 "purpose": "any"
             },
             {
-                "src": "/static/icons/favicon.svg",
+                "src": "/static/icons/apple-touch-icon.svg",
                 "sizes": "any",
                 "type": "image/svg+xml",
-                "purpose": "maskable"
+                "purpose": "any maskable"
             }
         ]
     }
