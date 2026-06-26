@@ -598,14 +598,14 @@ function Login({ onAuth }) {
 }
 
 /* ─── Home tab ─── */
-function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService, svcBusy, peers, sessionStarts, peerByteHistory, onSeeAllPeers, onPeerClick }) {
+function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService, svcBusy, peers, sessionStarts, sparks, onSeeAllPeers, onPeerClick }) {
   const svc    = status?.service || {};
   const active  = svc.active;
   const uptime  = fmtUptime(svc.started_at);
   const totalPeers  = peers.length;
   const onlinePeers = peers.filter(p => p.status === 'online').length;
   const pct = totalPeers ? Math.round((onlinePeers / totalPeers) * 100) : 0;
-  const topPeers = [...peers].sort((a,b) => (b.bytesIn + b.bytesOut) - (a.bytesIn + a.bytesOut)).slice(0,4);
+  const topPeers = peers.filter(p => p.status === 'online').sort((a,b) => (b.bytesIn + b.bytesOut) - (a.bytesIn + a.bytesOut));
 
   return (
     <div className="m-scroll-pad">
@@ -686,11 +686,11 @@ function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService,
           </button>
         </div>
         {topPeers.length === 0 ? (
-          <div style={{textAlign:'center', padding:'24px', color:'var(--muted)', fontSize:13}}>No peers yet</div>
+          <div style={{textAlign:'center', padding:'24px', color:'var(--muted)', fontSize:13}}>No peers online</div>
         ) : (
           <div style={{display:'flex', flexDirection:'column', gap:8}}>
             {topPeers.map(p => (
-              <HomePeerRow key={p.name} peer={p} history={peerByteHistory[p.name] || []} onPeerClick={onPeerClick}/>
+              <HomePeerRow key={p.name} peer={p} spark={sparks[p.name] || []} onPeerClick={onPeerClick}/>
             ))}
           </div>
         )}
@@ -899,10 +899,8 @@ function PeerDrawer({ peer, history, onClose, onAction, toast }) {
             </div>
           </div>
 
-          {/* Configuration — public key only */}
           {peer.pubKey && (
             <>
-              <div style={{fontFamily:'var(--mono)', fontSize:10, letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--muted)', marginBottom:10}}>Configuration</div>
               <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:10, padding:'12px 14px', gap:12}}>
                 <div style={{flex:1, minWidth:0}}>
                   <div style={{fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--muted)', marginBottom:4}}>Public Key</div>
@@ -942,39 +940,6 @@ function PeerDrawer({ peer, history, onClose, onAction, toast }) {
 }
 
 /* ─── Peer card ─── */
-function PeerCard({ peer, onPeerClick }) {
-  const initials = peer.name.slice(0,2).toUpperCase();
-  const avatarClass = peer.status === 'paused' ? 'paused' : peer.status === 'offline' ? 'offline' : '';
-  return (
-    <div className="m-peer-card" style={{cursor:'pointer'}} onClick={() => onPeerClick(peer.name)}>
-      <div className="m-peer-head" style={{cursor:'pointer'}}>
-        <div className={`m-peer-avatar ${avatarClass}`}>{initials}</div>
-        <div className="m-peer-main">
-          <div className="m-peer-name">
-            <span className={`m-peer-status-dot ${peer.status}`}/>
-            {peer.name}
-            {peer.paused && <span style={{fontSize:10,padding:'2px 7px',borderRadius:99,background:'var(--warn-soft)',color:'var(--warn)',fontFamily:'var(--mono)'}}>PAUSED</span>}
-          </div>
-          <div className="m-peer-sub">
-            {peer.addr}{peer.lastHs ? ` · ${fmtRel(peer.lastHs)}` : ''}
-          </div>
-        </div>
-        <div className="m-peer-chev"><Icon n="chev" size={18}/></div>
-      </div>
-      <div className="m-peer-stats">
-        <div className="m-peer-stat">
-          <div className="m-peer-stat-lbl">↓ Received</div>
-          <div className="m-peer-stat-val">{fmtBytes(peer.bytesIn)}</div>
-        </div>
-        <div className="m-peer-stat">
-          <div className="m-peer-stat-lbl">↑ Sent</div>
-          <div className="m-peer-stat-val">{fmtBytes(peer.bytesOut)}</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ─── Session Duration Bars ─── */
 function SessionDurationBars({ peers, sessionStarts }) {
   const [now, setNow] = useState(Date.now());
@@ -1027,18 +992,16 @@ function SessionDurationBars({ peers, sessionStarts }) {
 }
 
 /* ─── Home peer row ─── */
-function HomePeerRow({ peer, history, onPeerClick }) {
+function HomePeerRow({ peer, spark, onPeerClick }) {
   const initials = peer.name.slice(0,2).toUpperCase();
   const avatarClass = peer.status === 'paused' ? 'paused' : peer.status === 'offline' ? 'offline' : '';
   const gid = `ps${peer.name.replace(/[^a-zA-Z0-9]/g,'')}`;
-  const deltas = history.length >= 2
-    ? history.slice(1).map((s,i) => Math.max(0, (s.bytesIn + s.bytesOut) - (history[i].bytesIn + history[i].bytesOut)))
-    : [];
-  const maxD = Math.max(...deltas, 1);
-  const toX = i => (i / Math.max(deltas.length - 1, 1)) * 100;
+  const nonZero = (spark || []).some(v => v > 0);
+  const maxD = Math.max(...(spark || []), 1);
+  const toX = i => (i / Math.max((spark||[]).length - 1, 1)) * 100;
   const toY = v => 46 - (v / maxD) * 40;
-  const sparkLine = deltas.length >= 2
-    ? deltas.map((v,i) => `${i===0?'M':'L'} ${toX(i)} ${toY(v)}`).join(' ')
+  const sparkLine = nonZero
+    ? (spark||[]).map((v,i) => `${i===0?'M':'L'} ${toX(i)} ${toY(v)}`).join(' ')
     : '';
   const sparkFill = sparkLine ? `${sparkLine} L 100 50 L 0 50 Z` : '';
   return (
@@ -1066,7 +1029,7 @@ function HomePeerRow({ peer, history, onPeerClick }) {
 }
 
 /* ─── Peers tab ─── */
-function PeersTab({ peers, onAction, toast, onPeerClick }) {
+function PeersTab({ peers, sparks, onAction, toast, onPeerClick }) {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
   const ref = useRef(null);
@@ -1126,7 +1089,7 @@ function PeersTab({ peers, onAction, toast, onPeerClick }) {
       ) : (
         <div className="m-peer-list">
           {filtered.map(p => (
-            <PeerCard key={p.name} peer={p} onPeerClick={onPeerClick}/>
+            <HomePeerRow key={p.name} peer={p} spark={sparks[p.name] || []} onPeerClick={onPeerClick}/>
           ))}
         </div>
       )}
@@ -1262,10 +1225,12 @@ function MobileApp() {
   const [logs, setLogs] = useState([]);
   const [peers, setPeers] = useState([]);
   const [sessionStarts, setSessionStarts] = useState({});
+  const [sparks, setSparks] = useState({});
   const [peerByteHistory, setPeerByteHistory] = useState({});
   const [drawerPeerName, setDrawerPeerName] = useState(null);
   const [svcBusy, setSvcBusy] = useState(false);
   const prevNetRef = useRef(null);
+  const prevPeerBytesRef = useRef({});
   const { toasts, add: toast } = useToast();
 
   /* Theme + accent */
@@ -1315,12 +1280,32 @@ function MobileApp() {
           return next;
         });
         setPeers(_mapped);
-        const _liveByName = {};
-        (live||[]).forEach(l => { _liveByName[l.name] = l; });
+        const serverSparks = (s.clients || {}).spark_history || {};
+        const prevBytes = prevPeerBytesRef.current;
+        const nextBytes = {};
+        const deltas = {};
+        _mapped.forEach(p => {
+          nextBytes[p.name] = { rx: p.bytesIn, tx: p.bytesOut };
+          const pr = prevBytes[p.name];
+          if (p.status === 'online' && pr !== undefined) {
+            deltas[p.name] = Math.max(0, p.bytesIn - pr.rx) + Math.max(0, p.bytesOut - pr.tx);
+          }
+        });
+        prevPeerBytesRef.current = nextBytes;
+        setSparks(prev => {
+          const out = { ...prev };
+          _mapped.forEach(p => {
+            const seeded = (serverSparks[p.name] || []).slice(-20);
+            const seed = seeded.length ? [...new Array(Math.max(0, 20 - seeded.length)).fill(0), ...seeded] : new Array(20).fill(0);
+            const buf = out[p.name] || seed;
+            out[p.name] = p.name in deltas ? [...buf.slice(1), deltas[p.name]] : buf;
+          });
+          return out;
+        });
         setPeerByteHistory(prev => {
           const next = {};
           (issued||[]).forEach(iss => {
-            const lv = _liveByName[iss.name];
+            const lv = (live||[]).find(l => l.name === iss.name);
             const bytesIn  = lv ? (lv.bytes_recv || 0) : 0;
             const bytesOut = lv ? (lv.bytes_sent || 0) : 0;
             const cutoff = _now - 5 * 60 * 1000;
@@ -1458,9 +1443,9 @@ function MobileApp() {
         ) : !status && tab !== 'logs' ? (
           <div className="m-spinner"><div className="m-spinner-ring"/></div>
         ) : tab === 'home' ? (
-          <HomeTab status={status} rxBps={rxBps} txBps={txBps} trafficSamples={trafficSamples} chartTweaks={chartTweaks} onService={handleService} svcBusy={svcBusy} peers={peers} sessionStarts={sessionStarts} peerByteHistory={peerByteHistory} onSeeAllPeers={() => setTab('peers')} onPeerClick={n => setDrawerPeerName(n)}/>
+          <HomeTab status={status} rxBps={rxBps} txBps={txBps} trafficSamples={trafficSamples} chartTweaks={chartTweaks} onService={handleService} svcBusy={svcBusy} peers={peers} sessionStarts={sessionStarts} sparks={sparks} onSeeAllPeers={() => setTab('peers')} onPeerClick={n => setDrawerPeerName(n)}/>
         ) : tab === 'peers' ? (
-          <PeersTab peers={peers} onAction={handlePeerAction} toast={toast} onPeerClick={n => setDrawerPeerName(n)}/>
+          <PeersTab peers={peers} sparks={sparks} onAction={handlePeerAction} toast={toast} onPeerClick={n => setDrawerPeerName(n)}/>
         ) : (
           <LogsTab logs={logs}/>
         )}
