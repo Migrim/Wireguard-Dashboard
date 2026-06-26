@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>WG-Quick · WireGuard Dashboard</title>
 <script>
+/* Auto-redirect phones to the mobile-optimised view */
+(function () {
+  var ua = navigator.userAgent;
+  if (/Mobi|Android|iPhone|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)) {
+    window.location.replace('/mobile');
+  }
+}());
+</script>
+<script>
   (() => {
     const savedTheme = localStorage.getItem('WG_THEME');
     if (savedTheme === 'dark' || savedTheme === 'light') {

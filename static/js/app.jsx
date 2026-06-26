@@ -1,6 +1,7 @@
 // Main WG-Quick dashboard — real API integration
 
 const { useState: uS, useEffect: uE, useRef: uR, useMemo: uM, useCallback: uC } = React;
+const IS_MAC = /mac/i.test(navigator.userAgentData?.platform ?? navigator.userAgent);
 const LOG_VERBOSE_KEY = 'WG_LOG_VERBOSE';
 const DISMISSED_ALERTS_KEY = 'WG_DISMISSED_ALERTS';
 const AVG_PING_HISTORY_KEY = 'WG_AVG_PING_HISTORY';
@@ -78,7 +79,7 @@ function App({ tweaks, setTweaks, onLogout }) {
 
   uE(() => {
     const handler = e => {
-      if ((e.metaKey || e.altKey) && e.key === 'k') {
+      if ((IS_MAC ? e.metaKey : e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         searchRef.current?.focus();
         searchRef.current?.select();
@@ -501,7 +502,7 @@ function App({ tweaks, setTweaks, onLogout }) {
               ? <button className="search-clear" onClick={() => { setFilter(''); searchRef.current?.focus(); }} aria-label="Clear search">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
                 </button>
-              : <span className="kbd">⌘K</span>
+              : <span className="kbd">{IS_MAC ? '⌘K' : 'Ctrl+K'}</span>
             }
           </div>
         </div>

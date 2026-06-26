@@ -86,7 +86,7 @@ def _sudo(args: List[str], input_data: bytes = None) -> Tuple[str,int]:
 def _log_request():
     app.logger.info("%s %s", request.method, request.path)
 
-_AUTH_OPEN = {"/", "/welcome", "/api/auth/check", "/api/auth/login", "/api/auth/logout", "/api/welcome/dismiss"}
+_AUTH_OPEN = {"/", "/welcome", "/mobile", "/manifest.json", "/service-worker.js", "/api/auth/check", "/api/auth/login", "/api/auth/logout", "/api/welcome/dismiss"}
 
 @app.before_request
 def _require_auth():
@@ -1259,6 +1259,55 @@ def home():
 @app.route("/welcome")
 def welcome():
     return render_template("welcome.html")
+
+@app.route("/mobile")
+def mobile():
+    return render_template("mobile.html")
+
+@app.route("/manifest.json")
+def manifest():
+    m = {
+        "name": "WireGuard Dashboard",
+        "short_name": "WG Dashboard",
+        "description": "WireGuard VPN peer management dashboard",
+        "start_url": "/mobile",
+        "display": "standalone",
+        "orientation": "portrait",
+        "background_color": "#F5EEE2",
+        "theme_color": "#924f6f",
+        "icons": [
+            {
+                "src": "/static/icons/apple-touch-icon.svg",
+                "sizes": "any",
+                "type": "image/svg+xml",
+                "purpose": "any"
+            },
+            {
+                "src": "/static/icons/favicon.svg",
+                "sizes": "any",
+                "type": "image/svg+xml",
+                "purpose": "maskable"
+            }
+        ]
+    }
+    resp = Response(json.dumps(m), mimetype="application/manifest+json")
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+@app.route("/service-worker.js")
+def service_worker():
+    js = (
+        "self.addEventListener('install', function(e) { self.skipWaiting(); });\n"
+        "self.addEventListener('activate', function(e) { e.waitUntil(clients.claim()); });\n"
+        "self.addEventListener('fetch', function(e) {\n"
+        "  if (e.request.method !== 'GET') return;\n"
+        "  e.respondWith(fetch(e.request).catch(function() { return caches.match(e.request); }));\n"
+        "});\n"
+    )
+    resp = Response(js, mimetype="application/javascript")
+    resp.headers["Service-Worker-Allowed"] = "/"
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
 
 @app.route("/api/welcome/dismiss", methods=["POST"])
 def api_welcome_dismiss():

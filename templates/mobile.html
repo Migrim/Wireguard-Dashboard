@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#924f6f" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="WG Dashboard" />
+<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.svg" />
+<link rel="manifest" href="/manifest.json" />
+<title>WG Dashboard</title>
+<script>
+(function () {
+  var t = localStorage.getItem('WG_THEME');
+  if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/service-worker.js', { scope: '/' }).catch(function () {});
+  }
+}());
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --serif: 'Instrument Serif', Georgia, serif;
+  --sans: 'Inter', -apple-system, system-ui, sans-serif;
+  --mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  color-scheme: light;
+  --bg:          #F5EEE2;
+  --bg-2:        #EFE7D8;
+  --card:        #FBF6EC;
+  --card-raised: #FFFCF4;
+  --ink:         #2A2520;
+  --ink-2:       #4A4238;
+  --muted:       #8A7F72;
+  --muted-2:     #A89C8C;
+  --border:      #E6DCC8;
+  --border-strong: #D6C9B0;
+  --accent:      oklch(59% 0.15 33);
+  --accent-soft: oklch(89% 0.06 33);
+  --success:     oklch(58% 0.12 150);
+  --warn:        oklch(68% 0.14 70);
+  --danger:      oklch(56% 0.17 25);
+  --success-soft: oklch(90% 0.06 150);
+  --warn-soft:   oklch(92% 0.07 70);
+  --danger-soft: oklch(92% 0.05 25);
+  --shadow:      0 1px 3px rgba(80,60,30,0.08), 0 4px 14px rgba(80,60,30,0.06);
+  --shadow-sm:   0 1px 2px rgba(80,60,30,0.06);
+  --radius:      12px;
+  --nav-h:       60px;
+  --safe-bot:    env(safe-area-inset-bottom, 0px);
+  --safe-top:    env(safe-area-inset-top, 0px);
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg:          #14100C;
+  --bg-2:        #1C1611;
+  --card:        #241D16;
+  --card-raised: #2F2619;
+  --ink:         #EFE6D8;
+  --ink-2:       #C8BEAE;
+  --muted:       #8A7F72;
+  --muted-2:     #6B6256;
+  --border:      #3A2F24;
+  --border-strong: #4D3E2C;
+  --accent:      oklch(68% 0.15 33);
+  --accent-soft: oklch(32% 0.08 33);
+  --success:     oklch(72% 0.13 150);
+  --success-soft: oklch(30% 0.07 150);
+  --warn:        oklch(72% 0.14 70);
+  --warn-soft:   oklch(32% 0.08 70);
+  --danger:      oklch(64% 0.17 25);
+  --danger-soft: oklch(30% 0.07 25);
+  --shadow:      0 1px 3px rgba(0,0,0,0.5), 0 4px 14px rgba(0,0,0,0.4);
+  --shadow-sm:   0 1px 2px rgba(0,0,0,0.4);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overscroll-behavior: none; }
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+#root { height: 100%; display: flex; flex-direction: column; }
+
+/* ── App shell ── */
+.m-app { display: flex; flex-direction: column; height: 100dvh; background: var(--bg); }
+.m-header {
+  flex-shrink: 0;
+  padding: calc(var(--safe-top) + 12px) 16px 12px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+}
+.m-brand {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--serif); font-size: 20px; color: var(--ink); line-height: 1;
+}
+.m-brand-mark {
+  width: 32px; height: 32px;
+  background: var(--accent-soft); color: var(--accent);
+  border: 1px solid var(--border); border-radius: 8px;
+  display: grid; place-items: center; flex-shrink: 0;
+}
+.m-status-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 99px;
+  font-family: var(--mono); font-size: 11px; font-weight: 500;
+}
+.m-status-pill.active   { background: var(--success-soft); color: var(--success); }
+.m-status-pill.inactive { background: var(--danger-soft);  color: var(--danger); }
+.m-status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.m-status-pill.active .m-status-dot { animation: mpulse 1.8s infinite; }
+@keyframes mpulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+
+.m-header-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.m-icon-btn {
+  width: 34px; height: 34px; border-radius: 8px;
+  background: var(--card); border: 1px solid var(--border);
+  display: grid; place-items: center; cursor: pointer; color: var(--ink-2);
+  -webkit-tap-highlight-color: transparent;
+}
+.m-icon-btn:active { background: var(--bg-2); }
+
+.m-content {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+.m-scroll-pad { padding-bottom: calc(var(--nav-h) + var(--safe-bot) + 16px); }
+
+/* ── Bottom nav ── */
+.m-nav {
+  flex-shrink: 0;
+  display: flex;
+  height: calc(var(--nav-h) + var(--safe-bot));
+  padding-bottom: var(--safe-bot);
+  background: var(--card);
+  border-top: 1px solid var(--border);
+}
+.m-nav-btn {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; border: none; background: none; cursor: pointer; color: var(--muted);
+  font-family: var(--sans); font-size: 10px; font-weight: 500; letter-spacing: 0.02em;
+  -webkit-tap-highlight-color: transparent; transition: color 0.15s;
+}
+.m-nav-btn.on { color: var(--accent); }
+.m-nav-btn svg { width: 22px; height: 22px; stroke: currentColor; }
+
+/* ── Cards ── */
+.m-section { padding: 14px 14px 0; }
+.m-section:last-child { padding-bottom: 0; }
+.m-section-label {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 8px;
+}
+.m-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow: hidden;
+}
+.m-card + .m-card { margin-top: 10px; }
+
+/* ── Service card ── */
+.m-svc-card { padding: 16px; }
+.m-svc-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.m-svc-info { flex: 1; min-width: 0; }
+.m-svc-name { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.m-svc-uptime { font-size: 13px; color: var(--ink-2); margin-top: 2px; }
+.m-svc-btns { display: flex; gap: 6px; margin-top: 14px; }
+.m-btn {
+  flex: 1; height: 38px; border-radius: 9px; border: 1px solid var(--border);
+  background: var(--bg-2); color: var(--ink); font-family: var(--sans);
+  font-size: 13px; font-weight: 500; cursor: pointer; display: flex;
+  align-items: center; justify-content: center; gap: 6px;
+  -webkit-tap-highlight-color: transparent; transition: background 0.1s;
+}
+.m-btn:active { background: var(--border); }
+.m-btn:disabled { opacity: 0.4; pointer-events: none; }
+.m-btn.danger { background: var(--danger-soft); border-color: color-mix(in oklab, var(--danger) 25%, var(--border)); color: var(--danger); }
+.m-btn.success { background: var(--success-soft); border-color: color-mix(in oklab, var(--success) 25%, var(--border)); color: var(--success); }
+.m-btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+/* ── Stat grid ── */
+.m-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.m-stat-card { padding: 14px 16px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); }
+.m-stat-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.m-stat-val { font-family: var(--serif); font-size: 30px; color: var(--ink); letter-spacing: -0.02em; line-height: 1; margin-top: 6px; }
+.m-stat-sub { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+/* ── Traffic card ── */
+.m-traffic-card { padding: 16px; }
+.m-traffic-row { display: flex; justify-content: space-around; }
+.m-traffic-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.m-traffic-arrow { font-size: 16px; }
+.m-traffic-arrow.rx { color: var(--success); }
+.m-traffic-arrow.tx { color: var(--accent); }
+.m-traffic-rate { font-family: var(--mono); font-size: 16px; font-weight: 600; color: var(--ink); }
+.m-traffic-lbl { font-family: var(--mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.m-traffic-div { width: 1px; background: var(--border); align-self: stretch; }
+
+/* ── Budget bar ── */
+.m-budget-card { padding: 16px; }
+.m-budget-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.m-budget-title { font-size: 13px; font-weight: 500; color: var(--ink); }
+.m-budget-pct { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.m-budget-bar-bg { height: 8px; background: var(--bg-2); border-radius: 4px; border: 1px solid var(--border); overflow: hidden; }
+.m-budget-bar-fill { height: 100%; border-radius: 4px; transition: width 0.6s ease, background 0.3s; }
+.m-budget-foot { display: flex; justify-content: space-between; margin-top: 6px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+/* ── Peers ── */
+.m-search-wrap {
+  padding: 12px 14px 8px; position: sticky; top: 0; z-index: 2;
+  background: var(--bg);
+}
+.m-search {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 0 12px; height: 40px;
+  box-shadow: var(--shadow-sm);
+}
+.m-search svg { flex-shrink: 0; color: var(--muted); }
+.m-search input {
+  flex: 1; border: none; background: none; outline: none;
+  font-family: var(--sans); font-size: 14px; color: var(--ink);
+}
+.m-search input::placeholder { color: var(--muted); }
+.m-search-clear { background: none; border: none; color: var(--muted); cursor: pointer; padding: 2px; display: grid; place-items: center; }
+
+.m-peer-list { padding: 0 14px; display: flex; flex-direction: column; gap: 8px; }
+.m-peer-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow: hidden;
+  transition: border-color 0.15s;
+}
+.m-peer-card.expanded { border-color: var(--border-strong); }
+.m-peer-head {
+  padding: 14px 16px; display: flex; align-items: center; gap: 12px; cursor: pointer;
+  -webkit-tap-highlight-color: transparent; user-select: none;
+}
+.m-peer-avatar {
+  width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
+  background: var(--accent-soft); color: var(--accent);
+  display: grid; place-items: center;
+  font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+}
+.m-peer-avatar.offline { background: var(--border); color: var(--muted); }
+.m-peer-avatar.paused { background: var(--warn-soft); color: var(--warn); }
+.m-peer-main { flex: 1; min-width: 0; }
+.m-peer-name { font-size: 14px; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 7px; }
+.m-peer-status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.m-peer-status-dot.online { background: var(--success); }
+.m-peer-status-dot.offline { background: var(--muted-2); }
+.m-peer-status-dot.paused { background: var(--warn); animation: mpulse 1.4s steps(1) infinite; }
+.m-peer-sub { font-size: 12px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
+.m-peer-chev { color: var(--muted); flex-shrink: 0; transition: transform 0.22s; }
+.m-peer-chev.open { transform: rotate(180deg); }
+
+.m-peer-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); border-top: 1px solid var(--border); }
+.m-peer-stat { background: var(--card); padding: 10px 14px; }
+.m-peer-stat-lbl { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.m-peer-stat-val { font-family: var(--mono); font-size: 13px; color: var(--ink); margin-top: 2px; font-weight: 500; }
+
+.m-peer-expand { border-top: 1px solid var(--border); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.m-peer-kv { display: flex; flex-direction: column; gap: 8px; }
+.m-peer-kv-row { display: flex; gap: 10px; align-items: flex-start; }
+.m-peer-kv-key { font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); min-width: 72px; padding-top: 2px; flex-shrink: 0; }
+.m-peer-kv-val { font-family: var(--mono); font-size: 12px; color: var(--ink); word-break: break-all; }
+.m-peer-actions { display: flex; gap: 8px; }
+
+/* ── Config modal ── */
+.m-modal-scrim {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(20,15,10,0.5); backdrop-filter: blur(3px);
+  display: flex; align-items: flex-end; padding: 0;
+}
+.m-modal {
+  width: 100%; background: var(--card); border-radius: 20px 20px 0 0;
+  border: 1px solid var(--border); border-bottom: none;
+  padding: 20px 20px calc(20px + var(--safe-bot));
+  max-height: 80dvh; display: flex; flex-direction: column;
+  animation: slideUp 0.3s cubic-bezier(0.2,0.9,0.3,1);
+}
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.m-modal-handle { width: 36px; height: 4px; background: var(--border-strong); border-radius: 2px; margin: -12px auto 16px; }
+.m-modal-title { font-family: var(--serif); font-size: 22px; color: var(--ink); margin-bottom: 14px; }
+.m-config-pre {
+  flex: 1; overflow-y: auto; font-family: var(--mono); font-size: 12px; line-height: 1.6;
+  color: var(--ink); background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 14px; white-space: pre; margin-bottom: 14px;
+}
+.m-modal-btns { display: flex; gap: 8px; }
+
+/* ── Logs ── */
+.m-logs-wrap { padding: 14px; display: flex; flex-direction: column; gap: 0; }
+.m-logs-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.m-logs-title { font-size: 14px; font-weight: 600; color: var(--ink); }
+.m-logs-count { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.m-log-stream {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px 12px; font-family: var(--mono); font-size: 11.5px; line-height: 1.65;
+  max-height: calc(100dvh - 200px); overflow-y: auto; -webkit-overflow-scrolling: touch;
+}
+.m-log-line { display: flex; gap: 8px; padding: 1px 0; animation: logIn 0.3s ease; }
+@keyframes logIn { from { opacity: 0; } to { opacity: 1; } }
+.m-log-time { color: var(--muted-2); white-space: nowrap; flex-shrink: 0; }
+.m-log-lvl { font-size: 9.5px; letter-spacing: 0.08em; padding: 0 4px; border-radius: 3px; height: 16px; line-height: 16px; align-self: center; flex-shrink: 0; text-transform: uppercase; }
+.m-log-info .m-log-lvl { background: var(--accent-soft); color: var(--accent); }
+.m-log-warn .m-log-lvl { background: var(--warn-soft); color: var(--warn); }
+.m-log-error .m-log-lvl { background: var(--danger-soft); color: var(--danger); }
+.m-log-msg { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-log-error .m-log-msg { color: var(--ink); }
+
+/* ── Toasts ── */
+.m-toast-wrap { position: fixed; top: calc(var(--safe-top) + 70px); left: 12px; right: 12px; z-index: 200; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.m-toast {
+  background: var(--card-raised); border: 1px solid var(--border); border-radius: 12px;
+  padding: 12px 14px; font-size: 13px; color: var(--ink);
+  box-shadow: var(--shadow); display: flex; align-items: center; gap: 10px;
+  animation: toastIn 0.3s cubic-bezier(0.2,0.9,0.3,1);
+  pointer-events: auto;
+}
+@keyframes toastIn { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
+.m-toast.ok   { border-color: color-mix(in oklab, var(--success) 30%, var(--border)); }
+.m-toast.err  { border-color: color-mix(in oklab, var(--danger)  30%, var(--border)); }
+.m-toast.warn { border-color: color-mix(in oklab, var(--warn)    30%, var(--border)); }
+.m-toast-icon { flex-shrink: 0; font-size: 16px; }
+
+/* ── Login ── */
+.m-login {
+  position: fixed; inset: 0; z-index: 300;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg); padding: 24px;
+}
+.m-login-card { width: 100%; max-width: 360px; background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 32px 28px; box-shadow: var(--shadow); }
+.m-login-title { font-family: var(--serif); font-size: 28px; color: var(--ink); margin-bottom: 6px; }
+.m-login-sub { font-size: 13px; color: var(--muted); margin-bottom: 24px; }
+.m-login-input {
+  width: 100%; padding: 12px 14px; border: 1px solid var(--border);
+  border-radius: 10px; background: var(--bg-2); color: var(--ink);
+  font-family: var(--sans); font-size: 16px; outline: none;
+  margin-bottom: 12px; transition: border-color 0.15s;
+}
+.m-login-input:focus { border-color: var(--accent); }
+.m-login-err { font-size: 12px; color: var(--danger); margin-bottom: 10px; }
+.m-login-btn {
+  width: 100%; height: 46px; border-radius: 10px; border: none;
+  background: var(--ink); color: var(--bg); font-family: var(--sans);
+  font-size: 15px; font-weight: 600; cursor: pointer; transition: opacity 0.15s;
+}
+.m-login-btn:disabled { opacity: 0.5; }
+
+/* ── Spinner ── */
+.m-spinner { display: flex; align-items: center; justify-content: center; padding: 40px; }
+.m-spinner-ring { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Empty state ── */
+.m-empty { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 48px 24px; gap: 10px; }
+.m-empty-icon { font-size: 36px; }
+.m-empty-title { font-size: 15px; font-weight: 600; color: var(--ink); }
+.m-empty-sub { font-size: 13px; color: var(--muted); }
+
+/* ── Peer filter pills ── */
+.m-filter-row { display: flex; gap: 6px; padding: 0 14px 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.m-filter-row::-webkit-scrollbar { display: none; }
+.m-filter-pill { flex-shrink: 0; padding: 5px 14px; border-radius: 99px; border: 1px solid var(--border); background: var(--card); font-size: 12.5px; color: var(--muted); cursor: pointer; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
+.m-filter-pill.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body data-base="{{ request.script_root or '' }}">
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel">
+{% raw %}
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+/* ─── Helpers ─── */
+const BASE = document.body.dataset.base || '';
+const HS_TIMEOUT = 130;
+
+async function api(path, opts = {}) {
+  const res = await fetch(BASE + path, {
+    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+    ...opts,
+  });
+  let data = null;
+  try { data = await res.json(); } catch (_) {}
+  if (res.status === 401) throw Object.assign(new Error('Unauthorized'), { status: 401 });
+  if (!res.ok) throw new Error((data?.hint || data?.error) || `HTTP ${res.status}`);
+  return data;
+}
+
+function fmtBytes(b) {
+  if (!b) return '0 B';
+  const u = ['B','KB','MB','GB','TB'];
+  const i = Math.floor(Math.log(b) / Math.log(1024));
+  return `${(b / 1024 ** i).toFixed(i ? 1 : 0)} ${u[i]}`;
+}
+function fmtRate(bps) {
+  if (!bps) return '0 B/s';
+  const u = ['B/s','KB/s','MB/s','GB/s'];
+  const i = Math.min(3, Math.floor(Math.log(Math.max(bps,1)) / Math.log(1024)));
+  return `${(bps / 1024 ** i).toFixed(i ? 2 : 0)} ${u[i]}`;
+}
+function fmtRel(ms) {
+  if (!ms) return '—';
+  const d = Date.now() - ms;
+  if (d < 60_000) return `${Math.floor(d/1000)}s ago`;
+  if (d < 3_600_000) return `${Math.floor(d/60_000)}m ago`;
+  if (d < 86_400_000) return `${Math.floor(d/3_600_000)}h ago`;
+  return `${Math.floor(d/86_400_000)}d ago`;
+}
+function fmtUptime(startedMs) {
+  if (!startedMs) return null;
+  const s = Math.floor((Date.now() - startedMs) / 1000);
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s/60)}m ${s%60}s`;
+  const h = Math.floor(s/3600); const m = Math.floor((s%3600)/60);
+  if (h < 24) return `${h}h ${m}m`;
+  return `${Math.floor(h/24)}d ${h%24}h`;
+}
+function mapPeers(issued, live) {
+  const now = Date.now();
+  return (issued||[]).map(iss => {
+    const lv = (live||[]).find(l => l.name === iss.name);
+    const hs = lv ? (lv.last_handshake || 0) : 0;
+    const online = hs > 0 && (now/1000 - hs) < HS_TIMEOUT;
+    return {
+      name: iss.name,
+      addr: iss.ip || '—',
+      status: iss.paused ? 'paused' : online ? 'online' : 'offline',
+      bytesIn:  lv ? (lv.bytes_recv || 0) : 0,
+      bytesOut: lv ? (lv.bytes_sent || 0) : 0,
+      lastHs: hs > 0 ? hs * 1000 : null,
+      endpoint: lv?.remote || '—',
+      pubKey: iss.public_key || '',
+      paused: iss.paused || false,
+    };
+  });
+}
+const MONTHS = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+function parseLogs(lines) {
+  const now = Date.now(), yr = new Date().getFullYear();
+  return (lines||[]).map((line, i) => {
+    const lo = line.toLowerCase();
+    const lvl = (lo.includes('error')||lo.includes('failed')) ? 'error'
+               : (lo.includes('warn')||lo.includes('delayed')) ? 'warn' : 'info';
+    let t = now - (lines.length - i) * 1000;
+    const m = line.match(/^([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{2}):(\d{2}):(\d{2})/);
+    if (m) {
+      const d = new Date(yr, MONTHS[m[1]]??0, +m[2], +m[3], +m[4], +m[5]);
+      if (!isNaN(d)) t = d.getTime();
+    }
+    const msg = line.replace(/^[A-Z][a-z]{2}\s+\d{1,2}\s+[\d:.]+\s+\S+\s+\S+:\s*/, '').trim() || line;
+    return { t, lvl, msg };
+  });
+}
+function timeStr(ms) {
+  const d = new Date(ms);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+}
+
+/* ─── Icons (inline SVG) ─── */
+const Icon = ({ n, size=20 }) => {
+  const paths = {
+    home:    <><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></>,
+    users:   <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>,
+    list:    <><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></>,
+    shield:  <path d="M12 2L3 7v6c0 5 4 9 9 10 5-1 9-5 9-10V7l-9-5z"/>,
+    sun:     <><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></>,
+    moon:    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>,
+    chev:    <polyline points="6 9 12 15 18 9"/>,
+    x:       <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
+    search:  <><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>,
+    dl:      <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>,
+    pause:   <><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></>,
+    play:    <polygon points="5 3 19 12 5 21 5 3"/>,
+    refresh: <><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></>,
+    copy:    <><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>,
+    check:   <polyline points="20 6 9 17 4 12"/>,
+  };
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {paths[n]}
+    </svg>
+  );
+};
+
+/* ─── Toast ─── */
+function useToast() {
+  const [toasts, setToasts] = useState([]);
+  const add = useCallback((msg, type='ok', dur=3000) => {
+    const id = Date.now() + Math.random();
+    setToasts(t => [...t, { id, msg, type }]);
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), dur);
+  }, []);
+  return { toasts, add };
+}
+function Toasts({ toasts }) {
+  const icons = { ok:'✓', err:'✕', warn:'⚠' };
+  return (
+    <div className="m-toast-wrap">
+      {toasts.map(t => (
+        <div key={t.id} className={`m-toast ${t.type}`}>
+          <span className="m-toast-icon">{icons[t.type]}</span>
+          {t.msg}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ─── Login ─── */
+function Login({ onAuth }) {
+  const [pw, setPw] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async e => {
+    e.preventDefault();
+    setBusy(true); setErr('');
+    try {
+      await api('/api/auth/login', { method:'POST', body: JSON.stringify({ password: pw }) });
+      onAuth();
+    } catch (_) {
+      setErr('Wrong password');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="m-login">
+      <div className="m-login-card">
+        <div style={{fontSize:32,marginBottom:12}}>🛡</div>
+        <div className="m-login-title">WG Dashboard</div>
+        <div className="m-login-sub">Enter your password to continue</div>
+        <form onSubmit={submit}>
+          <input
+            className="m-login-input" type="password" placeholder="Password"
+            value={pw} onChange={e => setPw(e.target.value)} autoFocus
+          />
+          {err && <div className="m-login-err">{err}</div>}
+          <button className="m-login-btn" disabled={busy || !pw}>
+            {busy ? 'Signing in…' : 'Sign in'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Home tab ─── */
+function HomeTab({ status, rxBps, txBps, onService, svcBusy }) {
+  const svc    = status?.service || {};
+  const net    = status?.network || {};
+  const budget = status?.data_budget || {};
+  const clients = status?.clients || {};
+  const active  = svc.active;
+  const uptime  = fmtUptime(svc.started_at);
+  const budPct  = Math.min(100, Math.round(budget.pct || 0));
+  const barColor = budPct >= 90 ? 'var(--danger)' : budPct >= 70 ? 'var(--warn)' : 'var(--success)';
+  const totalPeers   = (clients.issued||[]).length;
+  const onlinePeers  = (clients.live||[]).filter(l => {
+    const hs = l.last_handshake || 0;
+    return hs > 0 && (Date.now()/1000 - hs) < HS_TIMEOUT;
+  }).length;
+
+  return (
+    <div className="m-scroll-pad">
+
+      {/* Service card */}
+      <div className="m-section">
+        <div className="m-section-label">Service</div>
+        <div className="m-card m-svc-card">
+          <div className="m-svc-row">
+            <div className="m-svc-info">
+              <div className="m-svc-name">{svc.unit || 'wg-quick@wg0'}</div>
+              {uptime && active && <div className="m-svc-uptime">Uptime: {uptime}</div>}
+              {!active && <div className="m-svc-uptime" style={{color:'var(--danger)'}}>Inactive</div>}
+            </div>
+            <div className={`m-status-pill ${active ? 'active' : 'inactive'}`}>
+              <div className="m-status-dot"/>
+              {active ? 'Active' : 'Stopped'}
+            </div>
+          </div>
+          <div className="m-svc-btns">
+            {active ? (<>
+              <button className="m-btn danger" onClick={() => onService('stop')} disabled={!!svcBusy}>
+                <Icon n="pause" size={14}/> Stop
+              </button>
+              <button className="m-btn" onClick={() => onService('restart')} disabled={!!svcBusy}>
+                <Icon n="refresh" size={14}/> Restart
+              </button>
+            </>) : (
+              <button className="m-btn success" onClick={() => onService('start')} disabled={!!svcBusy} style={{flex:'0 0 auto', minWidth:100}}>
+                <Icon n="play" size={14}/> Start
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Traffic */}
+      <div className="m-section" style={{marginTop:14}}>
+        <div className="m-section-label">Live Traffic</div>
+        <div className="m-card m-traffic-card">
+          <div className="m-traffic-row">
+            <div className="m-traffic-item">
+              <span className="m-traffic-arrow rx">↓</span>
+              <span className="m-traffic-rate">{fmtRate(rxBps)}</span>
+              <span className="m-traffic-lbl">Download</span>
+            </div>
+            <div className="m-traffic-div"/>
+            <div className="m-traffic-item">
+              <span className="m-traffic-arrow tx">↑</span>
+              <span className="m-traffic-rate">{fmtRate(txBps)}</span>
+              <span className="m-traffic-lbl">Upload</span>
+            </div>
+            <div className="m-traffic-div"/>
+            <div className="m-traffic-item">
+              <span className="m-traffic-arrow" style={{color:'var(--muted)'}}>⇅</span>
+              <span className="m-traffic-rate">{fmtBytes(net.rx || 0)}</span>
+              <span className="m-traffic-lbl">Total Rx</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Peer counts */}
+      <div className="m-section" style={{marginTop:14}}>
+        <div className="m-section-label">Peers</div>
+        <div className="m-stat-grid">
+          <div className="m-stat-card">
+            <div className="m-stat-label">Total</div>
+            <div className="m-stat-val">{totalPeers}</div>
+            <div className="m-stat-sub">peers issued</div>
+          </div>
+          <div className="m-stat-card">
+            <div className="m-stat-label">Online</div>
+            <div className="m-stat-val" style={{color: onlinePeers > 0 ? 'var(--success)' : 'var(--muted)'}}>{onlinePeers}</div>
+            <div className="m-stat-sub">active now</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Data budget */}
+      {budget.budget_bytes > 0 && (
+        <div className="m-section" style={{marginTop:14}}>
+          <div className="m-section-label">Data Budget</div>
+          <div className="m-card m-budget-card">
+            <div className="m-budget-head">
+              <div className="m-budget-title">This Period</div>
+              <div className="m-budget-pct">{budPct}%</div>
+            </div>
+            <div className="m-budget-bar-bg">
+              <div className="m-budget-bar-fill" style={{width: budPct+'%', background: barColor}}/>
+            </div>
+            <div className="m-budget-foot">
+              <span>{fmtBytes(budget.total||0)} used</span>
+              <span>{fmtBytes(budget.budget_bytes||0)} total</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Network info */}
+      <div className="m-section" style={{marginTop:14, marginBottom:0}}>
+        <div className="m-section-label">Network</div>
+        <div className="m-card">
+          {[
+            ['Interface', net.iface || '—'],
+            ['Port', net.port ? `UDP ${net.port}` : '—'],
+            ['Listening', net.listening ? '✓ Yes' : '✕ No'],
+            ['Firewall', net.ufw_udp_open ? '✓ Open' : '✕ Blocked'],
+            ['Internet', net.ping_ok ? '✓ OK' : '✕ No reply'],
+          ].map(([k,v],i) => (
+            <div key={k} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'11px 16px',borderTop: i ? '1px solid var(--border)' : 'none'}}>
+              <span style={{fontSize:13,color:'var(--muted)',fontFamily:'var(--mono)',fontSize:12}}>{k}</span>
+              <span style={{fontSize:13,color:'var(--ink)',fontFamily:'var(--mono)',fontSize:12}}>{v}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Config modal ─── */
+function ConfigModal({ peerName, onClose, toast }) {
+  const [config, setConfig] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    api(`/api/users/${encodeURIComponent(peerName)}/ovpn`)
+      .then(d => setConfig(d.profile || ''))
+      .catch(e => { toast(e.message, 'err'); onClose(); })
+      .finally(() => setLoading(false));
+  }, [peerName]);
+
+  const copy = () => {
+    navigator.clipboard?.writeText(config).then(() => {
+      setCopied(true); toast('Config copied to clipboard', 'ok');
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => toast('Copy failed', 'err'));
+  };
+
+  const download = () => {
+    const blob = new Blob([config], { type: 'text/plain' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = `${peerName}.conf`; a.click();
+    URL.revokeObjectURL(url);
+    toast('Download started', 'ok');
+  };
+
+  return (
+    <div className="m-modal-scrim" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="m-modal">
+        <div className="m-modal-handle"/>
+        <div className="m-modal-title">{peerName}.conf</div>
+        {loading ? <div className="m-spinner"><div className="m-spinner-ring"/></div>
+          : <pre className="m-config-pre">{config}</pre>
+        }
+        <div className="m-modal-btns">
+          <button className="m-btn" onClick={copy} style={{flex:1}}>
+            <Icon n={copied ? 'check' : 'copy'} size={14}/>
+            {copied ? 'Copied!' : 'Copy'}
+          </button>
+          <button className="m-btn primary" onClick={download} style={{flex:1}}>
+            <Icon n="dl" size={14}/> Download
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Peer card ─── */
+function PeerCard({ peer, onAction, toast }) {
+  const [open, setOpen] = useState(false);
+  const [configOpen, setConfigOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const initials = peer.name.slice(0,2).toUpperCase();
+  const avatarClass = peer.status === 'paused' ? 'paused' : peer.status === 'offline' ? 'offline' : '';
+
+  const doAction = async (action) => {
+    setBusy(true);
+    try {
+      await onAction(peer.name, action);
+      toast(action === 'pause' ? `${peer.name} paused` : `${peer.name} resumed`, 'ok');
+    } catch (e) {
+      toast(e.message, 'err');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <div className={`m-peer-card ${open ? 'expanded' : ''}`}>
+        <div className="m-peer-head" onClick={() => setOpen(o => !o)}>
+          <div className={`m-peer-avatar ${avatarClass}`}>{initials}</div>
+          <div className="m-peer-main">
+            <div className="m-peer-name">
+              <span className={`m-peer-status-dot ${peer.status}`}/>
+              {peer.name}
+              {peer.paused && <span style={{fontSize:10,padding:'2px 7px',borderRadius:99,background:'var(--warn-soft)',color:'var(--warn)',fontFamily:'var(--mono)'}}>PAUSED</span>}
+            </div>
+            <div className="m-peer-sub">
+              {peer.addr}{peer.lastHs ? ` · ${fmtRel(peer.lastHs)}` : ''}
+            </div>
+          </div>
+          <div className={`m-peer-chev ${open ? 'open' : ''}`}>
+            <Icon n="chev" size={18}/>
+          </div>
+        </div>
+
+        <div className="m-peer-stats">
+          <div className="m-peer-stat">
+            <div className="m-peer-stat-lbl">↓ Received</div>
+            <div className="m-peer-stat-val">{fmtBytes(peer.bytesIn)}</div>
+          </div>
+          <div className="m-peer-stat">
+            <div className="m-peer-stat-lbl">↑ Sent</div>
+            <div className="m-peer-stat-val">{fmtBytes(peer.bytesOut)}</div>
+          </div>
+        </div>
+
+        {open && (
+          <div className="m-peer-expand">
+            <div className="m-peer-kv">
+              {peer.endpoint !== '—' && (
+                <div className="m-peer-kv-row">
+                  <span className="m-peer-kv-key">Endpoint</span>
+                  <span className="m-peer-kv-val">{peer.endpoint}</span>
+                </div>
+              )}
+              {peer.lastHs && (
+                <div className="m-peer-kv-row">
+                  <span className="m-peer-kv-key">Handshake</span>
+                  <span className="m-peer-kv-val">{fmtRel(peer.lastHs)}</span>
+                </div>
+              )}
+            </div>
+            <div className="m-peer-actions">
+              <button
+                className={`m-btn ${peer.paused ? 'success' : ''}`}
+                style={{flex:1}} disabled={busy}
+                onClick={() => doAction(peer.paused ? 'resume' : 'pause')}
+              >
+                <Icon n={peer.paused ? 'play' : 'pause'} size={14}/>
+                {peer.paused ? 'Resume' : 'Pause'}
+              </button>
+              <button className="m-btn" style={{flex:1}} onClick={() => setConfigOpen(true)}>
+                <Icon n="dl" size={14}/> Config
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {configOpen && (
+        <ConfigModal
+          peerName={peer.name}
+          onClose={() => setConfigOpen(false)}
+          toast={toast}
+        />
+      )}
+    </>
+  );
+}
+
+/* ─── Peers tab ─── */
+function PeersTab({ peers, onAction, toast }) {
+  const [q, setQ] = useState('');
+  const [filter, setFilter] = useState('all');
+  const ref = useRef(null);
+
+  const filtered = useMemo(() => {
+    return peers.filter(p => {
+      if (filter === 'online' && p.status !== 'online') return false;
+      if (filter === 'offline' && p.status === 'online') return false;
+      if (q && !p.name.toLowerCase().includes(q.toLowerCase()) && !p.addr.includes(q)) return false;
+      return true;
+    });
+  }, [peers, q, filter]);
+
+  const counts = useMemo(() => ({
+    all: peers.length,
+    online: peers.filter(p => p.status === 'online').length,
+    offline: peers.filter(p => p.status !== 'online').length,
+  }), [peers]);
+
+  return (
+    <div className="m-scroll-pad">
+      <div className="m-search-wrap">
+        <div className="m-search">
+          <Icon n="search" size={16}/>
+          <input
+            ref={ref} value={q} onChange={e => setQ(e.target.value)}
+            placeholder="Search peers…" type="search"
+          />
+          {q && (
+            <button className="m-search-clear" onClick={() => setQ('')}>
+              <Icon n="x" size={15}/>
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="m-filter-row">
+        {[['all','All',counts.all],['online','Online',counts.online],['offline','Offline / Paused',counts.offline]].map(([k,l,c]) => (
+          <button key={k} className={`m-filter-pill ${filter===k?'on':''}`} onClick={() => setFilter(k)}>
+            {l} {c}
+          </button>
+        ))}
+      </div>
+
+      {peers.length === 0 ? (
+        <div className="m-empty">
+          <div className="m-empty-icon">🔌</div>
+          <div className="m-empty-title">No peers yet</div>
+          <div className="m-empty-sub">Add peers from the desktop dashboard</div>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="m-empty">
+          <div className="m-empty-icon">🔍</div>
+          <div className="m-empty-title">No matches</div>
+          <div className="m-empty-sub">Try a different search or filter</div>
+        </div>
+      ) : (
+        <div className="m-peer-list">
+          {filtered.map(p => (
+            <PeerCard key={p.name} peer={p} onAction={onAction} toast={toast}/>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Logs tab ─── */
+function LogsTab({ logs }) {
+  const endRef = useRef(null);
+  const streamRef = useRef(null);
+  const [pinned, setPinned] = useState(true);
+
+  useEffect(() => {
+    if (pinned && endRef.current) endRef.current.scrollIntoView({ behavior: 'smooth' });
+  }, [logs, pinned]);
+
+  const handleScroll = () => {
+    const el = streamRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    setPinned(atBottom);
+  };
+
+  return (
+    <div className="m-scroll-pad">
+      <div className="m-logs-wrap">
+        <div className="m-logs-head">
+          <div className="m-logs-title">System Logs</div>
+          <div className="m-logs-count">{logs.length} lines</div>
+        </div>
+        <div className="m-log-stream" ref={streamRef} onScroll={handleScroll}>
+          {logs.length === 0 && <div style={{color:'var(--muted)',fontStyle:'italic'}}>No logs yet…</div>}
+          {logs.map((l, i) => (
+            <div key={i} className={`m-log-line m-log-${l.lvl}`}>
+              <span className="m-log-time">{timeStr(l.t)}</span>
+              <span className="m-log-lvl">{l.lvl}</span>
+              <span className="m-log-msg">{l.msg}</span>
+            </div>
+          ))}
+          <div ref={endRef}/>
+        </div>
+        {!pinned && (
+          <button
+            onClick={() => { setPinned(true); endRef.current?.scrollIntoView({ behavior:'smooth' }); }}
+            style={{marginTop:8,width:'100%',height:34,borderRadius:8,border:'1px solid var(--border)',background:'var(--card)',cursor:'pointer',fontSize:12,color:'var(--muted)'}}
+          >
+            ↓ Jump to latest
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Root app ─── */
+function MobileApp() {
+  const [authState, setAuthState] = useState('checking'); // checking | login | ok
+  const [tab, setTab] = useState('home');
+  const [theme, setTheme] = useState(() => localStorage.getItem('WG_THEME') || 'light');
+  const [status, setStatus] = useState(null);
+  const [rxBps, setRxBps] = useState(0);
+  const [txBps, setTxBps] = useState(0);
+  const [logs, setLogs] = useState([]);
+  const [peers, setPeers] = useState([]);
+  const [svcBusy, setSvcBusy] = useState(false);
+  const prevNetRef = useRef(null);
+  const { toasts, add: toast } = useToast();
+
+  /* Theme toggle */
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('WG_THEME', theme);
+  }, [theme]);
+
+  /* Auth check */
+  useEffect(() => {
+    api('/api/auth/check').then(d => {
+      setAuthState(d.authenticated ? 'ok' : 'login');
+    }).catch(() => setAuthState('ok')); // if no auth required, proceed
+  }, []);
+
+  /* Poll /api/status */
+  useEffect(() => {
+    if (authState !== 'ok') return;
+    const fetch = () => {
+      api('/api/status').then(s => {
+        setStatus(s);
+        const net = s.network || {};
+        const prev = prevNetRef.current;
+        if (prev) {
+          const dt = 3;
+          setRxBps(Math.max(0, ((net.rx||0) - (prev.rx||0)) / dt));
+          setTxBps(Math.max(0, ((net.tx||0) - (prev.tx||0)) / dt));
+        }
+        prevNetRef.current = net;
+        const { issued, live } = s.clients || {};
+        setPeers(mapPeers(issued, live));
+      }).catch(e => {
+        if (e.status === 401) setAuthState('login');
+      });
+    };
+    fetch();
+    const id = setInterval(fetch, 3000);
+    return () => clearInterval(id);
+  }, [authState]);
+
+  /* Poll /api/logs */
+  useEffect(() => {
+    if (authState !== 'ok') return;
+    const fetch = () => {
+      api('/api/logs?n=100').then(d => setLogs(parseLogs(d.lines))).catch(() => {});
+    };
+    fetch();
+    const id = setInterval(fetch, 8000);
+    return () => clearInterval(id);
+  }, [authState]);
+
+  /* Service control */
+  const handleService = async (action) => {
+    setSvcBusy(action);
+    try {
+      const r = await api('/api/service', { method:'POST', body: JSON.stringify({ action }) });
+      if (!r.ok) throw new Error(r.out || 'Failed');
+      toast(`Service ${action}ed`, 'ok');
+    } catch(e) {
+      toast(e.message, 'err');
+    } finally {
+      setSvcBusy(null);
+    }
+  };
+
+  /* Peer pause/resume */
+  const handlePeerAction = async (name, action) => {
+    await api(`/api/users/${encodeURIComponent(name)}/${action}`, { method: 'POST' });
+    // Refresh status immediately
+    const s = await api('/api/status');
+    setStatus(s);
+    const { issued, live } = s.clients || {};
+    setPeers(mapPeers(issued, live));
+  };
+
+  if (authState === 'checking') {
+    return (
+      <div className="m-app" style={{alignItems:'center',justifyContent:'center'}}>
+        <div className="m-spinner-ring"/>
+      </div>
+    );
+  }
+  if (authState === 'login') {
+    return <Login onAuth={() => setAuthState('ok')}/>;
+  }
+
+  const tabs = [
+    { id:'home',  label:'Home',  icon:'home'  },
+    { id:'peers', label:'Peers', icon:'users' },
+    { id:'logs',  label:'Logs',  icon:'list'  },
+  ];
+
+  return (
+    <div className="m-app">
+      {/* Header */}
+      <div className="m-header">
+        <div className="m-brand">
+          <div className="m-brand-mark">
+            <Icon n="shield" size={16}/>
+          </div>
+          WG Dashboard
+        </div>
+        <div className="m-header-right">
+          {status && (
+            <div className={`m-status-pill ${status.service?.active ? 'active' : 'inactive'}`}>
+              <div className="m-status-dot"/>
+              {status.service?.active ? 'Active' : 'Down'}
+            </div>
+          )}
+          <button className="m-icon-btn" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} title="Toggle theme">
+            <Icon n={theme === 'dark' ? 'sun' : 'moon'} size={17}/>
+          </button>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="m-content">
+        {!status && tab !== 'logs' ? (
+          <div className="m-spinner"><div className="m-spinner-ring"/></div>
+        ) : tab === 'home' ? (
+          <HomeTab status={status} rxBps={rxBps} txBps={txBps} onService={handleService} svcBusy={svcBusy}/>
+        ) : tab === 'peers' ? (
+          <PeersTab peers={peers} onAction={handlePeerAction} toast={toast}/>
+        ) : (
+          <LogsTab logs={logs}/>
+        )}
+      </div>
+
+      {/* Bottom nav */}
+      <nav className="m-nav">
+        {tabs.map(t => (
+          <button key={t.id} className={`m-nav-btn ${tab===t.id?'on':''}`} onClick={() => setTab(t.id)}>
+            <Icon n={t.icon} size={22}/>
+            {t.label}
+          </button>
+        ))}
+      </nav>
+
+      <Toasts toasts={toasts}/>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<MobileApp/>);
+{% endraw %}
+</script>
+</body>
+</html>
