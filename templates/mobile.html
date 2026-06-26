@@ -302,14 +302,14 @@ body {
 .m-modal-btns { display: flex; gap: 8px; }
 
 /* ── Logs ── */
-.m-logs-wrap { padding: 14px; display: flex; flex-direction: column; gap: 0; }
-.m-logs-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.m-logs-wrap { padding: 14px; display: flex; flex-direction: column; gap: 0; height: 100%; box-sizing: border-box; }
+.m-logs-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-shrink: 0; }
 .m-logs-title { font-size: 14px; font-weight: 600; color: var(--ink); }
 .m-logs-count { font-family: var(--mono); font-size: 11px; color: var(--muted); }
 .m-log-stream {
   background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 10px 12px; font-family: var(--mono); font-size: 11.5px; line-height: 1.65;
-  max-height: calc(100dvh - 200px); overflow-y: auto; -webkit-overflow-scrolling: touch;
+  flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
 }
 .m-log-line { display: flex; gap: 8px; padding: 1px 0; animation: logIn 0.3s ease; }
 @keyframes logIn { from { opacity: 0; } to { opacity: 1; } }
@@ -361,9 +361,30 @@ body {
 .m-login-btn:disabled { opacity: 0.5; }
 
 /* ── Spinner ── */
-.m-spinner { display: flex; align-items: center; justify-content: center; padding: 40px; }
-.m-spinner-ring { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+.m-spinner {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 16px; height: 100%;
+  animation: mFadeIn 0.5s cubic-bezier(0.2,0.9,0.3,1) both;
+}
+.m-spinner-ring {
+  width: 36px; height: 36px;
+  border: 2.5px solid var(--border); border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.75s cubic-bezier(0.4,0,0.2,1) infinite;
+}
+.m-spinner-label {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--muted);
+  animation: breathe 2s ease-in-out infinite;
+}
+.m-spinner-label::after {
+  content: '';
+  animation: loadDots 1.5s steps(4, end) infinite;
+}
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes breathe { 0%,100%{opacity:0.4} 55%{opacity:1} }
+@keyframes loadDots { 0%{content:''} 25%{content:'.'} 50%{content:'..'} 75%{content:'...'} }
+@keyframes mFadeIn { from{opacity:0; transform:translateY(10px)} to{opacity:1; transform:translateY(0)} }
 
 /* ── Empty state ── */
 .m-empty { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 48px 24px; gap: 10px; }
@@ -733,7 +754,10 @@ function ConfigModal({ peerName, onClose, toast }) {
       <div className="m-modal">
         <div className="m-modal-handle"/>
         <div className="m-modal-title">{peerName}.conf</div>
-        {loading ? <div className="m-spinner"><div className="m-spinner-ring"/></div>
+        {loading ? <div className="m-spinner" style={{height:'auto', padding:'32px 0'}}>
+            <div className="m-spinner-ring"/>
+            <div className="m-spinner-label">Loading</div>
+          </div>
           : <pre className="m-config-pre">{config}</pre>
         }
         <div className="m-modal-btns">
@@ -838,8 +862,8 @@ function PeerDrawer({ peer, history, onClose, onAction, toast }) {
           <div className="m-modal-handle" style={{margin:0}}/>
         </div>
 
-        {/* Body — not scrollable */}
-        <div style={{padding:'4px 20px 16px', overflow:'hidden'}}>
+        {/* Body */}
+        <div style={{padding:'4px 20px 16px', overflowY:'auto', flex:1}}>
 
           {/* Header */}
           <div style={{display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:16, marginTop:4}}>
@@ -1076,13 +1100,11 @@ function PeersTab({ peers, sparks, onAction, toast, onPeerClick }) {
 
       {peers.length === 0 ? (
         <div className="m-empty">
-          <div className="m-empty-icon">🔌</div>
           <div className="m-empty-title">No peers yet</div>
           <div className="m-empty-sub">Add peers from the desktop dashboard</div>
         </div>
       ) : filtered.length === 0 ? (
         <div className="m-empty">
-          <div className="m-empty-icon">🔍</div>
           <div className="m-empty-title">No matches</div>
           <div className="m-empty-sub">Try a different search or filter</div>
         </div>
@@ -1115,7 +1137,7 @@ function LogsTab({ logs }) {
   };
 
   return (
-    <div className="m-scroll-pad">
+    <div style={{height:'100%', display:'flex', flexDirection:'column', overflow:'hidden'}}>
       <div className="m-logs-wrap">
         <div className="m-logs-head">
           <div className="m-logs-title">System Logs</div>
@@ -1135,7 +1157,7 @@ function LogsTab({ logs }) {
         {!pinned && (
           <button
             onClick={() => { setPinned(true); endRef.current?.scrollIntoView({ behavior:'smooth' }); }}
-            style={{marginTop:8,width:'100%',height:34,borderRadius:8,border:'1px solid var(--border)',background:'var(--card)',cursor:'pointer',fontSize:12,color:'var(--muted)'}}
+            style={{marginTop:8,width:'100%',height:34,borderRadius:8,border:'1px solid var(--border)',background:'var(--card)',cursor:'pointer',fontSize:12,color:'var(--muted)',flexShrink:0}}
           >
             ↓ Jump to latest
           </button>
@@ -1156,7 +1178,7 @@ function Toggle({ value, onChange }) {
   );
 }
 
-function SettingsTab({ theme, setTheme, accent, setAccent, chartTweaks, setChartTweaks }) {
+function SettingsTab({ theme, setTheme, accent, setAccent, chartTweaks, setChartTweaks, onLogout }) {
   const accents = [
     { id: 'terracotta', color: 'oklch(59% 0.15 33)' },
     { id: 'forest',     color: 'oklch(55% 0.11 150)' },
@@ -1208,12 +1230,29 @@ function SettingsTab({ theme, setTheme, accent, setAccent, chartTweaks, setChart
           </div>
         </div>
       </div>
+      {onLogout && (
+        <div>
+          <div className="m-settings-title">Account</div>
+          <div className="m-settings-card">
+            <div className="m-settings-row">
+              <span className="m-settings-lbl">Sign out</span>
+              <button
+                onClick={onLogout}
+                style={{background:'none', border:'none', fontFamily:'var(--mono)', fontSize:13, color:'var(--err, #c0392b)', cursor:'pointer', padding:0}}
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function MobileApp() {
   const [authState, setAuthState] = useState('checking'); // checking | login | ok
+  const [authRequired, setAuthRequired] = useState(false);
   const [tab, setTab] = useState('home');
   const [theme, setTheme] = useState(() => localStorage.getItem('WG_THEME') || 'light');
   const [accent, setAccent] = useState(() => localStorage.getItem('WG_ACCENT') || 'terracotta');
@@ -1251,6 +1290,7 @@ function MobileApp() {
   /* Auth check */
   useEffect(() => {
     api('/api/auth/check').then(d => {
+      setAuthRequired(true);
       setAuthState(d.authenticated ? 'ok' : 'login');
     }).catch(() => setAuthState('ok')); // if no auth required, proceed
   }, []);
@@ -1398,10 +1438,23 @@ function MobileApp() {
     setPeers(_mapped);
   };
 
+  const handleLogout = async () => {
+    try { await api('/api/auth/logout', { method: 'POST' }); } catch {}
+    setAuthState('login');
+  };
+
   if (authState === 'checking') {
     return (
-      <div className="m-app" style={{alignItems:'center',justifyContent:'center'}}>
-        <div className="m-spinner-ring"/>
+      <div className="m-app" style={{alignItems:'center', justifyContent:'center'}}>
+        <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:28, animation:'mFadeIn 0.5s cubic-bezier(0.2,0.9,0.3,1) both'}}>
+          <div style={{width:56, height:56, borderRadius:16, background:'var(--accent-soft)', color:'var(--accent)', border:'1px solid var(--border)', display:'grid', placeItems:'center'}}>
+            <Icon n="shield" size={24}/>
+          </div>
+          <div style={{display:'flex', flexDirection:'column', alignItems:'center', gap:16}}>
+            <div className="m-spinner-ring"/>
+            <div className="m-spinner-label">Connecting</div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -1439,9 +1492,12 @@ function MobileApp() {
       {/* Content */}
       <div className="m-content">
         {tab === 'settings' ? (
-          <SettingsTab theme={theme} setTheme={setTheme} accent={accent} setAccent={setAccent} chartTweaks={chartTweaks} setChartTweaks={setChartTweaks} />
+          <SettingsTab theme={theme} setTheme={setTheme} accent={accent} setAccent={setAccent} chartTweaks={chartTweaks} setChartTweaks={setChartTweaks} onLogout={authRequired ? handleLogout : null} />
         ) : !status && tab !== 'logs' ? (
-          <div className="m-spinner"><div className="m-spinner-ring"/></div>
+          <div className="m-spinner">
+            <div className="m-spinner-ring"/>
+            <div className="m-spinner-label">Loading</div>
+          </div>
         ) : tab === 'home' ? (
           <HomeTab status={status} rxBps={rxBps} txBps={txBps} trafficSamples={trafficSamples} chartTweaks={chartTweaks} onService={handleService} svcBusy={svcBusy} peers={peers} sessionStarts={sessionStarts} sparks={sparks} onSeeAllPeers={() => setTab('peers')} onPeerClick={n => setDrawerPeerName(n)}/>
         ) : tab === 'peers' ? (
