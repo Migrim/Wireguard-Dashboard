@@ -24,6 +24,7 @@
   }
   setAppH();
   window.addEventListener('resize', setAppH);
+  window.addEventListener('orientationchange', function() { setTimeout(setAppH, 300); });
 }());
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
