@@ -159,11 +159,11 @@ body {
 .m-nav-btn svg { width: 22px; height: 22px; stroke: currentColor; }
 
 /* ── Cards ── */
-.m-section { padding: 14px 14px 0; }
+.m-section { padding: 0px 14px 0; }
 .m-section:last-child { padding-bottom: 0; }
 .m-section-label {
   font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
-  text-transform: uppercase; color: var(--muted); margin-bottom: 8px;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 8px; margin-top: 8px;
 }
 .m-card {
   background: var(--card); border: 1px solid var(--border);
@@ -597,20 +597,14 @@ function Login({ onAuth }) {
 }
 
 /* ─── Home tab ─── */
-function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService, svcBusy }) {
+function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService, svcBusy, peers, peerOnlineSamples, peerByteHistory, onSeeAllPeers }) {
   const svc    = status?.service || {};
-  const net    = status?.network || {};
-  const budget = status?.data_budget || {};
-  const clients = status?.clients || {};
   const active  = svc.active;
   const uptime  = fmtUptime(svc.started_at);
-  const budPct  = Math.min(100, Math.round(budget.pct || 0));
-  const barColor = budPct >= 90 ? 'var(--danger)' : budPct >= 70 ? 'var(--warn)' : 'var(--success)';
-  const totalPeers   = (clients.issued||[]).length;
-  const onlinePeers  = (clients.live||[]).filter(l => {
-    const hs = l.last_handshake || 0;
-    return hs > 0 && (Date.now()/1000 - hs) < HS_TIMEOUT;
-  }).length;
+  const totalPeers  = peers.length;
+  const onlinePeers = peers.filter(p => p.status === 'online').length;
+  const pct = totalPeers ? Math.round((onlinePeers / totalPeers) * 100) : 0;
+  const topPeers = [...peers].sort((a,b) => (b.bytesIn + b.bytesOut) - (a.bytesIn + a.bytesOut)).slice(0,4);
 
   return (
     <div className="m-scroll-pad">
@@ -668,60 +662,46 @@ function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService,
         </div>
       </div>
 
-      {/* Peer counts */}
+      {/* Active Sessions */}
       <div className="m-section" style={{marginTop:14}}>
-        <div className="m-section-label">Peers</div>
-        <div className="m-stat-grid">
-          <div className="m-stat-card">
-            <div className="m-stat-label">Total</div>
-            <div className="m-stat-val">{totalPeers}</div>
-            <div className="m-stat-sub">peers issued</div>
+        <div className="m-card m-traffic-card">
+          <div className="m-traffic-head">
+            <span className="m-section-label" style={{marginBottom:0}}>Active Sessions</span>
+            <span className="m-range-badge">
+              <svg width="6" height="6" viewBox="0 0 6 6"><circle cx="3" cy="3" r="3" fill="currentColor"/></svg>
+              live
+            </span>
           </div>
-          <div className="m-stat-card">
-            <div className="m-stat-label">Online</div>
-            <div className="m-stat-val" style={{color: onlinePeers > 0 ? 'var(--success)' : 'var(--muted)'}}>{onlinePeers}</div>
-            <div className="m-stat-sub">active now</div>
+          <div className="m-traffic-total">
+            <span className="m-traffic-big">{onlinePeers}</span>
+            <span className="m-traffic-unit">/ {totalPeers}</span>
+          </div>
+          <div className="m-traffic-breakdown">
+            <span className="m-legend-item">{pct}% online</span>
+          </div>
+          <div style={{marginLeft:-16, marginRight:-16}}>
+            <SteppedOnlineChart samples={peerOnlineSamples} height={100}/>
           </div>
         </div>
       </div>
 
-      {/* Data budget */}
-      {budget.budget_bytes > 0 && (
-        <div className="m-section" style={{marginTop:14}}>
-          <div className="m-section-label">Data Budget</div>
-          <div className="m-card m-budget-card">
-            <div className="m-budget-head">
-              <div className="m-budget-title">This Period</div>
-              <div className="m-budget-pct">{budPct}%</div>
-            </div>
-            <div className="m-budget-bar-bg">
-              <div className="m-budget-bar-fill" style={{width: budPct+'%', background: barColor}}/>
-            </div>
-            <div className="m-budget-foot">
-              <span>{fmtBytes(budget.total||0)} used</span>
-              <span>{fmtBytes(budget.budget_bytes||0)} total</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Network info */}
+      {/* Active Peers */}
       <div className="m-section" style={{marginTop:14, marginBottom:0}}>
-        <div className="m-section-label">Network</div>
-        <div className="m-card">
-          {[
-            ['Interface', net.iface || '—'],
-            ['Port', net.port ? `UDP ${net.port}` : '—'],
-            ['Listening', net.listening ? '✓ Yes' : '✕ No'],
-            ['Firewall', net.ufw_udp_open ? '✓ Open' : '✕ Blocked'],
-            ['Internet', net.ping_ok ? '✓ OK' : '✕ No reply'],
-          ].map(([k,v],i) => (
-            <div key={k} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'11px 16px',borderTop: i ? '1px solid var(--border)' : 'none'}}>
-              <span style={{fontSize:13,color:'var(--muted)',fontFamily:'var(--mono)',fontSize:12}}>{k}</span>
-              <span style={{fontSize:13,color:'var(--ink)',fontFamily:'var(--mono)',fontSize:12}}>{v}</span>
-            </div>
-          ))}
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}}>
+          <span className="m-section-label" style={{marginBottom:0}}>Active Peers</span>
+          <button onClick={onSeeAllPeers} style={{fontFamily:'var(--sans)', fontSize:13, color:'var(--accent)', background:'none', border:'none', cursor:'pointer', padding:'0 2px', WebkitTapHighlightColor:'transparent'}}>
+            See all →
+          </button>
         </div>
+        {topPeers.length === 0 ? (
+          <div style={{textAlign:'center', padding:'24px', color:'var(--muted)', fontSize:13}}>No peers yet</div>
+        ) : (
+          <div style={{display:'flex', flexDirection:'column', gap:8}}>
+            {topPeers.map(p => (
+              <HomePeerRow key={p.name} peer={p} history={peerByteHistory[p.name] || []}/>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -871,6 +851,73 @@ function PeerCard({ peer, onAction, toast }) {
         />
       )}
     </>
+  );
+}
+
+/* ─── Stepped Online Chart ─── */
+function SteppedOnlineChart({ samples, height = 100 }) {
+  if (!samples || samples.length < 2) return <div style={{height, background:'transparent'}}/>;
+  const W = 400, H = height;
+  const minT = samples[0].ts, maxT = samples[samples.length - 1].ts;
+  const range = maxT - minT || 1;
+  const maxC = Math.max(...samples.map(s => s.count), 1);
+  const x = ts => ((ts - minT) / range) * W;
+  const y = c => H - 4 - (c / maxC) * (H - 10);
+  let line = `M ${x(samples[0].ts)} ${y(samples[0].count)}`;
+  for (let i = 1; i < samples.length; i++) {
+    line += ` H ${x(samples[i].ts)} V ${y(samples[i].count)}`;
+  }
+  const fill = `${line} V ${H} H 0 Z`;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{width:'100%', height, display:'block'}}>
+      <defs>
+        <linearGradient id="og" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.2"/>
+          <stop offset="100%" stopColor="var(--accent)" stopOpacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d={fill} fill="url(#og)"/>
+      <path d={line} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="square" strokeLinejoin="miter"/>
+    </svg>
+  );
+}
+
+/* ─── Home peer row ─── */
+function HomePeerRow({ peer, history }) {
+  const initials = peer.name.slice(0,2).toUpperCase();
+  const avatarClass = peer.status === 'paused' ? 'paused' : peer.status === 'offline' ? 'offline' : '';
+  const gid = `ps${peer.name.replace(/[^a-zA-Z0-9]/g,'')}`;
+  const deltas = history.length >= 2
+    ? history.slice(1).map((s,i) => Math.max(0, s.total - history[i].total))
+    : [];
+  const maxD = Math.max(...deltas, 1);
+  const toX = i => (i / Math.max(deltas.length - 1, 1)) * 100;
+  const toY = v => 46 - (v / maxD) * 40;
+  const sparkLine = deltas.length >= 2
+    ? deltas.map((v,i) => `${i===0?'M':'L'} ${toX(i)} ${toY(v)}`).join(' ')
+    : '';
+  const sparkFill = sparkLine ? `${sparkLine} L 100 50 L 0 50 Z` : '';
+  return (
+    <div className="m-card" style={{padding:'12px 14px', display:'flex', alignItems:'center', gap:12}}>
+      <div className={`m-peer-avatar ${avatarClass}`} style={{flexShrink:0}}>{initials}</div>
+      <div style={{flex:1, minWidth:0}}>
+        <div style={{fontSize:14, fontWeight:600, color:'var(--ink)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{peer.name}</div>
+        <div style={{fontFamily:'var(--mono)', fontSize:11, color:'var(--muted)', marginTop:1}}>{peer.addr}</div>
+        <div style={{fontFamily:'var(--mono)', fontSize:11, color:'var(--muted)', marginTop:2}}>↓ {fmtBytes(peer.bytesIn)} &nbsp;↑ {fmtBytes(peer.bytesOut)}</div>
+      </div>
+      {sparkLine ? (
+        <svg viewBox="0 0 100 50" preserveAspectRatio="none" style={{width:80, height:44, flexShrink:0}}>
+          <defs>
+            <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.3"/>
+              <stop offset="100%" stopColor="var(--accent)" stopOpacity="0.02"/>
+            </linearGradient>
+          </defs>
+          <path d={sparkFill} fill={`url(#${gid})`}/>
+          <path d={sparkLine} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      ) : <div style={{width:80, height:44, flexShrink:0}}/>}
+    </div>
   );
 }
 
@@ -1070,6 +1117,8 @@ function MobileApp() {
   const [trafficSamples, setTrafficSamples] = useState([]);
   const [logs, setLogs] = useState([]);
   const [peers, setPeers] = useState([]);
+  const [peerOnlineSamples, setPeerOnlineSamples] = useState([]);
+  const [peerByteHistory, setPeerByteHistory] = useState({});
   const [svcBusy, setSvcBusy] = useState(false);
   const prevNetRef = useRef(null);
   const { toasts, add: toast } = useToast();
@@ -1112,6 +1161,29 @@ function MobileApp() {
         prevNetRef.current = net;
         const { issued, live } = s.clients || {};
         setPeers(mapPeers(issued, live));
+        const _now = Date.now();
+        const _onlineCount = (issued||[]).filter(iss => {
+          if (iss.paused) return false;
+          const lv = (live||[]).find(l => l.name === iss.name);
+          const hs = lv ? (lv.last_handshake || 0) : 0;
+          return hs > 0 && (_now/1000 - hs) < HS_TIMEOUT;
+        }).length;
+        setPeerOnlineSamples(prev => {
+          const cutoff = _now - 10 * 60 * 1000;
+          return [...prev.filter(s => s.ts >= cutoff), { ts: _now, count: _onlineCount }];
+        });
+        const _liveByName = {};
+        (live||[]).forEach(l => { _liveByName[l.name] = l; });
+        setPeerByteHistory(prev => {
+          const next = {};
+          (issued||[]).forEach(iss => {
+            const lv = _liveByName[iss.name];
+            const total = lv ? ((lv.bytes_recv || 0) + (lv.bytes_sent || 0)) : 0;
+            const cutoff = _now - 5 * 60 * 1000;
+            next[iss.name] = [...(prev[iss.name] || []).filter(s => s.ts >= cutoff), { ts: _now, total }];
+          });
+          return next;
+        });
       }).catch(e => {
         if (e.status === 401) setAuthState('login');
       });
@@ -1235,7 +1307,7 @@ function MobileApp() {
         ) : !status && tab !== 'logs' ? (
           <div className="m-spinner"><div className="m-spinner-ring"/></div>
         ) : tab === 'home' ? (
-          <HomeTab status={status} rxBps={rxBps} txBps={txBps} trafficSamples={trafficSamples} chartTweaks={chartTweaks} onService={handleService} svcBusy={svcBusy}/>
+          <HomeTab status={status} rxBps={rxBps} txBps={txBps} trafficSamples={trafficSamples} chartTweaks={chartTweaks} onService={handleService} svcBusy={svcBusy} peers={peers} peerOnlineSamples={peerOnlineSamples} peerByteHistory={peerByteHistory} onSeeAllPeers={() => setTab('peers')}/>
         ) : tab === 'peers' ? (
           <PeersTab peers={peers} onAction={handlePeerAction} toast={toast}/>
         ) : (
