@@ -101,21 +101,26 @@ function PseudoQR({ seed = 'wg', size = 168 }) {
 // ============================================================
 // Collapsible — reusable pro-option card
 // ============================================================
-function Collapsible({ icon, title, summary, open, onToggle, modified, children }) {
+function Collapsible({ icon, title, summary, open, onToggle, modified, children, comingSoon }) {
   return (
-    <section className={`coll ${open ? 'open' : ''}`}>
-      <button type="button" className="coll-head" onClick={onToggle} aria-expanded={open}>
+    <section className={`coll${open ? ' open' : ''}${comingSoon ? ' coll-soon' : ''}`}>
+      <button type="button" className="coll-head" onClick={comingSoon ? undefined : onToggle} aria-expanded={open} disabled={comingSoon}>
         <span className="coll-icon">{icon}</span>
         <span className="coll-text">
           <span className="coll-title">
             {title}
-            {modified && !open && <span className="coll-dot" title="Changed from default" />}
+            {comingSoon
+              ? <span className="coll-soon-pill">Coming soon</span>
+              : modified && !open && <span className="coll-dot" title="Changed from default" />
+            }
           </span>
           <span className="coll-sum">{summary}</span>
         </span>
-        <svg className="coll-chev" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M9 6l6 6-6 6" />
-        </svg>
+        {!comingSoon && (
+          <svg className="coll-chev" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 6l6 6-6 6" />
+          </svg>
+        )}
       </button>
       <div className="coll-wrap">
         <div className="coll-inner">
@@ -142,11 +147,11 @@ const I = {
 // ============================================================
 function DeviceIcon({ kind }) {
   const common = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' };
+  if (kind === 'other')   return <svg {...common}><path d="M3 7v5l9 9 6-6-9-9H3z"/><circle cx="7" cy="11" r="1.3"/></svg>;
   if (kind === 'phone')   return <svg {...common}><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>;
   if (kind === 'laptop')  return <svg {...common}><rect x="3" y="5" width="18" height="11" rx="1"/><path d="M2 20h20"/></svg>;
   if (kind === 'desktop') return <svg {...common}><rect x="3" y="3" width="18" height="13" rx="1"/><path d="M9 21h6M12 16v5"/></svg>;
   if (kind === 'server')  return <svg {...common}><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/><path d="M7 7h.01M7 17h.01"/></svg>;
-  if (kind === 'router')  return <svg {...common}><rect x="3" y="13" width="18" height="7" rx="1"/><path d="M7 17h.01M11 17h.01M7 13V9a5 5 0 0110 0v4M12 6V4"/></svg>;
   return null;
 }
 
@@ -168,11 +173,10 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
   const [serverProfile, setServerProfile] = aS('');
   const [openSection, setOpenSection] = aS({});
   const [creating, setCreating] = aS(false);
-  const [createError, setCreateError] = aS('');
 
   // essentials
   const [name, setName] = aS('');
-  const [device, setDevice] = aS('phone');
+  const [device, setDevice] = aS('other');
   const [address, setAddress] = aS(() => nextFreeIp(peers));
   const [routingPreset, setRoutingPreset] = aS('all');
   const [allowedIps, setAllowedIps] = aS('0.0.0.0/0, ::/0');
@@ -181,8 +185,6 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
   const [dns, setDns] = aS(PRESET_DEFAULTS.dns);
   const [searchDomains, setSearchDomains] = aS('');
   const [blockAds, setBlockAds] = aS(false);
-  // pro: crypto
-  const [usePsk, setUsePsk] = aS(false);
   // pro: connection
   const [endpoint, setEndpoint] = aS(PRESET_DEFAULTS.endpoint);
   const [mtu, setMtu] = aS('1420');
@@ -211,13 +213,6 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
 
   const subnetLabel = aM(() => detectSubnetPrefix(peers) + '.0/24', [peers]);
 
-  const keys = aM(() => ({
-    privateKey: randKey(),
-    publicKey: randKey(),
-    presharedKey: randKey(),
-    serverPubKey: 'OZJ3kF8mY2sN/RtVcwQ7L9pXgHaBdEi6vCfTqM4uYjU=',
-  }), []);
-
   const [copied, setCopied] = aS('');
   const copy = (val, key) => {
     navigator.clipboard?.writeText(val);
@@ -239,11 +234,42 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
     else if (routingPreset === 'lan') setAllowedIps('10.7.0.0/24, 192.168.1.0/24');
   }, [routingPreset]);
 
+  aE(() => {
+    if (device === 'phone') {
+      setKeepalive('25');
+      setMtu('1280');
+      setRoutingPreset('all');
+      setDns('1.1.1.1, 1.0.0.1');
+      setBlockAds(false);
+    } else if (device === 'laptop') {
+      setKeepalive('25');
+      setRoutingPreset('all');
+      setDns('1.1.1.1, 1.0.0.1');
+      setBlockAds(false);
+    } else if (device === 'desktop') {
+      setKeepalive('');
+      setRoutingPreset('all');
+      setDns('1.1.1.1, 1.0.0.1');
+      setBlockAds(false);
+    } else if (device === 'server') {
+      setKeepalive('');
+      setRoutingPreset('lan');
+      setDns('');
+      setBlockAds(false);
+    } else {
+      setKeepalive(PRESET_DEFAULTS.keepalive);
+      setMtu(PRESET_DEFAULTS.mtu);
+      setRoutingPreset('all');
+      setDns(PRESET_DEFAULTS.dns);
+      setBlockAds(PRESET_DEFAULTS.blockAds);
+    }
+  }, [device]);
+
   const canCreate = name.length >= 2 && !ipTaken && !nameTaken;
 
   const toggle = (id) => setOpenSection((s) => ({ ...s, [id]: !s[id] }));
 
-  const effectiveDns = blockAds ? 'server (ad-block)' : dns || 'none';
+  const effectiveDns = blockAds ? 'server' : dns || 'none';
   const sections = [
     {
       id: 'dns', icon: I.dns, title: 'DNS & search domains',
@@ -252,8 +278,9 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
     },
     {
       id: 'crypto', icon: I.key, title: 'Cryptography & keys',
-      summary: `Curve25519 keypair · ${usePsk ? 'pre-shared key on' : 'no pre-shared key'}`,
-      modified: usePsk,
+      summary: 'Curve25519 keypair · pre-shared key',
+      modified: false,
+      comingSoon: true,
     },
     {
       id: 'tune', icon: I.tune, title: 'Connection tuning',
@@ -264,27 +291,32 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
       id: 'scripts', icon: I.script, title: 'Routing scripts & firewall',
       summary: postUp || postDown || preUp || preDown ? 'custom hooks set' : `table ${table}${fwmark ? ` · fwmark ${fwmark}` : ''}`,
       modified: !!(preUp || postUp || preDown || postDown || fwmark || table !== 'auto'),
+      comingSoon: true,
     },
     {
       id: 'life', icon: I.clock, title: 'Lifecycle & expiry',
       summary: (expiry === 'never' ? 'never expires' : `expires in ${expiry}`) + (disableIdle ? ` · idle ${idleDays}d` : ''),
       modified: expiry !== 'never' || disableIdle,
+      comingSoon: true,
     },
     {
       id: 'bw', icon: I.gauge, title: 'Bandwidth & quotas',
       summary: (dataCap ? `${dataCap} GB / mo` : 'unlimited data') + (rateDown || rateUp ? ' · shaped' : ''),
       modified: !!(dataCap || rateDown || rateUp),
+      comingSoon: true,
     },
     {
       id: 'meta', icon: I.tag, title: 'Tags & metadata',
       summary: (tags.length ? `${tags.length} tag${tags.length > 1 ? 's' : ''}` : 'no tags') + (owner ? ` · ${owner}` : ''),
       modified: !!(tags.length || owner || notes),
+      comingSoon: true,
     },
   ];
 
-  const proCount = sections.filter((s) => s.modified).length;
-  const allOpen = sections.every((s) => openSection[s.id]);
-  const setAll = (v) => setOpenSection(Object.fromEntries(sections.map((s) => [s.id, v])));
+  const proCount = sections.filter((s) => s.modified && !s.comingSoon).length;
+  const activeSections = sections.filter((s) => !s.comingSoon);
+  const allOpen = activeSections.every((s) => openSection[s.id]);
+  const setAll = (v) => setOpenSection(Object.fromEntries(activeSections.map((s) => [s.id, v])));
 
   const addTag = (t) => {
     const v = t.trim().replace(/\s+/g, '-').toLowerCase();
@@ -294,15 +326,11 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
   const handleCreate = async () => {
     if (!canCreate || creating) return;
     setCreating(true);
-    setCreateError('');
     try {
       const ipRaw = address.split('/')[0];
-      const r = await window.WG.apiCall('/api/users', {
-        method: 'POST',
-        body: JSON.stringify({ name, ip: ipRaw }),
-      });
+      const r = await window.WG.apiCall('/api/users', { silent: true, method: 'POST', body: JSON.stringify({ name, ip: ipRaw }) });
       if (!r?.profile) {
-        setCreateError(`Peer "${name}" was created but the server failed to generate its config. Refresh the page to see it.`);
+        window.WG.toast?.error?.('Config generation failed', `Peer "${name}" was created but the server failed to generate its config. Refresh to see it.`);
         onCreated?.();
         return;
       }
@@ -310,18 +338,18 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
       setCreated(true);
       onCreated?.();
     } catch (err) {
-      setCreateError(err.message || 'Failed to create peer');
+      window.WG.toast?.error?.('Failed to create peer', err.message || 'API error');
     } finally {
       setCreating(false);
     }
   };
 
   const deviceOptions = [
+    { id: 'other',   label: 'Other' },
     { id: 'phone',   label: 'Phone' },
     { id: 'laptop',  label: 'Laptop' },
     { id: 'desktop', label: 'Desktop' },
     { id: 'server',  label: 'Server' },
-    { id: 'router',  label: 'Router' },
   ];
 
   const routeOptions = [
@@ -345,7 +373,6 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
           setCreated(false);
           setName('');
           setServerProfile('');
-          setCreateError('');
           setAddress(nextFreeIp([...peers, { addr: address }]));
         }}
         onClose={onClose}
@@ -375,6 +402,7 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
           modified={s.modified}
           open={!!openSection[s.id]}
           onToggle={() => toggle(s.id)}
+          comingSoon={s.comingSoon}
         >
           {renderSection(s.id)}
         </Collapsible>
@@ -407,50 +435,14 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
         <div className="ap2-inline-toggle">
           <div>
             <div className="setting-title">Route DNS through server</div>
-            <div className="setting-desc">Resolve via the gateway with ad / tracker blocking</div>
+            <div className="setting-desc">Resolve via the server</div>
           </div>
           <button className={`toggle ${blockAds ? 'on' : ''}`} onClick={() => setBlockAds(!blockAds)} aria-pressed={blockAds}><span className="toggle-knob" /></button>
         </div>
       </>
     );
 
-    if (id === 'crypto') return (
-      <>
-        <div className="ap2-field">
-          <label className="ap-label">Keypair <span className="ap-label-opt">generated in-browser</span></label>
-          <div className="ap-key-mini">
-            <div className="key-val">
-              <span className="ap-key-tag mono">priv</span>
-              <span className="truncate mono">{keys.privateKey}</span>
-              <button className="mini-btn" onClick={() => copy(keys.privateKey, 'priv')}>{copied === 'priv' ? '✓' : 'copy'}</button>
-            </div>
-            <div className="key-val">
-              <span className="ap-key-tag mono">pub</span>
-              <span className="truncate mono">{keys.publicKey}</span>
-              <button className="mini-btn" onClick={() => copy(keys.publicKey, 'pub')}>{copied === 'pub' ? '✓' : 'copy'}</button>
-            </div>
-          </div>
-          <div className="ap2-help">The private key never leaves this browser. The server only stores the public key.</div>
-        </div>
-        <div className="ap2-inline-toggle">
-          <div>
-            <div className="setting-title">Pre-shared key</div>
-            <div className="setting-desc">Symmetric layer for post-quantum hardening</div>
-          </div>
-          <button className={`toggle ${usePsk ? 'on' : ''}`} onClick={() => setUsePsk(!usePsk)} aria-pressed={usePsk}><span className="toggle-knob" /></button>
-        </div>
-        {usePsk && (
-          <div className="ap2-field">
-            <label className="ap-label">Pre-shared key</label>
-            <div className="key-val">
-              <span className="ap-key-tag mono">psk</span>
-              <span className="truncate mono">{keys.presharedKey}</span>
-              <button className="mini-btn" onClick={() => copy(keys.presharedKey, 'psk')}>{copied === 'psk' ? '✓' : 'copy'}</button>
-            </div>
-          </div>
-        )}
-      </>
-    );
+    if (id === 'crypto') return null;
 
     if (id === 'tune') return (
       <>
@@ -555,7 +547,6 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
             <input type="text" className="ap-input mono" value={rateUp} onChange={(e) => setRateUp(e.target.value)} placeholder="—" />
           </div>
         </div>
-        <div className="ap2-help">Shaping is enforced server-side via tc. Caps over a billing period notify the owner at 80% and 100%.</div>
       </>
     );
 
@@ -681,8 +672,6 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
         <span className="ap-err" style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>Name already in use</span>
       ) : ipTaken ? (
         <span className="ap-err" style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>IP {address} already assigned</span>
-      ) : createError ? (
-        <span className="ap-err" style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{createError}</span>
       ) : !name ? (
         <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--muted)' }}>Enter a name to continue</span>
       ) : (

@@ -1,8 +1,8 @@
-import os, subprocess, datetime, re, time, shlex, json, ipaddress, urllib.request, urllib.parse, threading, secrets as _secrets
+import os, glob, subprocess, datetime, re, time, shlex, json, ipaddress, urllib.request, urllib.parse, threading, secrets as _secrets
 from typing import Tuple, Dict, Any, List
 import logging
-from flask import Flask, render_template, request, send_file, redirect, url_for, jsonify, abort, Response, stream_with_context, session
-from werkzeug.security import check_password_hash
+from flask import Flask, render_template, request, redirect, url_for, jsonify, abort, Response, stream_with_context, session
+from werkzeug.security import check_password_hash, generate_password_hash
 
 APP_PORT=int(os.environ.get("APP_PORT","8088"))
 WG_IFACE=os.environ.get("WG_IFACE","wg0")
@@ -28,6 +28,7 @@ PUBLIC_IP = _detect_public_ip()
 
 PEERS_DB=os.path.join(WG_DIR,"peers.json")
 WELCOME_FLAG=os.path.join(WG_DIR,"welcomed.flag")
+_WELCOME_FLAG_FALLBACK=os.path.join(os.path.dirname(__file__),".welcomed")
 DATA_BUDGET_DB=os.environ.get("DATA_BUDGET_DB", os.path.join(WG_DIR, "data_budget.json"))
 TRAFFIC_HISTORY=os.environ.get("TRAFFIC_HISTORY", os.path.join(WG_DIR, "traffic_history.json"))
 TRAFFIC_RETENTION_SECONDS=24*60*60
@@ -43,11 +44,52 @@ SUDO_BIN=os.environ.get("SUDO_BIN","/usr/bin/sudo")
 BASH_BIN=os.environ.get("BASH_BIN","/bin/bash")
 TC_BIN=os.environ.get("TC_BIN","/usr/sbin/tc")
 IPTABLES_BIN=os.environ.get("IPTABLES_BIN","/usr/sbin/iptables")
-DASHBOARD_PASSWORD_HASH=os.environ.get("DASHBOARD_PASSWORD_HASH","")
+_PASSWORD_HASH_FILE = os.path.join(WG_DIR, ".dashboard_password_hash")
+
+def _load_password_hash() -> str:
+    if h := os.environ.get("DASHBOARD_PASSWORD_HASH", ""):
+        return h
+    for _path in (_PASSWORD_HASH_FILE, os.path.join(os.path.dirname(__file__), ".dashboard_password_hash")):
+        try:
+            with open(_path) as _f:
+                h = _f.read().strip()
+                if h:
+                    return h
+        except Exception:
+            pass
+    return ""
+
+DASHBOARD_PASSWORD_HASH = _load_password_hash()
 
 app=Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY") or _secrets.token_hex(32)
+
+def _load_or_create_secret_key() -> str:
+    if k := os.environ.get("SECRET_KEY"):
+        return k
+    _key_file = os.path.join(WG_DIR, ".secret_key")
+    try:
+        with open(_key_file) as _f:
+            k = _f.read().strip()
+            if k:
+                return k
+    except Exception:
+        pass
+    k = _secrets.token_hex(32)
+    for _path in (_key_file, os.path.join(os.path.dirname(__file__), ".secret_key")):
+        try:
+            fd = os.open(_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as _f:
+                _f.write(k)
+            break
+        except Exception:
+            pass
+    return k
+
+app.secret_key = _load_or_create_secret_key()
 app.permanent_session_lifetime = datetime.timedelta(days=7)
+app.config["SESSION_COOKIE_SAMESITE"] = "Strict"
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SECURE"] = os.environ.get("SESSION_COOKIE_SECURE", "0") == "1"
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 app.logger.setLevel(logging.INFO)
 
@@ -57,6 +99,9 @@ def _run(cmd: str) -> Tuple[str,int]:
 
 _last_run = {"cmd":"", "rc":None, "out":""}
 _geo_cache: Dict[str, Dict[str, Any]] = {}
+
+_bg_notifications: List[Dict[str, Any]] = []
+_bg_lock = threading.Lock()
 
 # Helper function to sudo cat a file, checking common locations for cat
 def _sudo_cat(path: str) -> Tuple[str, int]:
@@ -86,16 +131,35 @@ def _sudo(args: List[str], input_data: bytes = None) -> Tuple[str,int]:
 def _log_request():
     app.logger.info("%s %s", request.method, request.path)
 
-_AUTH_OPEN = {"/", "/welcome", "/mobile", "/manifest.json", "/service-worker.js", "/api/auth/check", "/api/auth/login", "/api/auth/logout", "/api/welcome/dismiss"}
+_AUTH_OPEN = {"/", "/welcome", "/mobile", "/manifest.json", "/service-worker.js", "/api/auth/check", "/api/auth/login", "/api/auth/logout", "/api/welcome/dismiss", "/setup", "/api/setup"}
 
 @app.before_request
 def _require_auth():
     if not DASHBOARD_PASSWORD_HASH:
-        return
+        # No password configured yet — only let /setup and static through.
+        if request.path in {"/setup", "/api/setup"} or request.path.startswith("/static/"):
+            return
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "setup_required"}), 403
+        return redirect("/setup")
     if request.path in _AUTH_OPEN or request.path.startswith("/static/"):
         return
     if not session.get("authenticated"):
-        return jsonify({"error": "Unauthorized"}), 401
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "Unauthorized"}), 401
+        return redirect("/")
+
+@app.errorhandler(404)
+def _handle_404(_e):
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Not found", "hint": f"'{request.path}' does not exist"}), 404
+    return redirect("/")
+
+@app.errorhandler(405)
+def _handle_405(_e):
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Method not allowed"}), 405
+    return redirect("/")
 
 @app.after_request
 def _log_response(res):
@@ -138,6 +202,65 @@ def local_listening(port: int, proto: str="udp") -> bool:
 def ping_ok() -> bool:
     o,c=_run("ping -c1 -W1 1.1.1.1 >/dev/null 2>&1")
     return c==0
+
+_BG_INTERVAL   = int(os.environ.get("BG_CHECK_INTERVAL", "3600"))   # seconds between checks
+_BG_INIT_DELAY = int(os.environ.get("BG_CHECK_DELAY",    "120"))    # delay before first check
+
+def _bg_run_port_check() -> None:
+    conf = _read_conf()
+    lp   = int(conf.get("Interface", {}).get("ListenPort", WG_PORT))
+    now  = datetime.datetime.now(datetime.timezone.utc)
+    ts   = int(now.timestamp())
+    when = now.strftime("%H:%M UTC")
+
+    findings: List[Dict[str, Any]] = []
+
+    def _chk(fn):
+        try:    return fn()
+        except: return None
+
+    if not _chk(service_active):
+        findings.append({"id": "bg-svc-down", "level": "warn",
+            "title": "WireGuard service is down",
+            "desc":  f"{UNIT} is not active — peers cannot connect."})
+
+    if not _chk(lambda: local_listening(lp, "udp")):
+        findings.append({"id": "bg-port-unbound", "level": "warn",
+            "title": f"Nothing listening on UDP {lp}",
+            "desc":  "The WireGuard port is not bound. Restart the service."})
+
+    if not _chk(lambda: ufw_allowed(lp, "udp")):
+        findings.append({"id": "bg-ufw-blocked", "level": "warn",
+            "title": f"Firewall may block UDP {lp}",
+            "desc":  "No UFW rule found for the WireGuard port."})
+
+    ip_fwd, _ = _run("cat /proc/sys/net/ipv4/ip_forward 2>/dev/null || echo 0")
+    if ip_fwd.strip() != "1":
+        findings.append({"id": "bg-no-forward", "level": "warn",
+            "title": "IP forwarding is disabled",
+            "desc":  "Peers can connect but cannot route traffic (net.ipv4.ip_forward = 0)."})
+
+    if not _chk(ping_ok):
+        findings.append({"id": "bg-no-internet", "level": "warn",
+            "title": "Server has no internet connectivity",
+            "desc":  "Cannot reach 1.1.1.1 — peer traffic may not route correctly."})
+
+    for f in findings:
+        f["ts"]         = ts
+        f["checked_at"] = when
+
+    with _bg_lock:
+        _bg_notifications.clear()
+        _bg_notifications.extend(findings)
+
+def _bg_check_loop() -> None:
+    time.sleep(_BG_INIT_DELAY)
+    while True:
+        try:
+            _bg_run_port_check()
+        except Exception:
+            pass
+        time.sleep(_BG_INTERVAL)
 
 def timedate_ntp() -> str:
     o,c=_run("timedatectl 2>/dev/null | awk -F': ' '/NTP service:|System clock synchronized:/{print $2}' | xargs | sed 's/ /, /g'")
@@ -1191,7 +1314,7 @@ def _ensure_peer_removed_from_conf(pubkey: str) -> None:
 
 @app.route("/api/auth/check")
 def auth_check():
-    return jsonify({"authenticated": bool(session.get("authenticated")) or not bool(DASHBOARD_PASSWORD_HASH)})
+    return jsonify({"authenticated": bool(session.get("authenticated")), "setup_required": not bool(DASHBOARD_PASSWORD_HASH)})
 
 @app.route("/api/auth/login", methods=["POST"])
 def auth_login():
@@ -1208,30 +1331,83 @@ def auth_logout():
     session.clear()
     return jsonify({"ok": True})
 
+@app.route("/api/auth/password", methods=["POST"])
+def api_change_password():
+    global DASHBOARD_PASSWORD_HASH
+    data = request.get_json(silent=True) or {}
+    current = str(data.get("current_password", ""))
+    new_pw  = str(data.get("new_password", "")).strip()
+    if not DASHBOARD_PASSWORD_HASH or not check_password_hash(DASHBOARD_PASSWORD_HASH, current):
+        return jsonify({"ok": False, "error": "wrong_password", "hint": "Current password is incorrect"}), 403
+    if len(new_pw) < 8:
+        return jsonify({"ok": False, "error": "too_short", "hint": "New password must be at least 8 characters"}), 400
+    h = generate_password_hash(new_pw)
+    candidates = [_PASSWORD_HASH_FILE, os.path.join(os.path.dirname(__file__), ".dashboard_password_hash")]
+    saved = False
+    for path in candidates:
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as f:
+                f.write(h)
+            saved = True
+            break
+        except Exception:
+            continue
+    if not saved:
+        return jsonify({"ok": False, "error": "save_failed", "hint": "Could not write password file"}), 500
+    DASHBOARD_PASSWORD_HASH = h
+    return jsonify({"ok": True})
+
+@app.route("/setup")
+def setup_page():
+    if DASHBOARD_PASSWORD_HASH:
+        return redirect(url_for("home"))
+    return render_template("setup.html", mode="setup")
+
+@app.route("/change-password")
+def change_password_page():
+    return render_template("setup.html", mode="change")
+
+@app.route("/api/setup", methods=["POST"])
+def api_setup():
+    global DASHBOARD_PASSWORD_HASH
+    if DASHBOARD_PASSWORD_HASH:
+        return jsonify({"ok": False, "error": "already_configured"}), 403
+    data = request.get_json(silent=True) or {}
+    password = str(data.get("password", "")).strip()
+    if len(password) < 8:
+        return jsonify({"ok": False, "error": "too_short", "hint": "Password must be at least 8 characters"}), 400
+    h = generate_password_hash(password)
+    candidates = [_PASSWORD_HASH_FILE, os.path.join(os.path.dirname(__file__), ".dashboard_password_hash")]
+    saved = False
+    for path in candidates:
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as f:
+                f.write(h)
+            saved = True
+            break
+        except Exception:
+            continue
+    if not saved:
+        return jsonify({"ok": False, "error": "save_failed", "hint": "Could not write password file. Check server permissions."}), 500
+    DASHBOARD_PASSWORD_HASH = h
+    session.permanent = True
+    session["authenticated"] = True
+    return jsonify({"ok": True})
+
 def _is_welcomed() -> bool:
     if session.get("welcomed"):
         return True
-    try:
-        return os.path.isfile(WELCOME_FLAG)
-    except Exception:
-        return True
+    return os.path.isfile(WELCOME_FLAG) or os.path.isfile(_WELCOME_FLAG_FALLBACK)
 
 def _set_welcomed() -> None:
     session["welcomed"] = True
-    try:
-        with open(WELCOME_FLAG, "a"):
-            pass
-        return
-    except Exception:
-        pass
-    import tempfile
-    fd, tmp = tempfile.mkstemp(prefix="welcomed.", dir="/tmp")
-    try:
-        os.close(fd)
-        _sudo(["/usr/bin/install", "-m", "640", "-o", "root", "-g", "www-data", tmp, WELCOME_FLAG])
-    finally:
+    for _flag_path in (WELCOME_FLAG, _WELCOME_FLAG_FALLBACK):
         try:
-            os.remove(tmp)
+            with open(_flag_path, "a"):
+                pass
+            return
         except Exception:
             pass
 
@@ -1254,7 +1430,7 @@ def home():
         "logs":logs_tail(60)
     }
     iface,_,_=read_bytes()
-    return render_template("index.html",data=data,users=issued,iface=iface,app_version=_local_version())
+    return render_template("index.html",data=data,users=issued,iface=iface,app_version=_build_stamp())
 
 @app.route("/welcome")
 def welcome():
@@ -1314,8 +1490,10 @@ def api_welcome_dismiss():
     _set_welcomed()
     return jsonify({"ok": True})
 
-@app.route("/action/<what>")
+@app.route("/action/<what>", methods=["POST"])
 def action(what: str):
+    if what not in {"restart", "stop", "start"}:
+        abort(400)
     if what=="restart":
         _sudo(["/usr/bin/systemctl","restart",UNIT])
     elif what=="stop":
@@ -1508,7 +1686,13 @@ def api_users_settings(name: str):
         meta["dns"] = dns_val
 
     if "client_allowed_ips" in data:
-        meta["client_allowed_ips"] = str(data["client_allowed_ips"]).strip()
+        raw_ips = str(data["client_allowed_ips"]).strip()
+        try:
+            for cidr in raw_ips.split(","):
+                ipaddress.ip_network(cidr.strip(), strict=False)
+        except ValueError:
+            return jsonify({"ok": False, "error": "invalid_allowed_ips", "hint": "Use comma-separated CIDR prefixes e.g. 0.0.0.0/0, ::/0"}), 400
+        meta["client_allowed_ips"] = raw_ips
 
     if "keepalive" in data:
         ka = data["keepalive"]
@@ -1642,8 +1826,12 @@ def api_users_diag(name: str):
 @app.route("/api/diag/peers")
 def api_diag_peers():
     db = _load_peers_db()
+    safe_db = {
+        name: {k: v for k, v in peer.items() if k != "private_key"}
+        for name, peer in db.items()
+    }
     show, _ = _sudo(["/usr/bin/wg", "show", WG_IFACE, "dump"]) if os.path.exists("/usr/bin/wg") else ("", 0)
-    return jsonify({"db_keys": sorted(list(db.keys())), "db": db, "wg_dump": show})
+    return jsonify({"db_keys": sorted(list(safe_db.keys())), "db": safe_db, "wg_dump": show})
 
 
 @app.route("/api/diag/perms")
@@ -1679,7 +1867,6 @@ def api_diag_perms():
     info["sudo_cat_rc_str"] = str(rc_cat)
     info["sudo_cat_ok"] = (rc_cat == 0)
     info["sudo_cat_len_str"] = str(len(out_cat) if isinstance(out_cat, str) else 0)
-    info["sudo_cat_head"] = out_cat[:120] if isinstance(out_cat, str) else ""
     return jsonify(info)
 
 
@@ -1815,7 +2002,9 @@ def api_traffic_history():
 @app.route("/api/ports",methods=["GET","POST"])
 def api_ports():
     if request.method=="GET":
-        proto=request.args.get("proto","udp")
+        proto=request.args.get("proto","udp").lower()
+        if proto not in {"udp", "tcp"}:
+            abort(400)
         port=int(request.args.get("port",WG_PORT))
         return jsonify({"port":port,"proto":proto,"ufw_allowed":ufw_allowed(port,proto),"listening":local_listening(port,proto)})
     data=request.get_json(force=True,silent=True) or {}
@@ -1830,10 +2019,24 @@ def api_ports():
         o,c=_sudo(["/usr/sbin/ufw","delete","allow",f"{port}/{proto}"])
     return jsonify({"ok":True,"out":o,"ufw_allowed":ufw_allowed(port,proto)})
 
+_SENSITIVE_KEYS = {"PrivateKey", "PreSharedKey"}
+
+def _scrub_conf(conf: Dict[str, Any]) -> Dict[str, Any]:
+    scrubbed = dict(conf)
+    iface = dict(scrubbed.get("Interface", {}))
+    for k in _SENSITIVE_KEYS:
+        iface.pop(k, None)
+    scrubbed["Interface"] = iface
+    scrubbed["Peers"] = [
+        {pk: pv for pk, pv in p.items() if pk not in _SENSITIVE_KEYS}
+        for p in scrubbed.get("Peers", [])
+    ]
+    return scrubbed
+
 @app.route("/api/config",methods=["GET","POST"])
 def api_config():
     if request.method=="GET":
-        return jsonify({"path":WG_CONF,"data":_read_conf()})
+        return jsonify({"path":WG_CONF,"data":_scrub_conf(_read_conf())})
     data=request.get_json(force=True,silent=True) or {}
     conf=_read_conf()
     iface=conf.get("Interface",{})
@@ -1867,6 +2070,11 @@ def api_health():
 def api_diag_last():
     global _last_run
     return jsonify(_last_run)
+
+@app.route("/api/diag/bg-notifications")
+def api_bg_notifications():
+    with _bg_lock:
+        return jsonify(list(_bg_notifications))
 
 @app.route("/api/diag/vpn")
 def api_diag_vpn():
@@ -1992,11 +2200,11 @@ def api_speedtest_upload():
 
 @app.route("/download/<name>.conf")
 def download_conf(name: str):
-    txt,_=gen_client_conf(name)
-    p=f"/tmp/{name}.conf"
-    with open(p,"w") as f:
-        f.write(txt)
-    return send_file(p,as_attachment=True,download_name=f"{name}.conf")
+    txt, _ = gen_client_conf(name)
+    safe_name = name.replace("/", "_")
+    resp = Response(txt, mimetype="text/plain")
+    resp.headers["Content-Disposition"] = f'attachment; filename="{safe_name}.conf"'
+    return resp
 
 # ── System info API ────────────────────────────────────────────────────────────
 def _read_os_release() -> dict:
@@ -2080,6 +2288,20 @@ def _local_version() -> str:
             return f.read().strip()
     except Exception:
         return "unknown"
+
+def _build_stamp() -> str:
+    """For dev versions, append a mtime-based stamp so browsers reload changed files."""
+    v = _local_version()
+    if not _is_dev_version(v):
+        return v
+    try:
+        files = (
+            glob.glob(os.path.join(BASE_DIR, "static/js", "*.jsx"))
+            + glob.glob(os.path.join(BASE_DIR, "templates", "*.html"))
+        )
+        return f"{v}.{int(max(os.path.getmtime(f) for f in files))}" if files else v
+    except Exception:
+        return v
 
 def _remote_version() -> str:
     try:
@@ -2231,8 +2453,12 @@ def api_update_apply():
 
 # ───────────────────────────────────────────────────────────────────────────────
 
+# Start background port-check thread (skip in Werkzeug reloader child process)
+if os.environ.get("WERKZEUG_RUN_MAIN") != "false":
+    threading.Thread(target=_bg_check_loop, daemon=True, name="bg-port-check").start()
+
 def create_app():
     return app
 
 if __name__=="__main__":
-    app.run(host="0.0.0.0",port=APP_PORT, debug=True)
+    app.run(host="0.0.0.0", port=APP_PORT, debug=os.environ.get("FLASK_DEBUG", "0") == "1")

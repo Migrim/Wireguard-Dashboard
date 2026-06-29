@@ -37,6 +37,7 @@ function App({ tweaks, setTweaks, onLogout }) {
   const searchRef = uR(null);
   const [statusFilter, setStatusFilter] = uS('all');
   const [logs, setLogs] = uS(() => window.WG.makeInitialLogs());
+  const [bgNotifs, setBgNotifs] = uS([]);
   const [logsVerbose, setLogsVerbose] = uS(() => localStorage.getItem(LOG_VERBOSE_KEY) === '1');
   const [serviceActive, setServiceActive] = uS(false);
   const [serviceEnabled, setServiceEnabled] = uS(false);
@@ -134,7 +135,7 @@ function App({ tweaks, setTweaks, onLogout }) {
     let cancelled = false;
     const fetchStatus = async () => {
       try {
-        const j = await window.WG.apiCall('/api/status');
+        const j = await window.WG.apiCall('/api/status', { silent: true });
         if (cancelled) return;
         setServiceActive(!!j.service.active);
         setServiceEnabled(!!j.service.enabled);
@@ -232,7 +233,7 @@ function App({ tweaks, setTweaks, onLogout }) {
       }
       try {
         const results = await Promise.all(
-          connectedPeerNames.map(name => window.WG.apiCall('/api/users/' + encodeURIComponent(name) + '/diag').catch(() => null))
+          connectedPeerNames.map(name => window.WG.apiCall('/api/users/' + encodeURIComponent(name) + '/diag', { silent: true }).catch(() => null))
         );
         if (cancelled) return;
         const values = results
@@ -275,7 +276,7 @@ function App({ tweaks, setTweaks, onLogout }) {
   // Fetch initial history once on mount (5 minutes covers all short ranges)
   uE(() => {
     let cancelled = false;
-    window.WG.apiCall('/api/traffic/history?range=5m&max_points=3000')
+    window.WG.apiCall('/api/traffic/history?range=5m&max_points=3000', { silent: true })
       .then(h => {
         if (cancelled) return;
         setTrafficHistory((h.samples || []).map(s => ({
@@ -292,7 +293,7 @@ function App({ tweaks, setTweaks, onLogout }) {
   uE(() => {
     if (trafficRange !== '1h' && trafficRange !== '24h') return;
     let cancelled = false;
-    window.WG.apiCall(`/api/traffic/history?range=${trafficRange}&max_points=3600`)
+    window.WG.apiCall(`/api/traffic/history?range=${trafficRange}&max_points=3600`, { silent: true })
       .then(h => {
         if (cancelled) return;
         const fetched = (h.samples || []).map(s => ({
@@ -317,7 +318,7 @@ function App({ tweaks, setTweaks, onLogout }) {
     const interval = tweaks.refreshInterval || 1000;
     const fetchTraffic = async () => {
       try {
-        const t = await window.WG.apiCall('/api/traffic');
+        const t = await window.WG.apiCall('/api/traffic', { silent: true });
         if (cancelled) return;
         const sample = {
           ts: Number(t.ts) * 1000,
@@ -343,7 +344,7 @@ function App({ tweaks, setTweaks, onLogout }) {
     let cancelled = false;
     const fetchLogs = async () => {
       try {
-        const j = await window.WG.apiCall('/api/logs?n=60');
+        const j = await window.WG.apiCall('/api/logs?n=60', { silent: true });
         if (cancelled) return;
         if (j.lines && j.lines.length) {
           setLogs(window.WG.parseLogLines(j.lines));
@@ -355,6 +356,13 @@ function App({ tweaks, setTweaks, onLogout }) {
     return () => { cancelled = true; clearInterval(id); };
   }, []);
 
+  uE(() => {
+    const fetch = () => window.WG.apiCall('/api/diag/bg-notifications', { silent: true })
+      .then(r => { if (Array.isArray(r)) setBgNotifs(r); }).catch(() => {});
+    fetch();
+    const id = setInterval(fetch, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const doService = async (action) => {
     setServiceLoading(action);
@@ -362,9 +370,9 @@ function App({ tweaks, setTweaks, onLogout }) {
     const doneLabel   = { start: 'Server started', restart: 'Server restarted', stop: 'Server stopped' }[action] ?? 'Done';
     const t = window.WG.toast?.loading?.(`${startLabel} server…`);
     try {
-      const r = await window.WG.apiCall('/api/service', { method: 'POST', body: JSON.stringify({ action }) });
+      const r = await window.WG.apiCall('/api/service', { silent: true, method: 'POST', body: JSON.stringify({ action }) });
       if (!r.ok) throw new Error(r.out || 'Service action failed');
-      const j = await window.WG.apiCall('/api/status');
+      const j = await window.WG.apiCall('/api/status', { silent: true });
       setServiceActive(!!j.service.active);
       setServiceEnabled(!!j.service.enabled);
       t?.success?.(doneLabel);
@@ -375,7 +383,7 @@ function App({ tweaks, setTweaks, onLogout }) {
   };
 
   const updateBudgetSettings = async (patch) => {
-    const r = await window.WG.apiCall('/api/data-budget', { method: 'POST', body: JSON.stringify(patch) });
+    const r = await window.WG.apiCall('/api/data-budget', { silent: true, method: 'POST', body: JSON.stringify(patch) });
     setBudgetUsage(r);
     setDataBudget(r.settings?.budget_gb || 50);
     setBudgetAlerts(r.settings?.alerts !== false);
@@ -443,6 +451,11 @@ function App({ tweaks, setTweaks, onLogout }) {
       }
     }
   }
+  bgNotifs.forEach(n => {
+    if (!dismissedAlerts.has(n.id)) {
+      alerts.push({ level: n.level, title: n.title, desc: n.desc + (n.checked_at ? `  ·  checked ${n.checked_at}` : ''), key: n.id });
+    }
+  });
 
   const filtered = peers.filter(p => {
     if (statusFilter !== 'all' && p.status !== statusFilter) return false;
@@ -507,13 +520,15 @@ function App({ tweaks, setTweaks, onLogout }) {
           </div>
         </div>
         <div className="topbar-right">
-          <button className="btn btn-ghost" onClick={() => setTrafficModeOpen(true)}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9"/><path d="M2 12h20M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>
-            Traffic
-          </button>
+          {tweaks.trafficMode && (
+            <button className="btn btn-ghost" onClick={() => setTrafficModeOpen(true)}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9"/><path d="M2 12h20M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>
+              Traffic
+            </button>
+          )}
           <button className="btn btn-ghost" onClick={() => setPortCheckOpen(true)}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 10v6m-9-9h6m10 0h6"/></svg>
-            Check ports
+            Port check
           </button>
           <button className="btn btn-primary" onClick={() => setAddOpen(true)}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a6 6 0 016-6h4a6 6 0 016 6v2M18 10v6M15 13h6"/></svg>
@@ -656,12 +671,12 @@ function App({ tweaks, setTweaks, onLogout }) {
           tweaks={tweaks}
           onRevoke={() => {
             // Re-fetch peers after revoke
-            window.WG.apiCall('/api/status').then(j => {
+            window.WG.apiCall('/api/status', { silent: true }).then(j => {
               setPeers(window.WG.mapApiPeers(j.clients.issued, j.clients.live));
             }).catch(() => {});
           }}
           onPeerUpdated={() => {
-            window.WG.apiCall('/api/status').then(j => {
+            window.WG.apiCall('/api/status', { silent: true }).then(j => {
               setPeers(window.WG.mapApiPeers(j.clients.issued, j.clients.live));
             }).catch(() => {});
           }}
@@ -704,7 +719,7 @@ function App({ tweaks, setTweaks, onLogout }) {
           peers={peers}
           onClose={() => setAddOpen(false)}
           onCreated={() => {
-            window.WG.apiCall('/api/status').then(j => {
+            window.WG.apiCall('/api/status', { silent: true }).then(j => {
               const mapped = window.WG.mapApiPeers(j.clients.issued, j.clients.live);
               setPeers(mapped);
               ensurePeerState(mapped);
@@ -721,7 +736,7 @@ function App({ tweaks, setTweaks, onLogout }) {
 // ============================================================
 // KPI tiles
 // ============================================================
-function KPIServiceControl({ serviceActive, serviceEnabled, unit, startedAt, servicePort, connectedCount, totalCount, doService, serviceLoading, updateAvailable, onOpenSettings }) {
+function KPIServiceControl({ serviceActive, startedAt, servicePort, connectedCount, totalCount, doService, serviceLoading, updateAvailable, onOpenSettings }) {
   const uptime = (() => {
     if (!startedAt || !serviceActive) return '—';
     const mins = Math.floor((Date.now() - startedAt) / 60000);
@@ -1010,19 +1025,12 @@ function TweaksPanel({ tweaks, setTweaks }) {
 // ============================================================
 // Login screen
 // ============================================================
-function LoginScreen({ onLogin, loading, error, exiting }) {
+function LoginScreen({ onLogin, loading, exiting }) {
   const [password, setPassword] = uS('');
-  const [shake, setShake] = uS(false);
+  const [showPw, setShowPw] = uS(false);
   const inputRef = uR(null);
 
   uE(() => { inputRef.current?.focus(); }, []);
-
-  uE(() => {
-    if (!error) return;
-    setShake(true);
-    const id = setTimeout(() => setShake(false), 460);
-    return () => clearTimeout(id);
-  }, [error]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -1031,7 +1039,7 @@ function LoginScreen({ onLogin, loading, error, exiting }) {
 
   return (
     <div className={`login-screen${exiting ? ' exit' : ''}`}>
-      <div className={`login-card${shake ? ' shake' : ''}${exiting ? ' exit' : ''}`}>
+      <div className={`login-card${exiting ? ' exit' : ''}`}>
         <div className="login-brand">
           <div className="login-brand-mark">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -1047,18 +1055,32 @@ function LoginScreen({ onLogin, loading, error, exiting }) {
         <form onSubmit={handleSubmit} className="login-form">
           <div>
             <label className="login-label">Password</label>
-            <input
-              ref={inputRef}
-              type="password"
-              className="login-input"
-              placeholder="Enter dashboard password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              autoComplete="current-password"
-              disabled={loading}
-            />
+            <div className="login-input-wrap">
+              <input
+                ref={inputRef}
+                type={showPw ? 'text' : 'password'}
+                className="login-input"
+                placeholder="Enter dashboard password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                autoComplete="current-password"
+                disabled={loading}
+              />
+              <button
+                type="button"
+                className="login-eye"
+                onClick={() => setShowPw(v => !v)}
+                tabIndex={-1}
+                aria-label={showPw ? 'Hide password' : 'Show password'}
+                style={{ color: showPw ? 'var(--accent)' : undefined }}
+              >
+                {showPw
+                  ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17.9 17.9A10.5 10.5 0 0 1 12 20C7 20 3 12 3 12a18.5 18.5 0 0 1 5.1-6.9M9.9 4.2A10 10 0 0 1 12 4c5 0 9 8 9 8a18.5 18.5 0 0 1-2.2 3.2M3 3l18 18"/><circle cx="12" cy="12" r="3"/></svg>
+                  : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                }
+              </button>
+            </div>
           </div>
-          {error && <div className="login-error">{error}</div>}
           <button type="submit" className="btn btn-primary login-btn" disabled={loading || !password}>
             {loading && <span className="login-spinner-sm" />}
             {loading ? 'Signing in…' : 'Sign in'}
@@ -1073,14 +1095,22 @@ function LoginScreen({ onLogin, loading, error, exiting }) {
 // Auth wrapper — gates the full App behind a login screen
 // ============================================================
 function AuthWrapper({ tweaks, setTweaks }) {
-  const [authState, setAuthState] = uS('checking');
-  const [loginError, setLoginError] = uS('');
+  const WGToaster = window.Toaster;
+  const [authState, setAuthStateRaw] = uS('checking');
+  const authStateRef = uR('checking');
+  const setAuthState = (s) => { authStateRef.current = s; setAuthStateRaw(s); };
   const [loginLoading, setLoginLoading] = uS(false);
   const [exiting, setExiting] = uS(false);
 
   uE(() => {
-    window.WG.onUnauthorized = () => { setExiting(false); setAuthState('login'); };
-    window.WG.apiCall('/api/auth/check')
+    window.WG.onUnauthorized = () => {
+      if (authStateRef.current === 'dashboard') {
+        window.WG.toast.warning('Session expired', 'Please sign in again');
+      }
+      setExiting(false);
+      setAuthState('login');
+    };
+    window.WG.apiCall('/api/auth/check', { silent: true })
       .then(j => setAuthState(j.authenticated ? 'dashboard' : 'login'))
       .catch(() => setAuthState('login'));
     return () => { window.WG.onUnauthorized = null; };
@@ -1088,23 +1118,18 @@ function AuthWrapper({ tweaks, setTweaks }) {
 
   const handleLogin = async (password) => {
     setLoginLoading(true);
-    setLoginError('');
     try {
-      await window.WG.apiCall('/api/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ password }),
-      });
+      await window.WG.apiCall('/api/auth/login', { silent: true, method: 'POST', body: JSON.stringify({ password }) });
       setExiting(true);
       setTimeout(() => { setExiting(false); setAuthState('dashboard'); }, 480);
     } catch (_) {
-      setLoginError('Incorrect password');
+      window.WG.toast.error('Incorrect password', 'Please try again');
       setLoginLoading(false);
     }
   };
 
   const handleLogout = async () => {
-    try { await window.WG.apiCall('/api/auth/logout', { method: 'POST' }); } catch (_) {}
-    setLoginError('');
+    try { await window.WG.apiCall('/api/auth/logout', { silent: true, method: 'POST' }); } catch (_) {}
     setAuthState('login');
   };
 
@@ -1116,7 +1141,10 @@ function AuthWrapper({ tweaks, setTweaks }) {
     );
   }
   if (authState === 'login') {
-    return <LoginScreen onLogin={handleLogin} loading={loginLoading} error={loginError} exiting={exiting} />;
+    return <>
+      <LoginScreen onLogin={handleLogin} loading={loginLoading} exiting={exiting} />
+      {WGToaster && <WGToaster />}
+    </>;
   }
   return <App tweaks={tweaks} setTweaks={setTweaks} onLogout={handleLogout} />;
 }

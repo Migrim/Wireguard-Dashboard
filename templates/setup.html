@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>{% if mode == 'change' %}Change Password{% else %}Set up Dashboard{% endif %} · WG-Quick</title>
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='icons/favicon.svg') }}">
+<link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='icons/favicon.ico') }}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script>
+  (() => {
+    try {
+      const th = localStorage.getItem('WG_THEME');
+      if (th === 'dark' || th === 'light') document.documentElement.setAttribute('data-theme', th);
+    } catch (e) {}
+  })();
+</script>
+<style>
+:root {
+  --serif: 'Instrument Serif', Georgia, serif;
+  --sans: 'Inter', -apple-system, system-ui, sans-serif;
+  --mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  --bg: #F5EEE2;
+  --bg-2: #EFE7D8;
+  --card: #FBF6EC;
+  --card-raised: #FFFCF4;
+  --ink: #2A2520;
+  --ink-2: #4A4238;
+  --muted: #8A7F72;
+  --muted-2: #A89C8C;
+  --border: #E6DCC8;
+  --border-strong: #D6C9B0;
+  --accent: oklch(62% 0.14 45);
+  --accent-soft: oklch(88% 0.06 45);
+  --success: oklch(58% 0.12 150);
+  --success-soft: oklch(90% 0.06 150);
+  --danger: oklch(56% 0.17 25);
+  --danger-soft: oklch(92% 0.05 25);
+  --shadow-sm: 0 1px 2px rgba(80,60,30,.04), 0 1px 0 rgba(255,255,255,.5) inset;
+  --shadow: 0 1px 3px rgba(80,60,30,.06), 0 4px 14px rgba(80,60,30,.04), 0 1px 0 rgba(255,255,255,.7) inset;
+  --shadow-lg: 0 2px 4px rgba(80,60,30,.08), 0 30px 80px rgba(80,60,30,.18);
+  --radius: 10px;
+  --radius-lg: 16px;
+}
+[data-theme="dark"] {
+  --bg: #14100C; --bg-2: #1C1611; --card: #241D16; --card-raised: #2F2619;
+  --ink: #EFE6D8; --ink-2: #C8BEAE; --muted: #8A7F72; --muted-2: #6B6256;
+  --border: #3A2F24; --border-strong: #4D3E2C;
+  --accent: oklch(70% 0.14 45); --accent-soft: oklch(32% 0.08 45);
+  --success: oklch(72% 0.13 150); --success-soft: oklch(30% 0.07 150);
+  --danger-soft: oklch(30% 0.07 25);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.3);
+  --shadow: 0 1px 3px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.3);
+  --shadow-lg: 0 2px 4px rgba(0,0,0,.4), 0 30px 80px rgba(0,0,0,.6);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 28px 16px;
+  background-image:
+    radial-gradient(900px 500px at 20% -10%, color-mix(in oklab, var(--accent) 9%, transparent), transparent 60%),
+    radial-gradient(700px 400px at 90% 15%, color-mix(in oklab, var(--accent) 6%, transparent), transparent 60%);
+}
+
+.card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 36px 36px 32px;
+  animation: cardIn 0.45s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+@keyframes cardIn { from { transform: translateY(12px) scale(0.99); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.brand { display: flex; align-items: center; gap: 11px; margin-bottom: 28px; }
+.brand-mark {
+  width: 38px; height: 38px;
+  background: var(--card-raised);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  display: grid; place-items: center;
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
+  flex-shrink: 0;
+}
+.brand-name { font-family: var(--serif); font-size: 22px; line-height: 1; letter-spacing: -0.01em; }
+.brand-sub { font-family: var(--mono); font-size: 9.5px; color: var(--muted); margin-top: 3px; letter-spacing: 0.06em; text-transform: uppercase; }
+
+.title { font-family: var(--serif); font-size: 30px; line-height: 1.05; letter-spacing: -0.02em; margin: 0 0 8px; font-weight: 400; }
+.title em { font-style: italic; }
+.desc { font-size: 13px; color: var(--ink-2); line-height: 1.6; margin: 0 0 28px; }
+
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 12px; font-weight: 500; color: var(--ink-2); margin-bottom: 6px; }
+.field-wrap { position: relative; }
+.field input {
+  width: 100%;
+  height: 42px;
+  padding: 0 42px 0 13px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--sans);
+  font-size: 14px;
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.field input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent); }
+.field input.error { border-color: var(--danger); }
+.toggle-vis {
+  position: absolute; right: 11px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; cursor: pointer; color: var(--muted); padding: 4px;
+  display: grid; place-items: center;
+}
+.toggle-vis:hover { color: var(--ink); }
+
+.strength { display: flex; gap: 4px; align-items: center; max-height: 0; opacity: 0; overflow: hidden; margin-top: 0; transition: max-height 0.28s ease, opacity 0.28s ease, margin-top 0.28s ease; }
+.strength.visible { max-height: 24px; opacity: 1; margin-top: 8px; }
+.strength-bars { display: flex; gap: 3px; flex: 1; }
+.strength-bar { height: 4px; flex: 1; border-radius: 3px; background: var(--border-strong); transition: background 0.35s ease, opacity 0.35s ease; }
+.strength-bar:nth-child(1) { transition-delay: 0s; }
+.strength-bar:nth-child(2) { transition-delay: 0.04s; }
+.strength-bar:nth-child(3) { transition-delay: 0.08s; }
+.strength-bar:nth-child(4) { transition-delay: 0.12s; }
+.strength-label { font-family: var(--mono); font-size: 10px; width: 58px; flex-shrink: 0; white-space: nowrap; text-align: right; transition: color 0.3s ease; }
+
+.hint { font-size: 11.5px; color: var(--danger); max-height: 0; opacity: 0; overflow: hidden; margin-top: 0; transition: max-height 0.22s ease, opacity 0.22s ease, margin-top 0.22s ease; }
+.hint.on { max-height: 28px; opacity: 1; margin-top: 6px; }
+
+.btn-primary {
+  width: 100%;
+  height: 44px;
+  margin-top: 8px;
+  background: var(--ink);
+  color: var(--bg);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, opacity 0.12s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn-primary:hover:not(:disabled) { background: var(--ink-2); border-color: var(--ink-2); }
+.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.success-box {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+  padding: 12px 0 4px;
+}
+.success-box.on { display: flex; }
+.success-icon {
+  width: 56px; height: 56px; border-radius: 16px;
+  background: var(--success-soft); color: var(--success);
+  display: grid; place-items: center;
+}
+.success-title { font-family: var(--serif); font-size: 24px; letter-spacing: -0.01em; }
+.success-desc { font-size: 13px; color: var(--ink-2); max-width: 28ch; }
+
+.form-area { }
+.form-area.hidden { display: none; }
+
+.theme-btn {
+  width: 28px; height: 28px; display: grid; place-items: center;
+  background: var(--card); border: 1px solid var(--border); border-radius: 7px;
+  cursor: pointer; color: var(--muted); transition: all 0.12s;
+}
+.theme-btn:hover { color: var(--ink); border-color: var(--border-strong); }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="brand">
+    <div class="brand-mark">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2L3 7v6c0 5 4 9 9 10 5-1 9-5 9-10V7l-9-5z"/>
+        <path d="M9 12l2 2 4-4"/>
+      </svg>
+    </div>
+    <div>
+      <div class="brand-name">WG-Quick</div>
+      <div class="brand-sub">{% if mode == 'change' %}Security{% else %}Dashboard Setup{% endif %}</div>
+    </div>
+    <button class="theme-btn" id="themeBtn" title="Toggle theme" aria-label="Toggle theme" style="margin-left: auto;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+    </button>
+  </div>
+
+  <div class="form-area" id="formArea">
+    <h1 class="title">{% if mode == 'change' %}<em>Change</em> your password{% else %}Set a <em>dashboard</em> password{% endif %}</h1>
+    <p class="desc">{% if mode == 'change' %}Enter your current password, then choose a new one.{% else %}Choose a password to protect access to your WireGuard dashboard. You only need to do this once.{% endif %}</p>
+
+    <form id="setupForm" autocomplete="off">
+      {% if mode == 'change' %}
+      <div class="field">
+        <label for="pw0">Current password</label>
+        <div class="field-wrap">
+          <input type="password" id="pw0" placeholder="Your current password" autocomplete="current-password" />
+          <button type="button" class="toggle-vis" onclick="toggleVis('pw0', this)" tabindex="-1" aria-label="Show password">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div class="hint" id="curHint">Current password is incorrect</div>
+      </div>
+      {% endif %}
+      <div class="field">
+        <label for="pw1">{% if mode == 'change' %}New password{% else %}Password{% endif %}</label>
+        <div class="field-wrap">
+          <input type="password" id="pw1" placeholder="Choose a password" autocomplete="new-password" />
+          <button type="button" class="toggle-vis" onclick="toggleVis('pw1', this)" tabindex="-1" aria-label="Show password">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div class="strength" id="strengthRow">
+          <div class="strength-bars">
+            <div class="strength-bar" id="sb1"></div>
+            <div class="strength-bar" id="sb2"></div>
+            <div class="strength-bar" id="sb3"></div>
+            <div class="strength-bar" id="sb4"></div>
+          </div>
+          <div class="strength-label" id="strengthLabel"></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="pw2">Confirm password</label>
+        <div class="field-wrap">
+          <input type="password" id="pw2" placeholder="Repeat your password" autocomplete="new-password" />
+          <button type="button" class="toggle-vis" onclick="toggleVis('pw2', this)" tabindex="-1" aria-label="Show password">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div class="hint" id="matchHint">Passwords don't match</div>
+      </div>
+
+      <div class="hint" id="serverHint"></div>
+
+      <button type="submit" class="btn-primary" id="submitBtn" disabled>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L3 7v6c0 5 4 9 9 10 5-1 9-5 9-10V7l-9-5z"/><path d="M9 12l2 2 4-4"/></svg>
+        {% if mode == 'change' %}Update password{% else %}Set password &amp; open dashboard{% endif %}
+      </button>
+    </form>
+  </div>
+
+  <div class="success-box" id="successBox">
+    <div class="success-icon">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+    </div>
+    <div class="success-title">{% if mode == 'change' %}Password updated!{% else %}Password set!{% endif %}</div>
+    <p class="success-desc">Taking you to the dashboard…</p>
+  </div>
+
+</div>
+
+<script>
+const MODE = '{{ mode }}';
+
+function toggleVis(id, btn) {
+  const inp = document.getElementById(id);
+  const showing = inp.type === 'text';
+  inp.type = showing ? 'password' : 'text';
+  btn.style.color = showing ? '' : 'var(--accent)';
+}
+
+function scorePassword(pw) {
+  let s = 0;
+  if (pw.length >= 8) s++;
+  if (pw.length >= 12) s++;
+  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) s++;
+  if (/[0-9]/.test(pw)) s++;
+  if (/[^A-Za-z0-9]/.test(pw)) s++;
+  return Math.min(4, Math.floor(s * 4 / 5));
+}
+
+const COLORS = ['var(--danger)', 'oklch(68% 0.14 50)', 'var(--accent)', 'var(--success)'];
+const LABELS = ['Weak', 'Fair', 'Good', 'Strong'];
+
+const pw0 = document.getElementById('pw0'); // only in change mode
+const pw1 = document.getElementById('pw1');
+const pw2 = document.getElementById('pw2');
+const submitBtn = document.getElementById('submitBtn');
+const matchHint = document.getElementById('matchHint');
+const serverHint = document.getElementById('serverHint');
+const curHint = document.getElementById('curHint');
+const strengthRow = document.getElementById('strengthRow');
+const strengthLabel = document.getElementById('strengthLabel');
+const bars = [document.getElementById('sb1'), document.getElementById('sb2'), document.getElementById('sb3'), document.getElementById('sb4')];
+
+function validate() {
+  const v0 = pw0 ? pw0.value : 'ok'; // change mode requires current pw
+  const v1 = pw1.value, v2 = pw2.value;
+  const score = scorePassword(v1);
+
+  if (v1.length > 0) {
+    strengthRow.classList.add('visible');
+    bars.forEach((b, i) => {
+      b.style.background = i <= score - 1 ? COLORS[score - 1] : 'var(--border-strong)';
+    });
+    strengthLabel.textContent = v1.length < 8 ? 'Too short' : LABELS[score - 1];
+    strengthLabel.style.color = v1.length < 8 ? 'var(--danger)' : COLORS[score - 1];
+  } else {
+    strengthRow.classList.remove('visible');
+    bars.forEach(b => { b.style.background = 'var(--border-strong)'; });
+    strengthLabel.textContent = ' ';
+  }
+
+  const mismatch = v2.length > 0 && v1 !== v2;
+  matchHint.classList.toggle('on', mismatch);
+
+  submitBtn.disabled = (MODE === 'change' && v0.length === 0) || v1.length < 8 || v1 !== v2 || v2.length === 0;
+}
+
+if (pw0) pw0.addEventListener('input', validate);
+pw1.addEventListener('input', validate);
+pw2.addEventListener('input', validate);
+
+const SUBMIT_LABEL = MODE === 'change'
+  ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L3 7v6c0 5 4 9 9 10 5-1 9-5 9-10V7l-9-5z"/><path d="M9 12l2 2 4-4"/></svg> Update password'
+  : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L3 7v6c0 5 4 9 9 10 5-1 9-5 9-10V7l-9-5z"/><path d="M9 12l2 2 4-4"/></svg> Set password &amp; open dashboard';
+
+document.getElementById('setupForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  serverHint.style.display = 'none';
+  if (curHint) curHint.classList.remove('on');
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Saving…';
+
+  const endpoint = MODE === 'change' ? '/api/auth/password' : '/api/setup';
+  const body = MODE === 'change'
+    ? { current_password: pw0.value, new_password: pw1.value }
+    : { password: pw1.value };
+
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      document.getElementById('formArea').classList.add('hidden');
+      document.getElementById('successBox').classList.add('on');
+      setTimeout(() => { window.location.href = '/'; }, 1400);
+    } else {
+      if (MODE === 'change' && data.error === 'wrong_password' && curHint) {
+        curHint.classList.add('on');
+        if (pw0) { pw0.value = ''; pw0.focus(); }
+      } else {
+        serverHint.textContent = data.hint || data.error || 'Something went wrong, please try again.';
+        serverHint.style.display = 'block';
+      }
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = SUBMIT_LABEL;
+    }
+  } catch (err) {
+    serverHint.textContent = 'Network error — please try again.';
+    serverHint.style.display = 'block';
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = SUBMIT_LABEL;
+  }
+});
+
+document.getElementById('themeBtn').onclick = () => {
+  const th = document.documentElement.getAttribute('data-theme');
+  const next = th === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('WG_THEME', next); } catch (e) {}
+};
+
+(pw0 || pw1).focus();
+</script>
+</body>
+</html>

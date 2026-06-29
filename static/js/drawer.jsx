@@ -88,7 +88,7 @@ function PeerDrawer({ peer, onClose, throughputBuffers, peerPingHistory = {}, on
     let cancelled = false;
     const fetchDiag = async () => {
       try {
-        const r = await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/diag');
+        const r = await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/diag', { silent: true });
         if (cancelled) return;
         setDiag({
           loading: false,
@@ -133,7 +133,7 @@ function PeerDrawer({ peer, onClose, throughputBuffers, peerPingHistory = {}, on
   const downloadConfig = async () => {
     setDownloading(true);
     try {
-      const r = await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/ovpn');
+      const r = await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/ovpn', { silent: true });
       if (r && r.profile) {
         const blob = new Blob([r.profile], { type: 'text/plain' });
         const a = document.createElement('a');
@@ -161,7 +161,7 @@ function PeerDrawer({ peer, onClose, throughputBuffers, peerPingHistory = {}, on
           setRevoking(true);
           const t = window.WG.toast?.loading?.(`Revoking "${peer.name}"…`);
           try {
-            await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/revoke', { method: 'POST' });
+            await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/revoke', { silent: true, method: 'POST' });
             t?.success?.('Peer revoked', `"${peer.name}" has been removed`);
             onClose();
             if (onRevoke) onRevoke();
@@ -181,7 +181,7 @@ function PeerDrawer({ peer, onClose, throughputBuffers, peerPingHistory = {}, on
     setPendingAction(action);
     const t = window.WG.toast?.loading?.(wasPaused ? `Resuming "${peer.name}"…` : `Pausing "${peer.name}"…`);
     try {
-      await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/' + action, { method: 'POST' });
+      await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/' + action, { silent: true, method: 'POST' });
       if (onPeerUpdated) onPeerUpdated();
       if (wasPaused) {
         t?.success?.('Peer resumed', `"${peer.name}" is active again`);
@@ -394,6 +394,9 @@ function LogsPanel({ logs, notifications = [], onExpand, onDismiss = () => {} })
   const scrollRef = _useRef(null);
   const [idx, setIdx] = _useState(0);
   const [leaving, setLeaving] = _useState(false);
+  const [notifsCollapsed, setNotifsCollapsed] = _useState(
+    () => localStorage.getItem('WG_NOTIFS_COLLAPSED') === 'true'
+  );
 
   _useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -416,10 +419,17 @@ function LogsPanel({ logs, notifications = [], onExpand, onDismiss = () => {} })
     return () => { clearInterval(id); clearTimeout(swapT); };
   }, [visible.length]);
 
+  const toggleNotifs = (e) => {
+    e.stopPropagation();
+    const next = !notifsCollapsed;
+    setNotifsCollapsed(next);
+    localStorage.setItem('WG_NOTIFS_COLLAPSED', String(next));
+  };
+
   return (
     <div className="logs-card logs-card-clickable" onClick={onExpand} role="button" tabIndex={0}>
       <div className="logs-split">
-        <div className="notif-col" onClick={e => e.stopPropagation()}>
+        <div className={`notif-col${notifsCollapsed ? ' is-collapsed' : ''}`} onClick={e => e.stopPropagation()}>
           <div className="notif-head">
             <span className="section-label">NOTIFICATIONS</span>
             {visible.length > 0 && <span className="notif-count">{visible.length}</span>}
@@ -449,7 +459,15 @@ function LogsPanel({ logs, notifications = [], onExpand, onDismiss = () => {} })
           </div>
         </div>
 
-        <div className="logs-sep" />
+        <div className="logs-sep" onClick={toggleNotifs} title={notifsCollapsed ? 'Show notifications' : 'Hide notifications'}>
+          <div className="logs-sep-line" />
+          <div className="logs-sep-btn">
+            <svg className={`logs-sep-arrow${notifsCollapsed ? ' is-collapsed' : ''}`} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M18 15l-6-6-6 6"/>
+            </svg>
+          </div>
+          <div className="logs-sep-line" />
+        </div>
 
         <div className="logs-col">
           <div className="logs-head">
@@ -517,7 +535,7 @@ function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets
     setSaving(true);
     setMsg('');
     try {
-      const r = await window.WG.apiCall('/api/data-budget/export', { method: 'POST', body: JSON.stringify({}) });
+      const r = await window.WG.apiCall('/api/data-budget/export', { silent: true, method: 'POST', body: JSON.stringify({}) });
       const blob = new Blob([r.csv || ''], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -764,7 +782,7 @@ function LogsDrawer({ alerts, onClose, verbose, setVerbose, onDismiss }) {
     const poll = async () => {
       try {
         const n = verbose ? 1000 : 300;
-        const j = await window.WG.apiCall(`/api/logs?n=${n}&verbose=${verbose ? 1 : 0}`);
+        const j = await window.WG.apiCall(`/api/logs?n=${n}&verbose=${verbose ? 1 : 0}`, { silent: true });
         if (cancelled) return;
         if (j.lines && j.lines.length) {
           setLocalLogs(window.WG.parseLogLines(j.lines, verbose));
@@ -798,10 +816,7 @@ function LogsDrawer({ alerts, onClose, verbose, setVerbose, onDismiss }) {
     setRetentionSaving(true);
     setRetentionMsg('');
     try {
-      const r = await window.WG.apiCall('/api/logs/retention', {
-        method: 'POST',
-        body: JSON.stringify({ retention: val }),
-      });
+      const r = await window.WG.apiCall('/api/logs/retention', { silent: true, method: 'POST', body: JSON.stringify({ retention: val }) });
       setRetentionMsg(r.ok ? `Vacuumed journal (kept last ${val})` : 'Vacuum failed — check server logs');
     } catch (e) {
       setRetentionMsg('Error: ' + (e.message || 'API unreachable'));
@@ -1023,13 +1038,13 @@ function PortCheckDrawer({ peers, onClose }) {
     try {
       // Fetch all diagnostic data in parallel
       const [status, diag, health] = await Promise.all([
-        window.WG.apiCall('/api/status').catch(() => null),
-        window.WG.apiCall('/api/diag/vpn').catch(() => null),
-        window.WG.apiCall('/api/health').catch(() => null),
+        window.WG.apiCall('/api/status', { silent: true }).catch(() => null),
+        window.WG.apiCall('/api/diag/vpn', { silent: true }).catch(() => null),
+        window.WG.apiCall('/api/health', { silent: true }).catch(() => null),
       ]);
 
       const port = (status && status.network && status.network.port) || 51820;
-      const portStatus = await window.WG.apiCall('/api/ports?proto=udp&port=' + port).catch(() => null);
+      const portStatus = await window.WG.apiCall('/api/ports?proto=udp&port=' + port, { silent: true }).catch(() => null);
 
       const connectedPeers = peers.filter(p => p.status === 'connected').length;
 
@@ -1252,6 +1267,28 @@ function CountdownRing({ remaining }) {
         <span key={`${i}_${d}`} style={{ display: 'inline-block', animation: 'numFlyUp 0.3s cubic-bezier(0.2, 0.9, 0.25, 1) both' }}>{d}</span>
       ))}s
     </span>
+  );
+}
+
+function ChangePasswordSection() {
+  return (
+    <section className="drawer-section">
+      <div className="section-head"><span className="section-label">SECURITY</span></div>
+      <div className="settings-list">
+        <div className="setting-row">
+          <div>
+            <div className="setting-title">Dashboard password</div>
+            <div className="setting-desc">Change the password used to log in to this dashboard</div>
+          </div>
+          <div className="setting-control">
+            <button className="btn btn-primary" onClick={() => window.location.href = '/change-password'}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+              Change
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -1685,6 +1722,10 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
               </div>
             )}
 
+            <div style={{ marginBottom: '12px' }} />
+
+          <ChangePasswordSection />
+
             <div className="settings-list" style={{ marginTop: '10px' }}>
               <button
                 className="setting-row"
@@ -1734,6 +1775,21 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
                         className={`toggle ${tweaks.devUpdates ? 'on' : ''}`}
                         onClick={() => setTweaks({ ...tweaks, devUpdates: !tweaks.devUpdates })}
                         aria-pressed={tweaks.devUpdates}
+                      >
+                        <span className="toggle-knob" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="setting-row">
+                    <div>
+                      <div className="setting-title">Traffic mode <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--muted)', marginLeft: 4 }}>experimental</span></div>
+                      <div className="setting-desc">Show per-peer live traffic breakdown — not fully implemented yet</div>
+                    </div>
+                    <div className="setting-control">
+                      <button
+                        className={`toggle ${tweaks.trafficMode ? 'on' : ''}`}
+                        onClick={() => setTweaks({ ...tweaks, trafficMode: !tweaks.trafficMode })}
+                        aria-pressed={!!tweaks.trafficMode}
                       >
                         <span className="toggle-knob" />
                       </button>

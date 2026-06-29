@@ -175,10 +175,7 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
     setSaving(true);
     setSaveMsg('');
     try {
-      await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/settings', {
-        method: 'PATCH',
-        body: JSON.stringify(patch),
-      });
+      await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/settings', { silent: true, method: 'PATCH', body: JSON.stringify(patch) });
       setFlash(true);
       clearTimeout(flashRef.current);
       flashRef.current = setTimeout(() => setFlash(false), 1700);
@@ -242,7 +239,7 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
           body: JSON.stringify(patch),
         });
       }
-      const r = await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/ovpn');
+      const r = await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/ovpn', { silent: true });
       if (r && r.profile) {
         const blob = new Blob([r.profile], { type: 'text/plain' });
         const a = document.createElement('a');
@@ -253,7 +250,7 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
         a.remove();
       }
     } catch (e) {
-      alert('Failed to download: ' + (e.message || 'API error'));
+      window.WG?.toast?.error?.('Download failed', e.message || 'API error');
     } finally {
       setProvisioning(false);
     }
@@ -356,7 +353,7 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
         <div className="ap2-inline-toggle">
           <div>
             <div className="setting-title">Route DNS through server</div>
-            <div className="setting-desc">Resolve via the gateway with ad / tracker blocking</div>
+            <div className="setting-desc">Resolve via the server</div>
           </div>
           <button className={`toggle ${blockAds ? 'on' : ''}`} onClick={() => setBlockAds(!blockAds)} aria-pressed={blockAds}>
             <span className="toggle-knob" />
@@ -571,7 +568,7 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
     },
     {
       id: 'dns', icon: ICN.dns, title: 'DNS & search domains',
-      summary: (blockAds ? 'server (ad-block)' : dns || 'none') + (searchDomains ? ` · ${searchDomains}` : ''),
+      summary: (blockAds ? 'server' : dns || 'none') + (searchDomains ? ` · ${searchDomains}` : ''),
       modified: dns !== saved.dns || searchDomains !== saved.searchDomains || blockAds !== saved.blockAds,
     },
     {
@@ -590,6 +587,7 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
       modified: !!(preUp !== saved.preUp || postUp !== saved.postUp ||
                    preDown !== saved.preDown || postDown !== saved.postDown ||
                    fwmark !== saved.fwmark || table !== saved.table),
+      comingSoon: true,
     },
   ];
 
@@ -681,7 +679,7 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
         <div className="ps-stack">
           {instantSections.map((s) => (
             <Coll key={s.id} icon={s.icon} title={s.title} summary={s.summary}
-              modified={s.modified} open={!!openSection[s.id]} onToggle={() => toggle(s.id)}>
+              modified={s.modified} open={!!openSection[s.id]} onToggle={() => toggle(s.id)} comingSoon={s.comingSoon}>
               {renderSection(s.id)}
             </Coll>
           ))}
@@ -704,7 +702,7 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
         <div className="ps-stack">
           {configSections.map((s) => (
             <Coll key={s.id} icon={s.icon} title={s.title} summary={s.summary}
-              modified={s.modified} open={!!openSection[s.id]} onToggle={() => toggle(s.id)}>
+              modified={s.modified} open={!!openSection[s.id]} onToggle={() => toggle(s.id)} comingSoon={s.comingSoon}>
               {renderSection(s.id)}
             </Coll>
           ))}

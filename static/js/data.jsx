@@ -5,13 +5,14 @@ const HS_TIMEOUT = 130; // seconds without handshake = offline (all client confs
 const TRAFFIC_RANGES = { '10s': 10_000, '30s': 30_000, '1m': 60_000, '5m': 5 * 60_000, '1h': 60 * 60_000, '24h': 24 * 60 * 60_000 };
 
 async function apiCall(path, opt = {}) {
+  const { silent, ...fetchOpt } = opt;
   const url = path.startsWith('http') ? path : BASE + path;
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), 15000);
   try {
     const res = await fetch(url, {
-      ...opt,
-      headers: { 'Content-Type': 'application/json', ...(opt.headers || {}) },
+      ...fetchOpt,
+      headers: { 'Content-Type': 'application/json', ...(fetchOpt.headers || {}) },
       signal: ac.signal,
     });
     let data = null;
@@ -22,11 +23,28 @@ async function apiCall(path, opt = {}) {
     }
     if (!res.ok) {
       const msg = (data && (data.hint || data.error || data.out)) || ('HTTP ' + res.status);
+      if (!silent) _apiToast(res.status, path.split('?')[0], msg);
       throw new Error(String(msg));
     }
     return data;
   } finally {
     clearTimeout(t);
+  }
+}
+
+function _apiToast(status, path, msg) {
+  const toast = window.WG?.toast;
+  if (!toast) return;
+  if (status === 403) {
+    toast.error('Not authorized', 'You don\'t have permission for this action');
+  } else if (status === 404) {
+    toast.error('Not found', `'${path}' does not exist`);
+  } else if (status === 429) {
+    toast.warning('Too many requests', 'Slow down and try again');
+  } else if (status >= 500) {
+    toast.error('Server error', msg || 'Something went wrong — check the server logs');
+  } else {
+    toast.error(`Error ${status}`, msg || 'Unexpected error');
   }
 }
 

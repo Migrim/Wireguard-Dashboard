@@ -39,6 +39,7 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
   const dotOutYRef    = useRef(null);
   const animNiceMaxRef = useRef(null);
   const rafRef        = useRef(null);
+  const nowMsRef      = useRef(null);
 
   samplesRef.current  = samples;
   rangeRef.current    = range;
@@ -82,20 +83,32 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
       const h        = height - PAD.t - PAD.b;
       const all = samplesRef.current;
 
-      // In smooth mode, lag the window by one sample interval so new samples arrive
-      // beyond the right clip boundary and scroll into view — no jarring jumps.
-      // In static mode, anchor to the last sample so nothing drifts between polls.
-      const lag = smoothRef.current && all.length >= 2
-        ? Math.min(5000, all[all.length - 1].ts - all[all.length - 2].ts)
-        : 0;
-      const nowMs    = smoothRef.current
-        ? Date.now() - lag
-        : (all.length > 0 ? all[all.length - 1].ts : Date.now());
+      // In smooth mode, advance nowMs monotonically at real-time rate (dt per frame).
+      // Anchoring to Date.now()-lag would recalculate lag every frame from sample
+      // timestamps; when a new sample arrives with a slightly different interval the
+      // lag changes and nowMs jumps backward — the "glitch back". Advancing a ref
+      // instead guarantees nowMs never decreases regardless of sample timing, and
+      // also fixes Windows clock-skew (server ts > Date.now()) because we anchor to
+      // the last sample's ts rather than the client clock.
+      let nowMs;
+      if (smoothRef.current) {
+        const lastTs = all.length > 0 ? all[all.length - 1].ts : Date.now();
+        // Initialize (or reinitialize if drift > 10 s ahead of data)
+        if (nowMsRef.current === null || nowMsRef.current > lastTs + 10000) {
+          nowMsRef.current = lastTs;
+        }
+        nowMsRef.current += dt;
+        nowMs = nowMsRef.current;
+      } else {
+        nowMsRef.current = null; // reset so re-enabling smooth mode re-anchors
+        nowMs = all.length > 0 ? all[all.length - 1].ts : Date.now();
+      }
       const winStart = nowMs - rangeMs;
 
-      // In smooth mode, include samples beyond nowMs (outside clip) so they draw
-      // off-screen and slide left into view. In static mode, include only up to nowMs.
-      const sampleCeil = smoothRef.current ? Date.now() : nowMs;
+      // Include samples up to 6 s beyond nowMs so new arrivals (still off-screen
+      // to the right) are already in the path and scroll into view smoothly.
+      // The clipPath handles the visual right boundary.
+      const sampleCeil = smoothRef.current ? nowMs + 6000 : nowMs;
       const visible = [];
       for (let i = 0; i < all.length; i++) {
         if (all[i].ts >= winStart - 2000 && all[i].ts <= sampleCeil) visible.push(all[i]);
