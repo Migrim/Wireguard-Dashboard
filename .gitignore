@@ -1,5 +1,7 @@
-# Secret key — never commit this
+# Runtime state files — never commit these
 .secret_key
+.dashboard_password_hash
+.welcomed
 
 # Python
 __pycache__/
