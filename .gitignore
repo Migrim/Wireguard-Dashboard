@@ -1,4 +1,4 @@
-# Runtime state files — never commit these
+# Runtime state files
 .secret_key
 .dashboard_password_hash
 .welcomed
