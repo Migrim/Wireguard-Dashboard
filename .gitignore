@@ -1,0 +1,14 @@
+# Secret key — never commit this
+.secret_key
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# OS
+.DS_Store
