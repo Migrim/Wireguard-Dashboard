@@ -14,6 +14,7 @@ function App({ tweaks, setTweaks, onLogout }) {
   const [dataDrawerOpen, setDataDrawerOpen] = uS(false);
   const [trafficModeOpen, setTrafficModeOpen] = uS(false);
   const [portCheckOpen, setPortCheckOpen] = uS(false);
+  const [dyndnsOpen, setDyndnsOpen] = uS(false);
   const [logsDrawerOpen, setLogsDrawerOpen] = uS(false);
   const [addOpen, setAddOpen] = uS(false);
   const [settingsOpen, setSettingsOpen] = uS(false);
@@ -45,6 +46,7 @@ function App({ tweaks, setTweaks, onLogout }) {
   const [unit, setUnit] = uS('wg-quick@wg0');
   const [startedAt, setStartedAt] = uS(0);
   const [servicePort, setServicePort] = uS(null);
+  const [ifaceName, setIfaceName] = uS('wg0');
 
   const [trafficRange, setTrafficRange] = uS(() => localStorage.getItem('trafficRange') || '1m');
   const [trafficHistory, setTrafficHistory] = uS([]);
@@ -142,6 +144,7 @@ function App({ tweaks, setTweaks, onLogout }) {
         if (j.service.unit) setUnit(j.service.unit);
         if (j.service.started_at) setStartedAt(j.service.started_at);
         if (j.network?.port) setServicePort(`${j.network.port}/udp`);
+        if (j.network?.iface) setIfaceName(j.network.iface);
         if (j.data_budget) {
           setBudgetUsage(j.data_budget);
           setDataBudget(j.data_budget.settings?.budget_gb || 50);
@@ -360,7 +363,7 @@ function App({ tweaks, setTweaks, onLogout }) {
     const fetch = () => window.WG.apiCall('/api/diag/bg-notifications', { silent: true })
       .then(r => { if (Array.isArray(r)) setBgNotifs(r); }).catch(() => {});
     fetch();
-    const id = setInterval(fetch, 5 * 60 * 1000);
+    const id = setInterval(fetch, 30 * 1000);
     return () => clearInterval(id);
   }, []);
 
@@ -508,7 +511,21 @@ function App({ tweaks, setTweaks, onLogout }) {
                 placeholder="Filter peers by name, IP, or public key…"
                 value={filter}
                 onChange={e => setFilter(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Tab' && ghostSuffix) { e.preventDefault(); setFilter(searchSuggestion); } }}
+                onKeyDown={e => {
+                  if (e.key === 'Tab' && ghostSuffix) {
+                    e.preventDefault();
+                    setFilter(searchSuggestion);
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setFilter('');
+                    searchRef.current?.blur();
+                  } else if (e.key === 'Enter' && filtered.length === 1) {
+                    e.preventDefault();
+                    setSelectedPeer(filtered[0].id);
+                    setFilter('');
+                    searchRef.current?.blur();
+                  }
+                }}
               />
             </div>
             {filter
@@ -526,6 +543,10 @@ function App({ tweaks, setTweaks, onLogout }) {
               Traffic
             </button>
           )}
+          <button className="btn btn-ghost" onClick={() => setDyndnsOpen(true)}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="9"/><path d="M2 12h20M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>
+            DynDNS
+          </button>
           <button className="btn btn-ghost" onClick={() => setPortCheckOpen(true)}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 10v6m-9-9h6m10 0h6"/></svg>
             Port check
@@ -609,7 +630,7 @@ function App({ tweaks, setTweaks, onLogout }) {
         </div>
 
         <div className="logs-card-shell">
-          <LogsPanel logs={logs} notifications={alerts} onExpand={() => setLogsDrawerOpen(true)} onDismiss={dismissAlert} />
+          <LogsPanel logs={logs} notifications={alerts} onExpand={() => setLogsDrawerOpen(true)} onDismiss={dismissAlert} serviceActive={serviceActive} ifaceName={ifaceName} />
         </div>
       </section>
 
@@ -712,6 +733,7 @@ function App({ tweaks, setTweaks, onLogout }) {
       )}
       {settingsOpen && <SettingsDrawer tweaks={tweaks} setTweaks={setTweaks} connectedCount={connectedCount} totalPeers={peers.length} onClose={() => setSettingsOpen(false)} onUpdateAvailable={setUpdateAvailable} />}
       {tweaks._tweaksOpen && <TweaksPanel tweaks={tweaks} setTweaks={setTweaks} />}
+      {dyndnsOpen && <DynDNSDrawer onClose={() => setDyndnsOpen(false)} />}
       {portCheckOpen && <PortCheckDrawer peers={peers} onClose={() => setPortCheckOpen(false)} />}
       {logsDrawerOpen && <LogsDrawer alerts={alerts} onClose={() => setLogsDrawerOpen(false)} verbose={logsVerbose} setVerbose={setLogsVerbose} onDismiss={dismissAlert} />}
       {addOpen && (

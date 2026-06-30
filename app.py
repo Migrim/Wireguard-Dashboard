@@ -27,6 +27,56 @@ def _detect_public_ip() -> str:
 PUBLIC_IP = _detect_public_ip()
 
 PEERS_DB=os.path.join(WG_DIR,"peers.json")
+DYNDNS_DB=os.environ.get("DYNDNS_DB", os.path.join(WG_DIR, "dyndns.json"))
+
+def _load_dyndns() -> dict:
+    _default = {"mode": "static", "hostname": "", "provider": None, "token": "", "domain": "", "custom_url": ""}
+    content = ""
+    try:
+        with open(DYNDNS_DB) as f:
+            content = f.read()
+    except FileNotFoundError:
+        return _default
+    except PermissionError:
+        out, rc = _sudo_cat(DYNDNS_DB)
+        if rc != 0 or not out:
+            return _default
+        content = out
+    except Exception:
+        return _default
+    try:
+        data = json.loads(content)
+        return {**_default, **data}
+    except Exception:
+        return _default
+
+def _save_dyndns(data: dict) -> None:
+    import tempfile
+    fd, tmp_path = tempfile.mkstemp(prefix="dyndns.", suffix=".json.tmp", dir="/tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(data, f, indent=2)
+        try:
+            os.makedirs(os.path.dirname(DYNDNS_DB), exist_ok=True)
+            os.replace(tmp_path, DYNDNS_DB)
+            return
+        except Exception:
+            pass
+        out, rc = _sudo(["/usr/bin/install", "-m", "640", "-o", "root", "-g", "www-data", tmp_path, DYNDNS_DB])
+        if rc != 0:
+            raise PermissionError(f"Could not write {DYNDNS_DB}: {out}")
+    finally:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
+
+def _get_endpoint_host() -> str:
+    cfg = _load_dyndns()
+    if cfg.get("mode") == "dyndns" and cfg.get("hostname", "").strip():
+        return cfg["hostname"].strip()
+    return PUBLIC_IP
 WELCOME_FLAG=os.path.join(WG_DIR,"welcomed.flag")
 _WELCOME_FLAG_FALLBACK=os.path.join(os.path.dirname(__file__),".welcomed")
 DATA_BUDGET_DB=os.environ.get("DATA_BUDGET_DB", os.path.join(WG_DIR, "data_budget.json"))
@@ -220,7 +270,7 @@ def _bg_run_port_check() -> None:
         except: return None
 
     if not _chk(service_active):
-        findings.append({"id": "bg-svc-down", "level": "warn",
+        findings.append({"id": "bg-svc-down", "level": "error",
             "title": "WireGuard service is down",
             "desc":  f"{UNIT} is not active — peers cannot connect."})
 
@@ -1290,7 +1340,7 @@ def gen_client_conf(name: str) -> Tuple[str,str]:
     dns=meta.get("dns","").strip() or conf.get("Interface",{}).get("DNS","").strip() or CLIENT_DNS
     srv_pub=_server_pubkey()
     lp=conf.get("Interface",{}).get("ListenPort",str(WG_PORT))
-    endpoint=f"{PUBLIC_IP}:{lp}"
+    endpoint=f"{_get_endpoint_host()}:{lp}"
     allowed_client=meta.get("client_allowed_ips","").strip() or "0.0.0.0/0, ::/0"
     keepalive=str(meta.get("keepalive","25") or "25")
     txt=[]
@@ -2051,6 +2101,91 @@ def api_config():
     _sudo(["/usr/bin/systemctl","restart",UNIT])
     return jsonify({"ok":True})
 
+@app.route("/api/dyndns", methods=["GET", "POST"])
+def api_dyndns():
+    if r := _require_auth(): return r
+    if request.method == "GET":
+        cfg = _load_dyndns()
+        safe = {k: v for k, v in cfg.items() if k != "token"}
+        safe["has_token"] = bool(cfg.get("token"))
+        return jsonify(safe)
+    data = request.get_json(force=True, silent=True) or {}
+    cfg = _load_dyndns()
+    for key in ("mode", "hostname", "provider", "domain", "custom_url"):
+        if key in data:
+            val = data[key]
+            cfg[key] = None if val is None else str(val).strip()
+    if "token" in data and data["token"] not in ("", "••••"):
+        cfg["token"] = data["token"]
+    elif "token" in data and data["token"] == "":
+        cfg["token"] = ""
+    try:
+        _save_dyndns(cfg)
+    except Exception as e:
+        app.logger.error("dyndns_save_failed: %s", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
+    return jsonify({"ok": True})
+
+@app.route("/api/dyndns/resolve", methods=["POST"])
+def api_dyndns_resolve():
+    if r := _require_auth(): return r
+    import socket
+    data = request.get_json(force=True, silent=True) or {}
+    hostname = (data.get("hostname") or "").strip()
+    if not hostname:
+        return jsonify({"error": "hostname required"}), 400
+    try:
+        ip = socket.getaddrinfo(hostname, None)[0][4][0]
+        return jsonify({"ip": ip, "hostname": hostname})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@app.route("/api/dyndns/update", methods=["POST"])
+def api_dyndns_update():
+    if r := _require_auth(): return r
+    import base64
+    cfg = _load_dyndns()
+    provider = cfg.get("provider") or ""
+    token = cfg.get("token", "")
+    domain = cfg.get("domain", "")
+    custom_url = cfg.get("custom_url", "")
+    if not provider:
+        return jsonify({"error": "No provider configured"}), 400
+    current_ip = _detect_public_ip()
+    try:
+        if provider == "duckdns":
+            if not token or not domain:
+                return jsonify({"error": "Token and domain are required for Duck DNS"}), 400
+            url = f"https://www.duckdns.org/update?domains={urllib.parse.quote(domain)}&token={urllib.parse.quote(token)}&ip="
+            resp = urllib.request.urlopen(url, timeout=10).read().decode().strip()
+            if resp.upper().startswith("OK"):
+                return jsonify({"ok": True, "response": resp})
+            return jsonify({"error": f"Duck DNS returned: {resp}"}), 400
+        elif provider in ("noip", "dynu"):
+            if not token or not domain:
+                return jsonify({"error": "Credentials and hostname are required"}), 400
+            if provider == "noip":
+                update_url = f"https://dynupdate.no-ip.com/nic/update?hostname={urllib.parse.quote(domain)}&myip={current_ip}"
+            else:
+                update_url = f"https://api.dynu.com/nic/update?hostname={urllib.parse.quote(domain)}&myip={current_ip}"
+            req = urllib.request.Request(update_url)
+            creds = base64.b64encode(token.encode()).decode()
+            req.add_header("Authorization", f"Basic {creds}")
+            req.add_header("User-Agent", "WG-Dashboard/1.0 python-urllib")
+            resp = urllib.request.urlopen(req, timeout=10).read().decode().strip()
+            if resp.startswith("good") or resp.startswith("nochg"):
+                return jsonify({"ok": True, "response": resp})
+            return jsonify({"error": f"Provider returned: {resp}"}), 400
+        elif provider == "custom":
+            if not custom_url:
+                return jsonify({"error": "Custom URL is required"}), 400
+            url = custom_url.replace("{ip}", current_ip)
+            resp = urllib.request.urlopen(url, timeout=10).read().decode().strip()
+            return jsonify({"ok": True, "response": resp})
+        return jsonify({"error": "Unknown provider"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
 @app.route("/api/health")
 def api_health():
     iface,rx,tx=read_bytes()
@@ -2073,6 +2208,12 @@ def api_diag_last():
 
 @app.route("/api/diag/bg-notifications")
 def api_bg_notifications():
+    with _bg_lock:
+        return jsonify(list(_bg_notifications))
+
+@app.route("/api/diag/refresh", methods=["POST"])
+def api_diag_refresh():
+    _bg_run_port_check()
     with _bg_lock:
         return jsonify(list(_bg_notifications))
 

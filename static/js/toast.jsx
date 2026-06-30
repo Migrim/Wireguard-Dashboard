@@ -56,6 +56,7 @@
   // ── Single toast item ──────────────────────────────────────────────────────
   function ToastItem({ toast: t, onRemove }) {
     const [out, setOut] = _tS(false);
+    const [entered, setEntered] = _tS(false);
     const [pct, setPct] = _tS(100);
     // Stable mutable state lives in a ref to avoid stale closure issues
     const r = _tR({
@@ -63,9 +64,17 @@
       paused: false, exiting: false, timer: null,
     });
 
-    const itemRef = _tR(null);
-    const szRef   = _tR(null);
-    const icoRef  = _tR(null);
+    const itemRef    = _tR(null);
+    const szRef      = _tR(null);
+    const icoRef     = _tR(null);
+    const leaveTimer = _tR(null);
+
+    // Trigger entry transition after first layout so the browser computes the
+    // correct size while the element is still invisible (opacity:0 via CSS).
+    _tL(() => {
+      const id = requestAnimationFrame(() => setEntered(true));
+      return () => cancelAnimationFrame(id);
+    }, []);
 
     _tE(() => {
       if (!t._shakeAt) return;
@@ -86,6 +95,9 @@
       const newW = el.offsetWidth;
       const newH = el.offsetHeight;
       if (oldW === newW && oldH === newH) return;
+      // Lock text to prevent reflow while width animates between sizes
+      const txtEl = el.querySelector('.toast-txt');
+      if (txtEl) { txtEl.style.whiteSpace = 'nowrap'; txtEl.style.overflow = 'hidden'; }
       el.style.transition = 'none';
       el.style.width  = oldW + 'px';
       el.style.height = oldH + 'px';
@@ -98,6 +110,7 @@
         el.style.width = '';
         el.style.height = '';
         el.style.transition = '';
+        if (txtEl) { txtEl.style.whiteSpace = ''; txtEl.style.overflow = ''; }
       }, 300);
       return () => clearTimeout(id);
     }, [t.type, t.title, t.desc]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -111,6 +124,7 @@
     const exitRef = _tR(null);
     exitRef.current = () => {
       if (r.current.exiting) return;
+      clearTimeout(leaveTimer.current);
       r.current.exiting = true;
       clearInterval(r.current.timer);
       setOut(true);
@@ -139,6 +153,8 @@
     }, [t.type, t.duration]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const pause = () => {
+      clearTimeout(leaveTimer.current);
+      leaveTimer.current = null;
       if (r.current.paused) return;
       if (isFinite(r.current.duration)) {
         r.current.remaining = Math.max(0, r.current.remaining - (Date.now() - r.current.start));
@@ -147,14 +163,17 @@
     };
     const resume = () => {
       if (!r.current.paused) return;
-      r.current.paused = false;
-      r.current.start = Date.now();
+      leaveTimer.current = setTimeout(() => {
+        leaveTimer.current = null;
+        r.current.paused = false;
+        r.current.start = Date.now();
+      }, 300);
     };
 
     return (
       <div
         ref={itemRef}
-        className={`toast-item toast-${t.type}${out ? ' t-out' : ''}`}
+        className={`toast-item toast-${t.type}${entered ? ' t-in' : ''}${out ? ' t-out' : ''}`}
         onMouseEnter={pause}
         onMouseLeave={resume}
         role="status"
@@ -164,6 +183,16 @@
           <span ref={icoRef} className={`toast-ico toast-ico-${t.type}`}><ToastIcon type={t.type} /></span>
           <div className="toast-txt">
             <div className="toast-ttl">{t.title}</div>
+            {t.stats && (
+              <div className="toast-stats">
+                {t.stats.map((s, i) => (
+                  <span key={i} className="toast-stat">
+                    <span className="toast-stat-dot" style={{ background: s.color }} />
+                    {s.count} {s.label}
+                  </span>
+                ))}
+              </div>
+            )}
             {t.desc && <div className="toast-dsc">{t.desc}</div>}
           </div>
           <button className="toast-x" onClick={() => exitRef.current()} aria-label="Dismiss notification">
@@ -172,6 +201,14 @@
             </svg>
           </button>
         </div>
+        {t.action && (
+          <div className="toast-action-row">
+            <button className="toast-action-btn" onClick={() => { exitRef.current(); t.action.onClick(); }}>
+              {t.action.icon && <span className="toast-action-icon">{t.action.icon}</span>}
+              {t.action.label}
+            </button>
+          </div>
+        )}
         {t.type === 'confirm' && (
           <div className="toast-actions">
             <button className="toast-act toast-act-cancel" onClick={() => exitRef.current()}>

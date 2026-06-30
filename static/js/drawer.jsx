@@ -390,7 +390,7 @@ function NotifIcon({ level }) {
   return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 11v5M12 8h.01"/></svg>;
 }
 
-function LogsPanel({ logs, notifications = [], onExpand, onDismiss = () => {} }) {
+function LogsPanel({ logs, notifications = [], onExpand, onDismiss = () => {}, serviceActive = false, ifaceName = 'wg0' }) {
   const scrollRef = _useRef(null);
   const [idx, setIdx] = _useState(0);
   const [leaving, setLeaving] = _useState(false);
@@ -429,51 +429,56 @@ function LogsPanel({ logs, notifications = [], onExpand, onDismiss = () => {} })
   return (
     <div className="logs-card logs-card-clickable" onClick={onExpand} role="button" tabIndex={0}>
       <div className="logs-split">
-        <div className={`notif-col${notifsCollapsed ? ' is-collapsed' : ''}`} onClick={e => e.stopPropagation()}>
-          <div className="notif-head">
+        <div className="notif-panel" onClick={e => e.stopPropagation()}>
+          <div className="notif-head" onClick={toggleNotifs} role="button" tabIndex={0} title={notifsCollapsed ? 'Show notifications' : 'Hide notifications'}>
             <span className="section-label">NOTIFICATIONS</span>
-            {visible.length > 0 && <span className="notif-count">{visible.length}</span>}
+            <div className="notif-head-end">
+              {visible.length > 0 && <span className="notif-count">{visible.length}</span>}
+              {(() => {
+                const lvl = visible.some(n => n.level === 'error') ? 'error'
+                  : visible.some(n => n.level === 'warn') ? 'warn'
+                  : visible.length > 0 ? 'info' : null;
+                return lvl && <span className={`notif-indicator notif-indicator-${lvl}`} />;
+              })()}
+              <svg className={`notif-arrow${notifsCollapsed ? ' is-collapsed' : ''}`} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M18 15l-6-6-6 6"/>
+              </svg>
+            </div>
           </div>
-          <div className="notif-body">
-            {current ? (
-              <div className={`notif-item notif-${current.level}${leaving ? ' is-leaving' : ''}`}>
-                <span className="notif-icon"><NotifIcon level={current.level} /></span>
-                <div className="notif-text">
-                  <div className="notif-title">{current.title}</div>
-                  <div className="notif-desc">{current.desc}</div>
-                </div>
-                <button
-                  className="notif-dismiss"
-                  aria-label="Dismiss notification"
-                  onClick={e => { e.stopPropagation(); onDismiss(current.key); }}
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                </button>
+          <div className={`notif-col${notifsCollapsed ? ' is-collapsed' : ''}`}>
+            <div className="notif-col-inner">
+              <div className="notif-body">
+                {current ? (
+                  <div className={`notif-item notif-${current.level}${leaving ? ' is-leaving' : ''}`}>
+                    <span className="notif-icon"><NotifIcon level={current.level} /></span>
+                    <div className="notif-text">
+                      <div className="notif-title">{current.title}</div>
+                      <div className="notif-desc">{current.desc}</div>
+                    </div>
+                    <button
+                      className="notif-dismiss"
+                      aria-label="Dismiss notification"
+                      onClick={e => { e.stopPropagation(); onDismiss(current.key); }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="notif-empty">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/><line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" strokeWidth="1.5"/></svg>
+                    No notifications
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="notif-empty">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/><line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" strokeWidth="1.5"/></svg>
-                No notifications
-              </div>
-            )}
+            </div>
           </div>
-        </div>
-
-        <div className="logs-sep" onClick={toggleNotifs} title={notifsCollapsed ? 'Show notifications' : 'Hide notifications'}>
-          <div className="logs-sep-line" />
-          <div className="logs-sep-btn">
-            <svg className={`logs-sep-arrow${notifsCollapsed ? ' is-collapsed' : ''}`} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M18 15l-6-6-6 6"/>
-            </svg>
-          </div>
-          <div className="logs-sep-line" />
         </div>
 
         <div className="logs-col">
           <div className="logs-head">
             <span className="section-label">LIVE LOGS</span>
             <div className="log-meta">
-              <span className="pulse-dot" /> wg0
+              <span className={serviceActive ? 'pulse-dot' : 'pulse-dot pulse-dot-off'} /> {ifaceName}
               <span className="log-expand-hint">expand →</span>
             </div>
           </div>
@@ -1021,20 +1026,43 @@ function PortCheckDrawer({ peers, onClose }) {
   const [done, setDone] = _useState(false);
   const [running, setRunning] = _useState(false);
   const [apiError, setApiError] = _useState(null);
+  const [hidden, setHidden] = _useState(false);
+  const bgToastRef     = _useRef(null);
+  const closedRef      = _useRef(false);
+  const runningRef     = _useRef(false);
+  const cleanupTimerRef = _useRef(null);
+
+  const handleClose = () => {
+    if (runningRef.current) {
+      closedRef.current = true;
+      setHidden(true);
+      bgToastRef.current = window.WG.toast?.loading('Port check in progress…');
+    } else {
+      onClose();
+    }
+  };
 
   _useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e) => { if (e.key === 'Escape') handleClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, []);
 
   const run = async () => {
+    // Reset background-run state so re-runs behave like a fresh open
+    closedRef.current = false;
+    clearTimeout(cleanupTimerRef.current);
+    bgToastRef.current?.dismiss();
+    bgToastRef.current = null;
+
+    runningRef.current = true;
     setRunning(true);
     setDone(false);
     setResults({});
     setCurrent(0);
     setApiError(null);
 
+    let stepResults = {};
     try {
       // Fetch all diagnostic data in parallel
       const [status, diag, health] = await Promise.all([
@@ -1048,7 +1076,7 @@ function PortCheckDrawer({ peers, onClose }) {
 
       const connectedPeers = peers.filter(p => p.status === 'connected').length;
 
-      const stepResults = {
+      stepResults = {
         'iface':     (status && status.service && status.service.active) ? 'ok' : 'fail',
         'listen':    (portStatus && portStatus.listening) ? 'ok' : 'fail',
         'fw-in':     (portStatus && portStatus.ufw_allowed) ? 'ok' : 'warn',
@@ -1058,32 +1086,74 @@ function PortCheckDrawer({ peers, onClose }) {
         'handshake': connectedPeers > 0 ? 'ok' : (peers.length > 0 ? 'warn' : 'ok'),
       };
 
-      // Reveal one by one with animation
-      for (let i = 0; i < steps.length; i++) {
-        setCurrent(i);
-        await new Promise(r => setTimeout(r, 350 + Math.random() * 300));
-        setResults(prev => ({ ...prev, [steps[i].id]: stepResults[steps[i].id] }));
+      // Reveal one by one with animation (skip if hidden in background)
+      if (!closedRef.current) {
+        for (let i = 0; i < steps.length; i++) {
+          setCurrent(i);
+          await new Promise(r => setTimeout(r, 350 + Math.random() * 300));
+          setResults(prev => ({ ...prev, [steps[i].id]: stepResults[steps[i].id] }));
+        }
       }
     } catch (e) {
       setApiError(e.message || 'API unreachable');
-      steps.forEach(s => setResults(prev => ({ ...prev, [s.id]: 'fail' })));
+      steps.forEach(s => { stepResults[s.id] = 'fail'; });
     }
 
+    runningRef.current = false;
     setRunning(false);
     setDone(true);
     setCurrent(-1);
+    window.WG.apiCall('/api/diag/refresh', { method: 'POST', silent: true }).catch(() => {});
+
+    if (closedRef.current && bgToastRef.current) {
+      const vals = Object.values(stepResults);
+      const f = vals.filter(v => v === 'fail').length;
+      const w = vals.filter(v => v === 'warn').length;
+      const p = vals.filter(v => v === 'ok').length;
+
+      const DURATION = 8000;
+      const stats = [
+        f > 0 && { color: 'var(--danger)', count: f, label: f === 1 ? 'failed'  : 'failed'  },
+        w > 0 && { color: 'var(--warn)',   count: w, label: w === 1 ? 'warning' : 'warnings' },
+        p > 0 && { color: 'var(--success)',count: p, label: p === 1 ? 'passed'  : 'passed'  },
+      ].filter(Boolean);
+
+      const viewResultsIcon = <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>;
+
+      bgToastRef.current.update({
+        type: f > 0 ? 'error' : w > 0 ? 'warning' : 'success',
+        title: 'Port check complete',
+        stats,
+        action: {
+          label: 'View results',
+          icon: viewResultsIcon,
+          onClick: () => {
+            clearTimeout(cleanupTimerRef.current);
+            setHidden(false);
+          },
+        },
+        duration: DURATION,
+      });
+
+      cleanupTimerRef.current = setTimeout(onClose, DURATION + 300);
+    }
   };
 
-  _useEffect(() => { run(); }, []);
+  _useEffect(() => {
+    run();
+    return () => { clearTimeout(cleanupTimerRef.current); bgToastRef.current?.dismiss(); };
+  }, []);
 
   const passed = Object.values(results).filter(v => v === 'ok').length;
   const warned = Object.values(results).filter(v => v === 'warn').length;
   const failed = Object.values(results).filter(v => v === 'fail').length;
   const progress = current === -1 && done ? 1 : current === -1 ? 0 : (current + 0.5) / steps.length;
 
+  if (hidden) return null;
+
   return (
     <>
-      <div className="drawer-scrim" onClick={onClose} />
+      <div className="drawer-scrim" onClick={handleClose} />
       <aside className="drawer" role="dialog" aria-label="Port check">
         <header className="drawer-head">
           <div className="drawer-head-left">
@@ -1097,7 +1167,7 @@ function PortCheckDrawer({ peers, onClose }) {
               </div>
             </div>
           </div>
-          <button className="icon-btn" onClick={onClose} aria-label="Close">
+          <button className="icon-btn" onClick={handleClose} aria-label="Close">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 6l12 12M18 6L6 18"/></svg>
           </button>
         </header>

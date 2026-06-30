@@ -198,6 +198,10 @@ body {
   70% { box-shadow: 0 0 0 4px transparent; }
   100% { box-shadow: 0 0 0 0 transparent; }
 }
+@keyframes notif-pulse {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0.15; }
+}
 
 .topbar-center { display: flex; justify-content: center; }
 .search {
@@ -414,6 +418,7 @@ html.theme-switching .theme-toggle-icon {
   background: var(--success);
   animation: pulse 1.6s infinite;
 }
+.pulse-dot-off { background: var(--muted); animation: none; }
 .kpi-body {
   display: flex; align-items: flex-end; justify-content: space-between;
   gap: 12px;
@@ -507,18 +512,40 @@ html.theme-switching .theme-toggle-icon {
 
 /* Notifications split in LogsPanel */
 .logs-split { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.notif-col {
-  flex-shrink: 0; display: flex; flex-direction: column; min-width: 0;
-  overflow: hidden;
-  max-height: 200px;
-  transition: max-height 0.32s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.28s ease;
-  opacity: 1;
+.notif-panel { flex-shrink: 0; border-bottom: 1px solid var(--border); }
+.notif-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 16px;
+  cursor: pointer; user-select: none;
+  transition: background 0.15s;
 }
-.notif-col.is-collapsed { max-height: 0; opacity: 0; }
-.notif-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px 8px; }
+.notif-head:hover { background: var(--bg-2); }
+.notif-head-end { display: flex; align-items: center; gap: 8px; }
+.notif-arrow {
+  color: var(--muted);
+  display: block;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), color 0.15s;
+  flex-shrink: 0;
+}
+.notif-head:hover .notif-arrow { color: var(--accent); }
+.notif-arrow.is-collapsed { transform: rotate(180deg); }
+.notif-indicator {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+  animation: notif-pulse 1.8s infinite;
+}
+.notif-indicator-error { background: var(--danger); color: var(--danger); }
+.notif-indicator-warn  { background: var(--warn);   color: var(--warn); }
+.notif-indicator-info  { background: var(--accent-2); color: var(--accent-2); }
+.notif-col {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.notif-col.is-collapsed { grid-template-rows: 0fr; }
+.notif-col-inner { overflow: hidden; min-height: 0; }
 .notif-count { font-family: var(--mono); font-size: 10px; color: var(--muted); line-height: 1.5; }
-.notif-body { padding: 2px 16px 12px; display: flex; flex-direction: column; flex: 1; }
-.notif-empty { display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 6px; color: var(--muted); font-size: 12px; font-style: italic; padding: 10px 0 14px; flex: 1; }
+.notif-body { padding: 8px 16px 10px; display: flex; flex-direction: column; flex: 1; }
+.notif-empty { display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 6px; color: var(--muted); font-size: 12px; font-style: italic; padding: 8px 0 10px; flex: 1; }
 .notif-item {
   display: flex; gap: 9px; align-items: flex-start;
   background: var(--bg-2); border: 1px solid var(--border);
@@ -540,30 +567,6 @@ html.theme-switching .theme-toggle-icon {
   border-radius: 5px; transition: color 0.15s;
 }
 .notif-dismiss:hover { color: var(--ink); }
-.logs-sep {
-  flex-shrink: 0; display: flex; align-items: center;
-  margin: 0 16px; gap: 10px; cursor: pointer;
-  padding: 5px 0;
-  user-select: none;
-}
-.logs-sep-line { flex: 1; height: 1px; background: var(--border); }
-.logs-sep-btn {
-  display: grid; place-items: center;
-  width: 22px; height: 22px;
-  border-radius: 50%;
-  background: var(--card);
-  border: 1px solid var(--border-strong);
-  color: var(--muted);
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-  flex-shrink: 0;
-  box-shadow: var(--shadow-sm);
-}
-.logs-sep:hover .logs-sep-btn { background: var(--card-raised); color: var(--accent); border-color: var(--accent); }
-.logs-sep-arrow {
-  transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
-  display: block;
-}
-.logs-sep-arrow.is-collapsed { transform: rotate(180deg); }
 .logs-col { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 
 /* Per-peer budget rows */
@@ -2854,21 +2857,28 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
   background: var(--card-raised);
   border: 1px solid var(--border-strong);
   border-radius: 12px;
-  overflow: hidden;
+  /* clip instead of hidden — avoids creating a Block Formatting Context,
+     which causes a two-pass flex layout that makes text briefly wrap */
+  overflow: clip;
   box-shadow: var(--shadow-lg);
-  animation: toastIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+  opacity: 0;
+  transform: translateY(6px) scale(0.98);
   will-change: transform, opacity;
+  backface-visibility: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+.toast-item.t-in {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition: opacity 0.28s cubic-bezier(0.16, 1, 0.3, 1), transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .toast-item.t-out {
-  animation: toastOut 0.24s ease forwards;
-}
-@keyframes toastIn {
-  from { opacity: 0; transform: translateX(calc(-100% - 28px)) scale(0.92); }
-  to   { opacity: 1; transform: translateX(0) scale(1); }
+  animation: toastOut 0.22s ease forwards;
+  transition: none !important;
 }
 @keyframes toastOut {
-  from { opacity: 1; transform: translateX(0) scale(1); }
-  to   { opacity: 0; transform: translateX(calc(-100% - 28px)) scale(0.92); }
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(4px) scale(0.97); }
 }
 
 .toast-row {
@@ -2914,9 +2924,23 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
   animation: spin 0.75s linear infinite;
 }
 
-.toast-txt  { flex: 1; min-width: 0; }
-.toast-ttl  { font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.35; }
+.toast-txt  { flex: auto; min-width: 0; }
+.toast-ttl  { font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .toast-dsc  { font-size: 11.5px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+.toast-stats { display: flex; gap: 10px; margin-top: 5px; flex-wrap: wrap; }
+.toast-stat  { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--ink-2); }
+.toast-stat-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.toast-action-row { padding: 0 11px 10px 42px; }
+.toast-action-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 6px;
+  font-size: 11.5px; font-weight: 600; cursor: pointer;
+  background: var(--bg-2); color: var(--ink);
+  border: 1px solid var(--border);
+  transition: background 0.12s, border-color 0.12s;
+}
+.toast-action-btn:hover { background: var(--card-raised); border-color: var(--border-strong); }
+.toast-action-icon { display: grid; place-items: center; }
 
 .toast-x {
   flex-shrink: 0;
@@ -2959,7 +2983,7 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
 .toast-act-ok:hover { filter: brightness(0.88); }
 
 /* Progress bar (shows remaining auto-dismiss time) */
-.toast-bar { height: 2px; background: color-mix(in oklab, var(--border) 70%, transparent); }
+.toast-bar { height: 2px; background: color-mix(in oklab, var(--border) 70%, transparent); border-radius: 0 0 12px 12px; overflow: hidden; }
 .toast-bar-fill {
   height: 100%;
   background: var(--accent);
@@ -2983,6 +3007,7 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
 <script type="text/babel" src="{{ url_for('static', filename='js/trafficmode.jsx') }}?v={{ app_version }}"></script>
 <script type="text/babel" src="{{ url_for('static', filename='js/addpeer.jsx') }}?v={{ app_version }}"></script>
 <script type="text/babel" src="{{ url_for('static', filename='js/peersettings.jsx') }}?v={{ app_version }}"></script>
+<script type="text/babel" src="{{ url_for('static', filename='js/dyndns.jsx') }}?v={{ app_version }}"></script>
 <script type="text/babel" src="{{ url_for('static', filename='js/app.jsx') }}?v={{ app_version }}"></script>
 <script type="text/babel" src="{{ url_for('static', filename='js/toast.jsx') }}?v={{ app_version }}"></script>
 
