@@ -92,14 +92,32 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
       // the last sample's ts rather than the client clock.
       let nowMs;
       if (smoothRef.current) {
-        const lastTs = all.length > 0 ? all[all.length - 1].ts : Date.now();
-        if (nowMsRef.current === null) nowMsRef.current = lastTs;
-        // Clamp forward drift to the same look-ahead window used for sampleCeil below,
-        // so a stalled poll (backgrounded tab, slow network) never lets nowMs run far
-        // ahead of real data — this avoids the hard "reset" jump that used to snap the
-        // window backward once drift exceeded 10 s, which was visible to the user.
-        nowMsRef.current = Math.min(nowMsRef.current + dt, lastTs + 6000);
-        nowMs = nowMsRef.current;
+        if (all.length === 0) {
+          // No data yet (history still loading / fresh server) — stay unanchored.
+          // Anchoring to Date.now() here would leave zero lag behind the data, so
+          // every later sample would land inside the visible window and pop into
+          // view instead of scrolling in from the right.
+          nowMsRef.current = null;
+          nowMs = Date.now();
+        } else {
+          const lastTs = all[all.length - 1].ts;
+          // Anchor roughly one sample gap behind the newest sample so arrivals land
+          // off-screen right (past the clip edge) and scroll into view smoothly.
+          const gap  = all.length > 1 ? Math.min(5000, Math.max(800, lastTs - all[all.length - 2].ts)) : 1500;
+          const lead = gap + 300;
+          if (nowMsRef.current === null || lastTs - nowMsRef.current > lead + 10000) {
+            // First anchor, or the data jumped far ahead of the window (e.g. stale
+            // history replaced by live samples after reopening the page) — since
+            // nowMs only advances at 1× real time it could never catch up; snap it.
+            nowMsRef.current = lastTs - lead;
+          }
+          // Clamp forward drift to the same look-ahead window used for sampleCeil below,
+          // so a stalled poll (backgrounded tab, slow network) never lets nowMs run far
+          // ahead of real data — this avoids the hard "reset" jump that used to snap the
+          // window backward once drift exceeded 10 s, which was visible to the user.
+          nowMsRef.current = Math.min(nowMsRef.current + dt, lastTs + 6000);
+          nowMs = nowMsRef.current;
+        }
       } else {
         nowMsRef.current = null; // reset so re-enabling smooth mode re-anchors
         nowMs = all.length > 0 ? all[all.length - 1].ts : Date.now();
