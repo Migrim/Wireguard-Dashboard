@@ -828,7 +828,7 @@ function KPIServiceControl({ serviceActive, startedAt, servicePort, connectedCou
 }
 
 function KPIThroughput({ currentRx, currentTx, dataIn, dataOut, smooth = false }) {
-  const miniData = dataIn.slice(-20).map((v, i) => v + (dataOut[dataIn.length - 20 + i] || 0));
+  const miniData = dataIn.map((v, i) => v + (dataOut[i] || 0));
   const total = currentRx + currentTx;
   return (
     <div className="kpi-tile">
@@ -841,7 +841,7 @@ function KPIThroughput({ currentRx, currentTx, dataIn, dataOut, smooth = false }
           <span className="kpi-unit">{window.WG.formatRate(total).split(' ')[1]}</span>
         </div>
         <div className="kpi-mini">
-          <MiniBars data={miniData} width={140} height={32} color="var(--accent)" smooth={smooth} />
+          <MiniBars data={miniData} width={140} height={32} color="var(--accent)" smooth={smooth} slots={20} />
         </div>
       </div>
       <div className="kpi-foot">

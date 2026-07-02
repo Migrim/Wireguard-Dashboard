@@ -387,13 +387,17 @@ function Sparkline({ data, width = 120, height = 32, color = 'var(--accent)', ac
 // ============================================================
 // MiniBar — per-KPI live mini chart (bars)
 // ============================================================
-function MiniBars({ data, width = 140, height = 36, color = 'var(--accent)', smooth = false }) {
+function MiniBars({ data, width = 140, height = 36, color = 'var(--accent)', smooth = false, slots = 20 }) {
   const uid = useRef(`mb-${Math.random().toString(36).slice(2)}`).current;
-  const n = data.length;
-  const max = Math.max(...data, 0.01);
-  const barW = (width - (n - 1) * 2) / n;
-  // In smooth mode the bars keep their slots (no scroll); each slot's height
-  // eases toward the value that shifted into it, so new data grows in place.
+  // Fixed slot count: left-pad with zeros so the bar count never changes —
+  // values shift through the slots instead of new bars mounting.
+  const vals = data.length >= slots
+    ? data.slice(-slots)
+    : [...Array(slots - data.length).fill(0), ...data];
+  const max = Math.max(...vals, 0.01);
+  const barW = (width - (slots - 1) * 2) / slots;
+  // In smooth mode each slot's height eases toward the value that shifted
+  // into it, so the data appears to flow from bar to bar.
   const barStyle = smooth ? { transition: 'y 0.6s ease, height 0.6s ease' } : undefined;
   return (
     <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height, display: 'block' }}>
@@ -406,11 +410,11 @@ function MiniBars({ data, width = 140, height = 36, color = 'var(--accent)', smo
         </clipPath>
       </defs>
       <g clipPath={`url(#${uid})`}>
-        {data.map((v, i) => {
-          const h = (v / max) * (height - 4);
+        {vals.map((v, i) => {
+          const h = Math.max(1.5, (v / max) * (height - 4));
           const x = i * (barW + 2);
           const y = height - h - 2;
-          return <rect key={i} x={x} y={y} width={barW} height={h} fill={color} opacity={0.3 + 0.7 * (i / n)} rx="1" style={barStyle} />;
+          return <rect key={i} x={x} y={y} width={barW} height={h} fill={color} opacity={0.3 + 0.7 * (i / slots)} rx="1" style={barStyle} />;
         })}
       </g>
     </svg>
