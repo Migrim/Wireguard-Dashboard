@@ -336,6 +336,18 @@ def _bg_check_loop() -> None:
             pass
         time.sleep(_BG_INTERVAL)
 
+def _bg_retention_loop() -> None:
+    """Re-apply the saved journal retention so it acts as a policy, not a one-shot vacuum."""
+    time.sleep(_BG_INIT_DELAY)
+    while True:
+        try:
+            retention = str(_load_dash_settings().get("log_retention", ""))
+            if retention in {"1d", "7d", "30d"}:
+                _sudo(["/usr/bin/journalctl", f"--vacuum-time={retention}"])
+        except Exception:
+            app.logger.exception("bg_retention_failed")
+        time.sleep(6 * 3600)
+
 _BUDGET_ENFORCE_INTERVAL = int(os.environ.get("BUDGET_ENFORCE_INTERVAL", "60"))
 
 def _bg_budget_loop() -> None:
@@ -409,6 +421,53 @@ def _budget_alert_log_lines() -> List[Tuple[float, str]]:
 
 DASH_EVENTS_DB = os.environ.get("DASH_EVENTS_DB", os.path.join(WG_DIR, "dashboard_events.json"))
 _dash_events_lock = threading.Lock()
+DASH_SETTINGS_DB = os.environ.get("DASH_SETTINGS_DB", os.path.join(WG_DIR, "dashboard_settings.json"))
+_dash_settings_lock = threading.Lock()
+
+def _write_json_file_root(path: str, obj: Any) -> None:
+    """Atomic JSON write with sudo fallback for root-owned directories."""
+    import tempfile
+    fd, tmp_path = tempfile.mkstemp(prefix="dash-json.", suffix=".json.tmp", dir="/tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(obj, f)
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            os.replace(tmp_path, path)
+            return
+        except Exception:
+            pass
+        _sudo(["/usr/bin/install", "-m", "640", "-o", "root", "-g", "www-data", tmp_path, path])
+    finally:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except:
+            pass
+
+def _load_dash_settings() -> Dict[str, Any]:
+    try:
+        with open(DASH_SETTINGS_DB, "r", encoding="utf-8") as f:
+            s = json.load(f)
+    except FileNotFoundError:
+        return {}
+    except PermissionError:
+        out, rc = _sudo_cat(DASH_SETTINGS_DB)
+        if rc != 0 or not out:
+            return {}
+        try:
+            s = json.loads(out)
+        except Exception:
+            return {}
+    except Exception:
+        return {}
+    return s if isinstance(s, dict) else {}
+
+def _save_dash_setting(key: str, value: Any) -> None:
+    with _dash_settings_lock:
+        s = _load_dash_settings()
+        s[key] = value
+        _write_json_file_root(DASH_SETTINGS_DB, s)
 
 def _load_dash_events() -> List[Dict[str, Any]]:
     try:
@@ -436,24 +495,7 @@ def _log_dashboard_event(msg: str, level: str = "info") -> None:
             events = _load_dash_events()
             events.append({"ts": int(time.time()), "level": level if level in ("info", "warn", "error") else "info", "msg": str(msg)[:300]})
             del events[:-200]
-            import tempfile
-            fd, tmp_path = tempfile.mkstemp(prefix="dash-events.", suffix=".json.tmp", dir="/tmp")
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as f:
-                    json.dump(events, f)
-                try:
-                    os.makedirs(os.path.dirname(DASH_EVENTS_DB), exist_ok=True)
-                    os.replace(tmp_path, DASH_EVENTS_DB)
-                    return
-                except Exception:
-                    pass
-                _sudo(["/usr/bin/install", "-m", "640", "-o", "root", "-g", "www-data", tmp_path, DASH_EVENTS_DB])
-            finally:
-                try:
-                    if os.path.exists(tmp_path):
-                        os.remove(tmp_path)
-                except:
-                    pass
+            _write_json_file_root(DASH_EVENTS_DB, events)
     except Exception:
         app.logger.exception("dashboard_event_save_failed")
 
@@ -2239,18 +2281,24 @@ def api_logs():
         app.logger.exception("dashboard_log_merge_failed")
     return jsonify({"lines":lines,"verbose":verbose,"count":len(lines)})
 
-@app.route("/api/logs/retention",methods=["POST"])
+@app.route("/api/logs/retention",methods=["GET","POST"])
 def api_logs_retention():
+    if request.method=="GET":
+        saved=str(_load_dash_settings().get("log_retention","forever"))
+        return jsonify({"retention":saved if saved in {"1d","7d","30d","forever"} else "forever"})
     data=request.get_json(force=True,silent=True) or {}
     retention=str(data.get("retention","7d")).strip()
     if retention not in {"1d","7d","30d","forever"}:
         abort(400)
+    _save_dash_setting("log_retention",retention)
     if retention=="forever":
+        _log_dashboard_event("journal retention set to forever")
         return jsonify({"ok":True,"retention":retention,"out":"No vacuum needed"})
-    vacuum_map={"1d":"1d","7d":"7d","30d":"30d"}
-    o,c=_sudo(["/usr/bin/journalctl",f"--vacuum-time={vacuum_map[retention]}"])
+    o,c=_sudo(["/usr/bin/journalctl",f"--vacuum-time={retention}"])
     if c==0:
         _log_dashboard_event(f"journal retention set to {retention}")
+    else:
+        _log_dashboard_event(f"journal vacuum failed for retention {retention}","error")
     return jsonify({"ok":c==0,"retention":retention,"out":o})
 
 @app.route("/api/data-budget", methods=["GET", "POST"])
@@ -2965,6 +3013,7 @@ if os.environ.get("WERKZEUG_RUN_MAIN") != "false":
     threading.Thread(target=_bg_check_loop, daemon=True, name="bg-port-check").start()
     threading.Thread(target=_bg_budget_loop, daemon=True, name="bg-budget").start()
     threading.Thread(target=_bg_traffic_loop, daemon=True, name="bg-traffic").start()
+    threading.Thread(target=_bg_retention_loop, daemon=True, name="bg-retention").start()
 
 def create_app():
     return app

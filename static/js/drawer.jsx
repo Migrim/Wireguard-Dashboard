@@ -784,10 +784,10 @@ function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets
 // by level to match the dashboard (info blue, warn amber, error red)
 // ============================================================
 function buildLogsPdf(entries, meta = {}) {
-  const W = 595.28, H = 841.89, M = 40;              // A4 portrait, 40pt margins
-  const FS = 7.5, LH = 10.2, CW = FS * 0.6;          // Courier metrics
+  const W = 595.28, H = 841.89, M = 44;              // A4 portrait
+  const FS = 7.2, LH = 11.4, CW = FS * 0.6;          // Courier metrics
   const maxCols = Math.floor((W - 2 * M) / CW);
-  const headerH = 46, footerY = 24;
+  const headerH = 64, footerH = 34;
 
   const esc = s => s.replace(/[\\()]/g, m => '\\' + m);
   const UMAP = { '—': 151, '–': 150, '‘': 145, '’': 146, '“': 147, '”': 148, '•': 149, '…': 133 };
@@ -799,30 +799,59 @@ function buildLogsPdf(entries, meta = {}) {
     return c <= 255 ? ch : '?';
   }).join('');
 
-  const LEVEL_COLOR = { info: '0.25 0.50 0.85', warn: '0.83 0.49 0.05', error: '0.84 0.19 0.19' };
-  const MSG_COLOR   = { info: '0.15 0.17 0.21', warn: '0.62 0.40 0.07', error: '0.70 0.15 0.15' };
-  const TIME_COLOR  = '0.55 0.55 0.55';
+  const C = {
+    title: '0.10 0.12 0.16',
+    sub: '0.46 0.48 0.53',
+    time: '0.52 0.55 0.60',
+    rule: '0.86 0.87 0.89',
+    foot: '0.58 0.60 0.64',
+    level: { info: '0.20 0.44 0.83', warn: '0.72 0.42 0.02', error: '0.79 0.15 0.15' },
+    chip:  { info: '0.89 0.93 0.99', warn: '0.99 0.94 0.85', error: '0.99 0.91 0.91' },
+    msg:   { info: '0.16 0.18 0.22', warn: '0.54 0.36 0.05', error: '0.63 0.13 0.13' },
+  };
 
-  // Flatten entries into visual rows of positioned, colored segments,
-  // wrapping long messages with a hanging indent.
-  const indent = 15; // "HH:MM:SS LEVEL "
-  const msgCols = Math.max(20, maxCols - indent);
+  const pad2 = n => String(n).padStart(2, '0');
+  const fmtTs = t => {
+    const d = new Date(t);
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+  };
+
+  // Column layout in character units: date+time | level chip | message
+  const lvlX = 20.5;
+  const msgX = lvlX + 8;
+  const msgCols = Math.max(20, Math.floor(maxCols - msgX));
+
+  // Flatten entries into rows of colored segments; wrap with hanging indent.
   const rows = [];
   entries.forEach(l => {
-    const ts = new Date(l.t).toTimeString().slice(0, 8);
-    const lvl = String(l.level || 'info').toUpperCase().padEnd(5).slice(0, 5);
-    const lc = LEVEL_COLOR[l.level] || LEVEL_COLOR.info;
-    const mc = MSG_COLOR[l.level] || MSG_COLOR.info;
-    const msg = enc(l.msg || '');
-    for (let i = 0; i < msg.length || i === 0; i += msgCols) {
-      const chunk = msg.slice(i, i + msgCols);
-      if (i === 0) rows.push([{ x: 0, text: ts, color: TIME_COLOR }, { x: 9, text: lvl, color: lc }, { x: indent, text: chunk, color: mc }]);
-      else rows.push([{ x: indent, text: chunk, color: mc }]);
-    }
+    const lv = C.level[l.level] ? l.level : 'info';
+    let rest = enc(l.msg || '');
+    let first = true;
+    do {
+      let chunk = rest.slice(0, msgCols);
+      if (rest.length > msgCols) {
+        const sp = chunk.lastIndexOf(' ');
+        if (sp > msgCols * 0.6) chunk = chunk.slice(0, sp);
+      }
+      rest = rest.slice(chunk.length).replace(/^ +/, '');
+      if (first) {
+        rows.push({
+          chip: lv,
+          segs: [
+            { x: 0, text: fmtTs(l.t), color: C.time },
+            { x: lvlX + 0.6, text: lv.toUpperCase(), color: C.level[lv] },
+            { x: msgX, text: chunk, color: C.msg[lv] },
+          ],
+        });
+        first = false;
+      } else {
+        rows.push({ segs: [{ x: msgX, text: chunk, color: C.msg[lv] }] });
+      }
+    } while (rest.length);
   });
 
-  const capFirst = Math.floor((H - M - headerH - footerY - 10) / LH);
-  const capRest = Math.floor((H - 2 * M - footerY + 10) / LH);
+  const capFirst = Math.floor((H - M - headerH - footerH) / LH);
+  const capRest = Math.floor((H - M - footerH - M + 6) / LH);
   const pages = [];
   let cur = [];
   rows.forEach(r => {
@@ -832,25 +861,36 @@ function buildLogsPdf(entries, meta = {}) {
   pages.push(cur);
 
   const nPages = pages.length;
+  const footLeft = enc(`${meta.title || 'WireGuard logs'} · ${fmtTs(Date.now()).slice(0, 10)}`);
   const streams = pages.map((pageRows, pi) => {
     let s = '';
     let y;
     if (pi === 0) {
-      s += `BT /F2 13 Tf 0.10 0.12 0.16 rg 1 0 0 1 ${M} ${(H - M - 8).toFixed(2)} Tm (${esc(enc(meta.title || 'WireGuard logs'))}) Tj ET\n`;
-      if (meta.sub) s += `BT /F1 7.5 Tf 0.45 0.45 0.45 rg 1 0 0 1 ${M} ${(H - M - 22).toFixed(2)} Tm (${esc(enc(meta.sub))}) Tj ET\n`;
+      s += `BT /F2 14 Tf ${C.title} rg 1 0 0 1 ${M} ${(H - M - 10).toFixed(2)} Tm (${esc(enc(meta.title || 'WireGuard logs'))}) Tj ET\n`;
+      if (meta.sub) s += `BT /F1 7.5 Tf ${C.sub} rg 1 0 0 1 ${M} ${(H - M - 25).toFixed(2)} Tm (${esc(enc(meta.sub))}) Tj ET\n`;
+      s += `${C.rule} rg ${M} ${(H - M - 36).toFixed(2)} ${(W - 2 * M).toFixed(2)} 0.8 re f\n`;
       y = H - M - headerH;
     } else {
       y = H - M;
     }
-    s += `BT /F1 ${FS} Tf\n`;
     pageRows.forEach(r => {
-      r.forEach(seg => {
+      if (r.chip) {
+        const label = r.chip.toUpperCase();
+        const rx = M + lvlX * CW;
+        const rw = (label.length + 1.2) * CW;
+        s += `${C.chip[r.chip]} rg ${rx.toFixed(2)} ${(y - 2.2).toFixed(2)} ${rw.toFixed(2)} ${(FS + 3.6).toFixed(2)} re f\n`;
+      }
+      s += `BT /F1 ${FS} Tf\n`;
+      r.segs.forEach(seg => {
         s += `1 0 0 1 ${(M + seg.x * CW).toFixed(2)} ${y.toFixed(2)} Tm ${seg.color} rg (${esc(seg.text)}) Tj\n`;
       });
+      s += 'ET\n';
       y -= LH;
     });
-    s += 'ET\n';
-    s += `BT /F1 7 Tf 0.6 0.6 0.6 rg 1 0 0 1 ${(W / 2 - 22).toFixed(2)} ${footerY} Tm (Page ${pi + 1} of ${nPages}) Tj ET\n`;
+    const pageLbl = `Page ${pi + 1} of ${nPages}`;
+    s += `${C.rule} rg ${M} ${(footerH - 4).toFixed(2)} ${(W - 2 * M).toFixed(2)} 0.6 re f\n`;
+    s += `BT /F1 7 Tf ${C.foot} rg 1 0 0 1 ${M} ${(footerH - 14).toFixed(2)} Tm (${esc(footLeft)}) Tj ET\n`;
+    s += `BT /F1 7 Tf ${C.foot} rg 1 0 0 1 ${(W - M - pageLbl.length * 7 * 0.6).toFixed(2)} ${(footerH - 14).toFixed(2)} Tm (${esc(pageLbl)}) Tj ET\n`;
     return s;
   });
 
@@ -886,9 +926,8 @@ function LogsDrawer({ alerts, onClose, verbose, setVerbose, onDismiss }) {
   const [levelFilter, setLevelFilter] = _useState('all');
   const [search, setSearch] = _useState('');
   const [autoScroll, setAutoScroll] = _useState(true);
-  const [retention, setRetention] = _useState('7d');
+  const [retention, setRetention] = _useState('forever');
   const [retentionSaving, setRetentionSaving] = _useState(false);
-  const [retentionMsg, setRetentionMsg] = _useState('');
   const [localLogs, setLocalLogs] = _useState([]);
   const [loading, setLoading] = _useState(true);
   const streamRef = _useRef(null);
@@ -936,19 +975,27 @@ function LogsDrawer({ alerts, onClose, verbose, setVerbose, onDismiss }) {
     wasAtBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
   };
 
+  // Load persisted retention setting
+  _useEffect(() => {
+    window.WG.apiCall('/api/logs/retention', { silent: true })
+      .then(r => { if (r.retention) setRetention(r.retention); })
+      .catch(() => {});
+  }, []);
+
   const saveRetention = async (val) => {
+    const prev = retention;
     setRetention(val);
-    if (val === 'forever') { setRetentionMsg('Retention set to forever'); return; }
     setRetentionSaving(true);
-    setRetentionMsg('');
     try {
       const r = await window.WG.apiCall('/api/logs/retention', { silent: true, method: 'POST', body: JSON.stringify({ retention: val }) });
-      setRetentionMsg(r.ok ? `Vacuumed journal (kept last ${val})` : 'Vacuum failed — check server logs');
+      if (val === 'forever') window.WG.toast?.success?.('Retention saved', 'Journal entries are kept forever');
+      else if (r.ok) window.WG.toast?.success?.('Retention saved', `Journal vacuumed — kept last ${val}, re-applied every 6 h`);
+      else window.WG.toast?.error?.('Vacuum failed', 'Setting saved, but journalctl vacuum failed — check server logs');
     } catch (e) {
-      setRetentionMsg('Error: ' + (e.message || 'API unreachable'));
+      setRetention(prev);
+      window.WG.toast?.error?.('Retention not saved', e.message || 'API unreachable');
     } finally {
       setRetentionSaving(false);
-      setTimeout(() => setRetentionMsg(''), 4000);
     }
   };
 
@@ -1112,10 +1159,7 @@ function LogsDrawer({ alerts, onClose, verbose, setVerbose, onDismiss }) {
               <div className="setting-row">
                 <div>
                   <div className="setting-title">Retention</div>
-                  <div className="setting-desc">
-                    Vacuum journal on disk — removes entries older than the selected period
-                    {retentionMsg && <span style={{ display: 'block', marginTop: 3, color: retentionMsg.startsWith('Error') ? 'var(--danger)' : 'var(--accent-2)', fontFamily: 'var(--mono)', fontSize: 10 }}>{retentionMsg}</span>}
-                  </div>
+                  <div className="setting-desc">Removes journal entries older than the selected period — applied now and re-applied periodically</div>
                 </div>
                 <div className="setting-control">
                   <select className="select-input" value={retention} disabled={retentionSaving} onChange={e => saveRetention(e.target.value)}>
