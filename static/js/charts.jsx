@@ -38,6 +38,7 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
   const dotInYRef     = useRef(null);
   const dotOutYRef    = useRef(null);
   const animNiceMaxRef = useRef(null);
+  const animRangeRef  = useRef(null);
   const rafRef        = useRef(null);
   const nowMsRef      = useRef(null);
 
@@ -65,20 +66,19 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
   useEffect(() => {
     let lastTime = performance.now();
 
-    const RANGE_LABELS = {
-      '10s': ['-10s', '-5s', 'now'],
-      '30s': ['-30s', '-15s', 'now'],
-      '1m':  ['-1m', '-30s', 'now'],
-      '5m':  ['-5m', '-2.5m', 'now'],
-      '1h':  ['-1h', '-30m', 'now'],
-      '24h': ['-24h', '-12h', 'now'],
+    const fmtDur = (ms) => {
+      const s = ms / 1000;
+      if (s < 60) return `${Math.round(s)}s`;
+      const m = s / 60;
+      if (m < 60) return `${Number(m.toFixed(m < 10 ? 1 : 0))}m`;
+      return `${Number((m / 60).toFixed(1))}h`;
     };
 
     const tick = (now) => {
       const dt       = Math.min(now - lastTime, 100);
       lastTime       = now;
       const W        = widthRef.current;
-      const rangeMs  = CHART_RANGE_MS[rangeRef.current] || 60000;
+      const selMs    = CHART_RANGE_MS[rangeRef.current] || 60000;
       const w        = W - PAD.l - PAD.r;
       const h        = height - PAD.t - PAD.b;
       const all = samplesRef.current;
@@ -122,6 +122,22 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
         nowMsRef.current = null; // reset so re-enabling smooth mode re-anchors
         nowMs = all.length > 0 ? all[all.length - 1].ts : Date.now();
       }
+      // Clamp the window to the data actually available so the plot is always
+      // fully used — with only 20s of samples a 1m/1h window would squeeze the
+      // line into the right edge. The window grows with the data (10s → 30s → …)
+      // until it reaches the selected range; jumps (pill switch, history load)
+      // are eased in smooth mode so the zoom animates.
+      let targetRange = selMs;
+      if (all.length > 1) {
+        targetRange = Math.max(10000, Math.min(selMs, nowMs - all[0].ts));
+      }
+      if (animRangeRef.current === null) animRangeRef.current = targetRange;
+      if (smoothRef.current) {
+        animRangeRef.current += (targetRange - animRangeRef.current) * (1 - Math.exp(-dt / 300));
+      } else {
+        animRangeRef.current = targetRange;
+      }
+      const rangeMs  = animRangeRef.current;
       const winStart = nowMs - rangeMs;
 
       // Include samples up to 6 s beyond nowMs so new arrivals (still off-screen
@@ -267,11 +283,10 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
         }
       }
 
-      // Time-axis labels
-      const lbls = RANGE_LABELS[rangeRef.current] || RANGE_LABELS['1m'];
-      if (lblLeft.current)  { lblLeft.current.setAttribute('x',  PAD.l.toString());              lblLeft.current.textContent  = lbls[0]; }
-      if (lblMid.current)   { lblMid.current.setAttribute('x',   (PAD.l + w / 2).toFixed(1));   lblMid.current.textContent   = lbls[1]; }
-      if (lblRight.current) { lblRight.current.setAttribute('x', (PAD.l + w).toFixed(1));        lblRight.current.textContent = lbls[2]; }
+      // Time-axis labels — reflect the effective (possibly clamped) window
+      if (lblLeft.current)  { lblLeft.current.setAttribute('x',  PAD.l.toString());              lblLeft.current.textContent  = `-${fmtDur(rangeMs)}`; }
+      if (lblMid.current)   { lblMid.current.setAttribute('x',   (PAD.l + w / 2).toFixed(1));   lblMid.current.textContent   = `-${fmtDur(rangeMs / 2)}`; }
+      if (lblRight.current) { lblRight.current.setAttribute('x', (PAD.l + w).toFixed(1));        lblRight.current.textContent = 'now'; }
 
       rafRef.current = requestAnimationFrame(tick);
     };

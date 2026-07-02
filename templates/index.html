@@ -3066,16 +3066,26 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
   const SMOOTH_SCALE_KEY = 'WG_SMOOTH_SCALE';
   const SPLINE_TENSION_KEY = 'WG_SPLINE_TENSION';
   const TRAFFIC_MODE_KEY = 'WG_TRAFFIC_MODE';
+  // One-time migration: smooth scrolling / smooth lines / smooth Y scaling
+  // and 500ms polling became the defaults — override values persisted by
+  // earlier versions, then let the user change them freely again.
+  if (!localStorage.getItem('WG_TWEAKS_V2')) {
+    localStorage.setItem(SPLINE_CHART_KEY, 'true');
+    localStorage.setItem(SMOOTH_THROUGHPUT_KEY, 'true');
+    localStorage.setItem(SMOOTH_SCALE_KEY, 'true');
+    localStorage.setItem(REFRESH_INTERVAL_KEY, '500');
+    localStorage.setItem('WG_TWEAKS_V2', '1');
+  }
   const TWEAKS_DEFAULTS = {
     theme: localStorage.getItem(THEME_KEY) || 'light',
     density: 'compact',
     accent: localStorage.getItem(ACCENT_KEY) || 'terracotta',
     devUpdates: localStorage.getItem(DEV_UPDATES_KEY) === 'true',
-    splineChart: localStorage.getItem(SPLINE_CHART_KEY) === 'true',
+    splineChart: localStorage.getItem(SPLINE_CHART_KEY) !== 'false',
     splineTension: parseFloat(localStorage.getItem(SPLINE_TENSION_KEY) || '1'),
-    smoothThroughput: localStorage.getItem(SMOOTH_THROUGHPUT_KEY) === 'true',
-    smoothScale: localStorage.getItem(SMOOTH_SCALE_KEY) === 'true',
-    refreshInterval: parseInt(localStorage.getItem(REFRESH_INTERVAL_KEY) || '1000', 10),
+    smoothThroughput: localStorage.getItem(SMOOTH_THROUGHPUT_KEY) !== 'false',
+    smoothScale: localStorage.getItem(SMOOTH_SCALE_KEY) !== 'false',
+    refreshInterval: parseInt(localStorage.getItem(REFRESH_INTERVAL_KEY) || '500', 10),
     trafficMode: localStorage.getItem(TRAFFIC_MODE_KEY) === 'true',
     _tweaksOpen: false,
   };
