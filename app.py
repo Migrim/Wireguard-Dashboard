@@ -2135,6 +2135,22 @@ def api_dyndns_update():
     if not provider:
         return jsonify({"error": "No provider configured"}), 400
     current_ip = _detect_public_ip()
+
+    def _record(ok: bool, detail: str = "") -> None:
+        # Remember the outcome of the last real push attempt so the UI
+        # can show it after a reload.
+        cfg["last_update"] = {
+            "ts": int(time.time()),
+            "ok": ok,
+            "ip": current_ip,
+            "provider": provider,
+            "detail": detail,
+        }
+        try:
+            _save_dyndns(cfg)
+        except Exception as e:
+            app.logger.error("dyndns_last_update_save_failed: %s", e)
+
     try:
         if provider == "duckdns":
             if not token or not domain:
@@ -2142,7 +2158,9 @@ def api_dyndns_update():
             url = f"https://www.duckdns.org/update?domains={urllib.parse.quote(domain)}&token={urllib.parse.quote(token)}&ip="
             resp = urllib.request.urlopen(url, timeout=10).read().decode().strip()
             if resp.upper().startswith("OK"):
+                _record(True, resp)
                 return jsonify({"ok": True, "response": resp, "ip": current_ip, "domain": domain})
+            _record(False, f"Duck DNS returned: {resp}")
             return jsonify({"error": f"Duck DNS returned: {resp}"}), 400
         elif provider in ("noip", "dynu"):
             if not token or not domain:
@@ -2157,16 +2175,20 @@ def api_dyndns_update():
             req.add_header("User-Agent", "WG-Dashboard/1.0 python-urllib")
             resp = urllib.request.urlopen(req, timeout=10).read().decode().strip()
             if resp.startswith("good") or resp.startswith("nochg"):
+                _record(True, resp)
                 return jsonify({"ok": True, "response": resp, "ip": current_ip, "domain": domain})
+            _record(False, f"Provider returned: {resp}")
             return jsonify({"error": f"Provider returned: {resp}"}), 400
         elif provider == "custom":
             if not custom_url:
                 return jsonify({"error": "Custom URL is required"}), 400
             url = custom_url.replace("{ip}", current_ip)
             resp = urllib.request.urlopen(url, timeout=10).read().decode().strip()
+            _record(True, resp)
             return jsonify({"ok": True, "response": resp, "ip": current_ip})
         return jsonify({"error": "Unknown provider"}), 400
     except Exception as e:
+        _record(False, str(e))
         return jsonify({"error": str(e)}), 400
 
 @app.route("/api/health")

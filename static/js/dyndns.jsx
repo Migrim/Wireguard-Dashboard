@@ -45,39 +45,21 @@ const DYNDNS_PROVIDERS = [
   },
 ];
 
-function TestButton({ resolving, resolveResult, onResolve, hasHostname }) {
-  const [hovered, setHovered] = uSD(false);
-  const hasResult = resolveResult !== null;
-
-  const icon = (() => {
-    if (resolving) {
-      return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ animation: 'spin 1s linear infinite' }}><path d="M21 12a9 9 0 11-18 0"/></svg>;
-    }
-    if (hasResult && hovered) {
-      return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 2v6h-6M3 12a9 9 0 0115-6.7L21 8M3 22v-6h6M21 12a9 9 0 01-15 6.7L3 16"/></svg>;
-    }
-    if (resolveResult?.ok === true) {
-      return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--success, #22c55e)" strokeWidth="2.5"><path d="M5 12l5 5L20 7"/></svg>;
-    }
-    if (resolveResult?.ok === false) {
-      return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--danger, #ef4444)" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>;
-    }
-    return 'Test';
-  })();
-
-  return (
-    <button
-      className="btn btn-ghost"
-      style={{ flexShrink: 0 }}
-      onClick={onResolve}
-      disabled={resolving || !hasHostname}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      {icon}
-    </button>
-  );
+function ddTimeAgo(ts) {
+  const s = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  return new Date(ts * 1000).toLocaleDateString();
 }
+
+const ddSpinner = (size = 13) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ animation: 'spin 1s linear infinite' }}><path d="M21 12a9 9 0 11-18 0"/></svg>
+);
 
 function DynDNSDrawer({ onClose }) {
   const Collapsible = window.Collapsible;
@@ -85,6 +67,7 @@ function DynDNSDrawer({ onClose }) {
   const [cfg, setCfg]               = uSD(null);
   const [loading, setLoading]       = uSD(true);
   const [saving, setSaving]         = uSD(false);
+  const [dirty, setDirty]           = uSD(false);
   const [tokenDirty, setTokenDirty] = uSD(false);
   const [providersOpen, setProvidersOpen] = uSD(false);
   const [tokenRevealed, setTokenRevealed] = uSD(false);
@@ -107,6 +90,46 @@ function DynDNSDrawer({ onClose }) {
       .catch(() => setLoading(false));
   }, []);
 
+  const set = (key, val) => { setCfg(prev => ({ ...prev, [key]: val })); setDirty(true); };
+
+  const providerInfo = DYNDNS_PROVIDERS.find(p => p.id === cfg?.provider);
+  const isDynDNS     = cfg?.mode === 'dyndns';
+  const hostname     = (cfg?.hostname || '').trim();
+  const publicIp     = cfg?.public_ip || '';
+  const lastUpdate   = cfg?.last_update || null;
+
+  // Is the auto-update provider fully filled in?
+  const providerConfigured = !!cfg?.provider && (
+    cfg.provider === 'custom'
+      ? !!(cfg.custom_url || '').trim()
+      : !!(cfg.domain || '').trim() && (cfg.has_token || (tokenDirty && !!(cfg.token || '').trim()))
+  );
+
+  const resolve = uCD(async (host) => {
+    setResolving(true);
+    try {
+      const r = await window.WG.apiCall('/api/dyndns/resolve', {
+        method: 'POST',
+        body: JSON.stringify({ hostname: host }),
+        silent: true,
+      });
+      setResolveResult({ ok: true, ip: r.ip, host });
+    } catch (e) {
+      setResolveResult({ ok: false, error: e?.message || 'Resolution failed', host });
+    } finally {
+      setResolving(false);
+    }
+  }, []);
+
+  // Live check: resolve the hostname on open and (debounced) while typing,
+  // so the sync status is always visible without pressing a button.
+  uED(() => {
+    if (loading || !isDynDNS) return;
+    if (!hostname) { setResolveResult(null); return; }
+    const t = setTimeout(() => resolve(hostname), resolveResult ? 650 : 0);
+    return () => clearTimeout(t);
+  }, [hostname, isDynDNS, loading]);
+
   const persist = uCD(async () => {
     if (!cfg) return;
     const body = { ...cfg };
@@ -119,6 +142,7 @@ function DynDNSDrawer({ onClose }) {
     setSaving(true);
     try {
       await persist();
+      setDirty(false);
       window.WG.toast?.success?.('Saved', 'DynDNS settings updated');
     } catch (e) {
       window.WG.toast?.error?.('Save failed', e?.message || 'Unknown error');
@@ -127,40 +151,31 @@ function DynDNSDrawer({ onClose }) {
     }
   }, [persist]);
 
-  const resolve = uCD(async () => {
-    if (!cfg?.hostname) return;
-    setResolving(true);
-    setResolveResult(null);
-    try {
-      const r = await window.WG.apiCall('/api/dyndns/resolve', {
-        method: 'POST',
-        body: JSON.stringify({ hostname: cfg.hostname }),
-      });
-      setResolveResult({ ok: true, ip: r.ip });
-    } catch (e) {
-      setResolveResult({ ok: false, error: e?.message || 'Resolution failed' });
-    } finally {
-      setResolving(false);
-    }
-  }, [cfg?.hostname]);
-
   const updateNow = uCD(async () => {
     setUpdating(true);
     try {
       await persist();
+      setDirty(false);
       const r = await window.WG.apiCall('/api/dyndns/update', { method: 'POST', silent: true });
+      setCfg(prev => ({ ...prev, last_update: {
+        ts: Math.floor(Date.now() / 1000), ok: true, ip: r.ip, provider: prev?.provider, detail: r.response || '',
+      }}));
       const lines = [`Provider: ${providerInfo?.label || cfg?.provider}`];
       if (r.domain) lines.push(`Domain: ${r.domain}`);
       if (r.ip) lines.push(`Public IP: ${r.ip}`);
       if (r.response) lines.push(`Response: ${r.response}`);
       window.WG.toast?.success?.('DynDNS record updated', lines.join('\n'));
+      if (hostname) resolve(hostname);
     } catch (e) {
-      const lines = [`Provider: ${providerInfo?.label || cfg?.provider || 'none'}`, e?.message || 'Update failed'];
-      window.WG.toast?.error?.('DynDNS update failed', lines.join('\n'));
+      const msg = e?.message || 'Update failed';
+      setCfg(prev => ({ ...prev, last_update: {
+        ts: Math.floor(Date.now() / 1000), ok: false, ip: publicIp, provider: prev?.provider, detail: msg,
+      }}));
+      window.WG.toast?.error?.('DynDNS update failed', [`Provider: ${providerInfo?.label || cfg?.provider || 'none'}`, msg].join('\n'));
     } finally {
       setUpdating(false);
     }
-  }, [persist, providerInfo, cfg?.provider]);
+  }, [persist, providerInfo, cfg?.provider, hostname, publicIp, resolve]);
 
   const toggleReveal = uCD(async () => {
     if (tokenRevealed) { setTokenRevealed(false); return; }
@@ -177,10 +192,49 @@ function DynDNSDrawer({ onClose }) {
     }
   }, [tokenRevealed, tokenDirty]);
 
-  const set = (key, val) => setCfg(prev => ({ ...prev, [key]: val }));
+  // ── Overall status for the hero card ─────────────────
+  const status = (() => {
+    if (!isDynDNS) return {
+      level: 'idle', icon: 'globe',
+      title: 'Static public IP mode',
+      sub: publicIp ? `Peers connect to ${publicIp}` : 'Peers connect via the server’s public IP',
+    };
+    if (!hostname) return {
+      level: 'warn', icon: 'warn',
+      title: 'Hostname required',
+      sub: 'Enter your DynDNS hostname below to get started',
+    };
+    if (resolving || !resolveResult) return {
+      level: 'busy', icon: 'spinner',
+      title: 'Checking hostname…',
+      sub: hostname,
+    };
+    if (!resolveResult.ok) return {
+      level: 'fail', icon: 'fail',
+      title: 'Hostname doesn’t resolve',
+      sub: resolveResult.error,
+    };
+    if (publicIp && resolveResult.ip !== publicIp) return {
+      level: 'warn', icon: 'warn',
+      title: 'Out of sync',
+      sub: `${hostname} → ${resolveResult.ip} · server is ${publicIp}`,
+    };
+    return {
+      level: 'ok', icon: 'ok',
+      title: 'In sync — everything working',
+      sub: `${hostname} → ${resolveResult.ip}`,
+    };
+  })();
 
-  const providerInfo  = DYNDNS_PROVIDERS.find(p => p.id === cfg?.provider);
-  const isDynDNS      = cfg?.mode === 'dyndns';
+  const statusIcon = {
+    ok:      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M5 12l5 5L20 7"/></svg>,
+    warn:    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 8v5M12 16.8v.2"/><path d="M10.3 3.9L1.8 18.5a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>,
+    fail:    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M18 6L6 18M6 6l12 12"/></svg>,
+    spinner: ddSpinner(15),
+    globe:   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="9"/><path d="M2 12h20M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>,
+  }[status.icon];
+
+  const heroClass = { ok: 'dd-ok', warn: 'dd-warn', fail: 'dd-fail' }[status.level] || '';
 
   return (
     <>
@@ -199,7 +253,7 @@ function DynDNSDrawer({ onClose }) {
               <h2 className="drawer-title">DynDNS</h2>
               <div className="drawer-sub">
                 {loading ? 'Loading…' : isDynDNS
-                  ? (cfg?.hostname || 'No hostname set')
+                  ? (hostname || 'No hostname set')
                   : 'Static public IP mode'}
               </div>
             </div>
@@ -214,10 +268,83 @@ function DynDNSDrawer({ onClose }) {
         <div className="drawer-body">
           {loading ? (
             <section className="drawer-section">
-              <div className="skel" style={{ height: 60, borderRadius: 8 }} />
+              <div className="skel" style={{ height: 96, width: '100%', borderRadius: 12 }} />
+              <div className="skel" style={{ height: 60, width: '100%', borderRadius: 8, marginTop: 24 }} />
             </section>
           ) : (
             <>
+
+              {/* ── Status overview ──────────────────────────── */}
+              <section className="drawer-section">
+                <div className="section-head">
+                  <span className="section-label">STATUS</span>
+                  {isDynDNS && hostname && (
+                    <button
+                      className="icon-btn"
+                      style={{ width: 24, height: 24 }}
+                      onClick={() => resolve(hostname)}
+                      disabled={resolving}
+                      aria-label="Re-check hostname"
+                      title="Re-check hostname"
+                    >
+                      {resolving
+                        ? ddSpinner(12)
+                        : <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 2v6h-6M3 12a9 9 0 0115-6.7L21 8M3 22v-6h6M21 12a9 9 0 01-15 6.7L3 16"/></svg>}
+                    </button>
+                  )}
+                </div>
+
+                <div className={`dd-hero ${heroClass}`}>
+                  <div className="dd-hero-status">
+                    <div className="dd-status-icon">{statusIcon}</div>
+                    <div className="dd-hero-text">
+                      <div className="dd-hero-title">{status.title}</div>
+                      <div className="dd-hero-sub">{status.sub}</div>
+                    </div>
+                  </div>
+
+                  {isDynDNS && (
+                    <div className="dd-stats">
+                      <div className="dd-stat">
+                        <div className="dd-stat-label">Hostname</div>
+                        <div className={`dd-stat-val ${hostname ? '' : 'is-muted'}`}>
+                          {hostname || 'not set'}
+                        </div>
+                      </div>
+                      <div className="dd-stat">
+                        <div className="dd-stat-label">Resolves to</div>
+                        <div className={`dd-stat-val ${resolveResult?.ok ? '' : 'is-muted'}`}>
+                          {resolving
+                            ? ddSpinner(11)
+                            : resolveResult?.ok
+                              ? <><span className={`dd-dot ${publicIp && resolveResult.ip === publicIp ? 'ok' : 'warn'}`} />{resolveResult.ip}</>
+                              : resolveResult
+                                ? <><span className="dd-dot fail" />no record</>
+                                : '—'}
+                        </div>
+                      </div>
+                      <div className="dd-stat">
+                        <div className="dd-stat-label">Server public IP</div>
+                        <div className={`dd-stat-val ${publicIp ? '' : 'is-muted'}`}>
+                          {publicIp || 'unknown'}
+                        </div>
+                      </div>
+                      <div className="dd-stat">
+                        <div className="dd-stat-label">Auto-update</div>
+                        <div className={`dd-stat-val ${cfg?.provider ? '' : 'is-muted'}`}>
+                          {!cfg?.provider
+                            ? 'manual'
+                            : !providerConfigured
+                              ? <><span className="dd-dot warn" />{providerInfo?.label || cfg.provider} · incomplete</>
+                              : lastUpdate
+                                ? <><span className={`dd-dot ${lastUpdate.ok ? 'ok' : 'fail'}`} />{providerInfo?.label || cfg.provider} · {ddTimeAgo(lastUpdate.ts)}</>
+                                : <><span className="dd-dot" />{providerInfo?.label || cfg.provider} · never pushed</>}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </section>
 
               {/* ── Mode ─────────────────────────────────────── */}
               <section className="drawer-section">
@@ -251,30 +378,34 @@ function DynDNSDrawer({ onClose }) {
                   <section className="drawer-section">
                     <div className="section-head">
                       <span className="section-label">HOSTNAME</span>
+                      {hostname && resolveResult?.ok && publicIp && resolveResult.ip === publicIp && (
+                        <span className="dd-conf-pill ok">
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M5 12l5 5L20 7"/></svg>
+                          WORKING
+                        </span>
+                      )}
                     </div>
 
                     <label className="ap-label">DynDNS hostname</label>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <input
-                        className="ap-input mono"
-                        style={{ flex: 1 }}
-                        placeholder="myhome.duckdns.org"
-                        value={cfg?.hostname || ''}
-                        onChange={e => { set('hostname', e.target.value); setResolveResult(null); }}
-                      />
-                      <TestButton resolving={resolving} resolveResult={resolveResult} onResolve={resolve} hasHostname={!!cfg?.hostname} />
-                    </div>
+                    <input
+                      className="ap-input mono"
+                      placeholder="myhome.duckdns.org"
+                      value={cfg?.hostname || ''}
+                      onChange={e => set('hostname', e.target.value)}
+                    />
 
-                    {resolveResult && (
-                      <div style={{ marginTop: 8 }}>
-                        <label className="ap-label">Resolved IP</label>
-                        <input
-                          className="ap-input mono"
-                          readOnly
-                          value={resolveResult.ok ? resolveResult.ip : resolveResult.error}
-                          style={{ cursor: 'default', pointerEvents: 'none' }}
-                        />
-                      </div>
+                    {hostname && (
+                      resolving ? (
+                        <div className="dd-field-status">{ddSpinner(11)}<span>resolving…</span></div>
+                      ) : resolveResult?.ok ? (
+                        publicIp && resolveResult.ip === publicIp ? (
+                          <div className="dd-field-status ok"><span className="dd-dot ok" /><span>resolves to {resolveResult.ip} — matches this server</span></div>
+                        ) : (
+                          <div className="dd-field-status warn"><span className="dd-dot warn" /><span>resolves to {resolveResult.ip}{publicIp ? ` — server IP is ${publicIp}` : ''}</span></div>
+                        )
+                      ) : resolveResult ? (
+                        <div className="dd-field-status fail"><span className="dd-dot fail" /><span>{resolveResult.error}</span></div>
+                      ) : null
                     )}
 
                     <div className="ap-hint">
@@ -286,7 +417,16 @@ function DynDNSDrawer({ onClose }) {
                   <section className="drawer-section">
                     <div className="section-head">
                       <span className="section-label">AUTO-UPDATE PROVIDER</span>
-                      <span className="section-meta">optional</span>
+                      {cfg?.provider && providerConfigured ? (
+                        <span className="dd-conf-pill ok">
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M5 12l5 5L20 7"/></svg>
+                          CONFIGURED
+                        </span>
+                      ) : cfg?.provider ? (
+                        <span className="dd-conf-pill warn">INCOMPLETE</span>
+                      ) : (
+                        <span className="section-meta">optional</span>
+                      )}
                     </div>
 
                     <div className="settings-list">
@@ -328,7 +468,15 @@ function DynDNSDrawer({ onClose }) {
                           )}
                         </div>
                         <div>
-                          <label className="ap-label">{providerInfo?.tokenLabel || 'Token'}</label>
+                          <label className="ap-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {providerInfo?.tokenLabel || 'Token'}
+                            {cfg?.has_token && !tokenDirty && (
+                              <span className="dd-conf-pill ok" style={{ letterSpacing: '0.05em' }}>
+                                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M5 12l5 5L20 7"/></svg>
+                                saved
+                              </span>
+                            )}
+                          </label>
                           <div className="ap-input-wrap">
                             <input
                               className="ap-input mono"
@@ -349,7 +497,7 @@ function DynDNSDrawer({ onClose }) {
                                 title={tokenRevealed ? 'Hide token' : 'Show token'}
                               >
                                 {revealingToken ? (
-                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ animation: 'spin 1s linear infinite' }}><path d="M21 12a9 9 0 11-18 0"/></svg>
+                                  ddSpinner(14)
                                 ) : tokenRevealed ? (
                                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M17.94 17.94A10.94 10.94 0 0112 20c-5.5 0-9.4-3.7-10.9-8 .58-1.6 1.5-3.1 2.7-4.32M9.9 4.24A10.9 10.9 0 0112 4c5.5 0 9.4 3.7 10.9 8a12.9 12.9 0 01-2.36 3.9M14.12 14.12a3 3 0 11-4.24-4.24"/><path d="M1 1l22 22"/></svg>
                                 ) : (
@@ -389,9 +537,9 @@ function DynDNSDrawer({ onClose }) {
                               <div className="setting-desc">Push the server's current public IP to your provider</div>
                             </div>
                             <div className="setting-control">
-                              <button className="btn btn-ghost" onClick={updateNow} disabled={updating}>
+                              <button className="btn btn-ghost" onClick={updateNow} disabled={updating || !providerConfigured}>
                                 {updating
-                                  ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ animation: 'spin 1s linear infinite' }}><path d="M21 12a9 9 0 11-18 0"/></svg>
+                                  ? ddSpinner(14)
                                   : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 2v6h-6M3 12a9 9 0 0115-6.7L21 8M3 22v-6h6M21 12a9 9 0 01-15 6.7L3 16"/></svg>
                                 }
                                 {updating ? 'Updating…' : 'Push now'}
@@ -399,6 +547,17 @@ function DynDNSDrawer({ onClose }) {
                             </div>
                           </div>
                         </div>
+                        {lastUpdate && (
+                          <div className={`dd-field-status ${lastUpdate.ok ? 'ok' : 'fail'}`} style={{ marginTop: 2 }}>
+                            <span className={`dd-dot ${lastUpdate.ok ? 'ok' : 'fail'}`} />
+                            <span>
+                              last push {ddTimeAgo(lastUpdate.ts)}
+                              {lastUpdate.ok
+                                ? (lastUpdate.ip ? ` · ${lastUpdate.ip}` : '') + (lastUpdate.detail ? ` · ${lastUpdate.detail}` : '')
+                                : ` · failed${lastUpdate.detail ? `: ${lastUpdate.detail}` : ''}`}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     )}
                   </section>
@@ -444,15 +603,15 @@ function DynDNSDrawer({ onClose }) {
 
         {/* ── Sticky footer ────────────────────────────── */}
         <footer className="ap-foot">
-          <span style={{ fontSize: 12, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>
-            {!loading && (isDynDNS
-              ? (cfg?.hostname || 'no hostname set')
-              : 'static public ip')}
+          <span style={{ fontSize: 12, color: dirty ? 'var(--warn)' : 'var(--muted)', fontFamily: 'var(--mono)', display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+            {!loading && (dirty
+              ? <><span className="dd-dot warn" />unsaved changes</>
+              : (isDynDNS ? (hostname || 'no hostname set') : 'static public ip'))}
           </span>
           <button
             className="btn btn-primary"
             onClick={save}
-            disabled={saving || loading}
+            disabled={saving || loading || !dirty}
           >
             {saving
               ? <><span className="pc-spinner" style={{ width: 12, height: 12 }} />Saving…</>

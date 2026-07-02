@@ -761,6 +761,35 @@ html.theme-switching .theme-toggle-icon {
 .mono { font-family: var(--mono); font-size: 11.5px; }
 .arrow-up { color: var(--accent); }
 
+/* DynDNS drawer */
+.dd-hero { background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; transition: border-color 0.25s; }
+.dd-hero.dd-ok   { border-color: color-mix(in oklab, var(--success) 35%, var(--border)); }
+.dd-hero.dd-warn { border-color: color-mix(in oklab, var(--warn) 40%, var(--border)); }
+.dd-hero.dd-fail { border-color: color-mix(in oklab, var(--danger) 35%, var(--border)); }
+.dd-hero-status { display: flex; align-items: center; gap: 12px; padding: 13px 15px; }
+.dd-status-icon { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; background: var(--card); border: 1px solid var(--border); color: var(--muted); transition: all 0.25s; }
+.dd-ok .dd-status-icon   { background: var(--success-soft); border-color: transparent; color: var(--success); }
+.dd-warn .dd-status-icon { background: var(--warn-soft); border-color: transparent; color: var(--warn); }
+.dd-fail .dd-status-icon { background: var(--danger-soft); border-color: transparent; color: var(--danger); }
+.dd-hero-text { flex: 1; min-width: 0; }
+.dd-hero-title { font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.2; }
+.dd-hero-sub { font-family: var(--mono); font-size: 10.5px; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dd-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); border-top: 1px solid var(--border); }
+.dd-stat { background: var(--card); padding: 10px 15px; min-width: 0; }
+.dd-stat-label { font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.dd-stat-val { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11.5px; color: var(--ink); min-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dd-stat-val.is-muted { color: var(--muted); }
+.dd-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+.dd-dot.ok { background: var(--success); } .dd-dot.warn { background: var(--warn); } .dd-dot.fail { background: var(--danger); }
+.dd-field-status { display: flex; align-items: center; gap: 7px; margin-top: 8px; font-family: var(--mono); font-size: 10.5px; color: var(--muted); line-height: 1.4; min-width: 0; }
+.dd-field-status > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dd-field-status.ok { color: var(--success); }
+.dd-field-status.warn { color: var(--warn); }
+.dd-field-status.fail { color: var(--danger); }
+.dd-conf-pill { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.08em; padding: 2px 8px; border-radius: 99px; display: inline-flex; align-items: center; gap: 4px; }
+.dd-conf-pill.ok { background: var(--success-soft); color: var(--success); }
+.dd-conf-pill.warn { background: var(--warn-soft); color: var(--warn); }
+
 /* MAIN GRID */
 .main-grid {
   display: grid;
