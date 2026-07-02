@@ -115,7 +115,7 @@ function DynDNSDrawer({ onClose }) {
       });
       // The server re-detects its own public IP on every check, so the
       // sync comparison never uses a stale boot-time snapshot.
-      if (r.public_ip) setCfg(prev => prev ? { ...prev, public_ip: r.public_ip } : prev);
+      if (r.public_ip) setCfg(prev => prev ? { ...prev, public_ip: r.public_ip, public_ip_source: r.public_ip_source || prev.public_ip_source } : prev);
       setResolveResult({ ok: true, ip: r.ip, host });
     } catch (e) {
       setResolveResult({ ok: false, error: e?.message || 'Resolution failed', host });
@@ -160,12 +160,18 @@ function DynDNSDrawer({ onClose }) {
       await persist();
       setDirty(false);
       const r = await window.WG.apiCall('/api/dyndns/update', { method: 'POST', silent: true });
-      setCfg(prev => ({ ...prev, last_update: {
-        ts: Math.floor(Date.now() / 1000), ok: true, ip: r.ip, provider: prev?.provider, detail: r.response || '',
-      }}));
+      setCfg(prev => ({
+        ...prev,
+        public_ip: r.record_ip || prev?.public_ip,
+        public_ip_source: r.record_ip ? `${providerInfo?.label || prev?.provider} update reply` : prev?.public_ip_source,
+        last_update: {
+          ts: Math.floor(Date.now() / 1000), ok: true, ip: r.ip, provider: prev?.provider, detail: r.response || '',
+        },
+      }));
       const lines = [`Provider: ${providerInfo?.label || cfg?.provider}`];
       if (r.domain) lines.push(`Domain: ${r.domain}`);
-      if (r.ip) lines.push(`Public IP: ${r.ip}`);
+      if (r.record_ip) lines.push(`Record now points to: ${r.record_ip}`);
+      else if (r.ip) lines.push(`Public IP: ${r.ip}`);
       if (r.response) lines.push(`Response: ${r.response}`);
       window.WG.toast?.success?.('DynDNS record updated', lines.join('\n'));
       if (hostname) resolve(hostname);
@@ -331,6 +337,11 @@ function DynDNSDrawer({ onClose }) {
                         <div className={`dd-stat-val ${publicIp ? '' : 'is-muted'}`}>
                           {publicIp || 'unknown'}
                         </div>
+                        {cfg?.public_ip_source && (
+                          <div style={{ fontSize: 9, color: 'var(--muted)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={`Detected via ${cfg.public_ip_source}`}>
+                            via {cfg.public_ip_source}
+                          </div>
+                        )}
                       </div>
                       <div className="dd-stat">
                         <div className="dd-stat-label">Auto-update</div>
@@ -404,7 +415,10 @@ function DynDNSDrawer({ onClose }) {
                         publicIp && resolveResult.ip === publicIp ? (
                           <div className="dd-field-status ok"><span className="dd-dot ok" /><span>resolves to {resolveResult.ip} — matches this server</span></div>
                         ) : (
-                          <div className="dd-field-status warn"><span className="dd-dot warn" /><span>resolves to {resolveResult.ip}{publicIp ? ` — server IP is ${publicIp}` : ''}</span></div>
+                          <div className="dd-field-status warn"><span className="dd-dot warn" /><span>
+                            resolves to {resolveResult.ip}{publicIp ? ` — server IP is ${publicIp}` : ''}
+                            {lastUpdate?.ok && (Date.now() / 1000 - lastUpdate.ts) < 180 ? ' · just pushed, DNS can lag ~1 min' : ''}
+                          </span></div>
                         )
                       ) : resolveResult ? (
                         <div className="dd-field-status fail"><span className="dd-dot fail" /><span>{resolveResult.error}</span></div>

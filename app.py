@@ -14,29 +14,34 @@ CLIENT_DNS=os.environ.get("CLIENT_DNS","1.1.1.1, 1.0.0.1")
 HOST_IP=subprocess.check_output(["bash","-lc","hostname -I | awk '{print $1}'"]).decode().strip()
 UNIT=f"wg-quick@{WG_IFACE}"
 
-def _detect_public_ip() -> str:
+def _detect_public_ip() -> Tuple[str, str]:
+    """Return (ip, source) so the UI can show where the address came from."""
     if os.environ.get("SERVER_PUBLIC_IP"):
-        return os.environ["SERVER_PUBLIC_IP"].strip()
+        return os.environ["SERVER_PUBLIC_IP"].strip(), "SERVER_PUBLIC_IP override"
     for url in ("https://api.ipify.org","https://ifconfig.me/ip","https://icanhazip.com"):
         try:
-            return urllib.request.urlopen(url, timeout=4).read().decode().strip()
+            ip = urllib.request.urlopen(url, timeout=4).read().decode().strip()
+            return ip, url.split("//", 1)[1].split("/", 1)[0]
         except Exception:
             continue
-    return HOST_IP
+    return HOST_IP, "local interface (no lookup service reachable)"
 
 # The public IP can change at any time (that is the whole point of DynDNS),
 # so never serve a boot-time snapshot: re-detect on demand with a short cache.
-_public_ip_cache = {"ts": 0.0, "ip": ""}
+# A successful DynDNS push overwrites this cache with the address the provider
+# actually saw — on CGNAT/DS-Lite lines that is more reliable than lookup
+# services, which can egress through a different NAT pool IP.
+_public_ip_cache = {"ts": 0.0, "ip": "", "src": ""}
+
+def _public_ip_info(max_age: float = 60.0) -> Tuple[str, str]:
+    if _public_ip_cache["ip"] and time.time() - _public_ip_cache["ts"] < max_age:
+        return _public_ip_cache["ip"], _public_ip_cache["src"]
+    ip, src = _detect_public_ip()
+    _public_ip_cache.update(ts=time.time(), ip=ip, src=src)
+    return ip, src
 
 def _current_public_ip(max_age: float = 60.0) -> str:
-    if os.environ.get("SERVER_PUBLIC_IP"):
-        return os.environ["SERVER_PUBLIC_IP"].strip()
-    if _public_ip_cache["ip"] and time.time() - _public_ip_cache["ts"] < max_age:
-        return _public_ip_cache["ip"]
-    ip = _detect_public_ip()
-    _public_ip_cache["ts"] = time.time()
-    _public_ip_cache["ip"] = ip
-    return ip
+    return _public_ip_info(max_age)[0]
 
 PEERS_DB=os.path.join(WG_DIR,"peers.json")
 DYNDNS_DB=os.environ.get("DYNDNS_DB", os.path.join(WG_DIR, "dyndns.json"))
@@ -2096,7 +2101,7 @@ def api_dyndns():
         cfg = _load_dyndns()
         safe = {k: v for k, v in cfg.items() if k != "token"}
         safe["has_token"] = bool(cfg.get("token"))
-        safe["public_ip"] = _current_public_ip()
+        safe["public_ip"], safe["public_ip_source"] = _public_ip_info()
         return jsonify(safe)
     data = request.get_json(force=True, silent=True) or {}
     cfg = _load_dyndns()
@@ -2131,7 +2136,8 @@ def api_dyndns_resolve():
         return jsonify({"error": "hostname required"}), 400
     try:
         ip = socket.getaddrinfo(hostname, None)[0][4][0]
-        return jsonify({"ip": ip, "hostname": hostname, "public_ip": _current_public_ip()})
+        pub_ip, pub_src = _public_ip_info()
+        return jsonify({"ip": ip, "hostname": hostname, "public_ip": pub_ip, "public_ip_source": pub_src})
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
@@ -2167,11 +2173,20 @@ def api_dyndns_update():
         if provider == "duckdns":
             if not token or not domain:
                 return jsonify({"error": "Token and domain are required for Duck DNS"}), 400
-            url = f"https://www.duckdns.org/update?domains={urllib.parse.quote(domain)}&token={urllib.parse.quote(token)}&ip="
+            url = f"https://www.duckdns.org/update?domains={urllib.parse.quote(domain)}&token={urllib.parse.quote(token)}&ip=&verbose=true"
             resp = urllib.request.urlopen(url, timeout=10).read().decode().strip()
-            if resp.upper().startswith("OK"):
-                _record(True, resp)
-                return jsonify({"ok": True, "response": resp, "ip": current_ip, "domain": domain})
+            # verbose reply: OK / <ipv4> / [<ipv6>] / UPDATED|NOCHANGE
+            lines = [l.strip() for l in resp.splitlines() if l.strip()]
+            if lines and lines[0].upper() == "OK":
+                record_ip = lines[1] if len(lines) > 1 else ""
+                changed = lines[-1] if lines and lines[-1] in ("UPDATED", "NOCHANGE") else ""
+                if record_ip:
+                    # Duck DNS stored the source IP of this request — the most
+                    # reliable reading of our real egress IP, so cache it.
+                    _public_ip_cache.update(ts=time.time(), ip=record_ip, src="duckdns.org update reply")
+                detail = f"record → {record_ip or '?'}{f' ({changed.lower()})' if changed else ''}"
+                _record(True, detail)
+                return jsonify({"ok": True, "response": detail, "record_ip": record_ip, "ip": record_ip or current_ip, "domain": domain})
             _record(False, f"Duck DNS returned: {resp}")
             return jsonify({"error": f"Duck DNS returned: {resp}"}), 400
         elif provider in ("noip", "dynu"):
@@ -2187,8 +2202,13 @@ def api_dyndns_update():
             req.add_header("User-Agent", "WG-Dashboard/1.0 python-urllib")
             resp = urllib.request.urlopen(req, timeout=10).read().decode().strip()
             if resp.startswith("good") or resp.startswith("nochg"):
+                # reply format: "good <ip>" / "nochg <ip>" — the stored address
+                parts = resp.split()
+                record_ip = parts[1] if len(parts) > 1 else ""
+                if record_ip:
+                    _public_ip_cache.update(ts=time.time(), ip=record_ip, src=f"{provider} update reply")
                 _record(True, resp)
-                return jsonify({"ok": True, "response": resp, "ip": current_ip, "domain": domain})
+                return jsonify({"ok": True, "response": resp, "record_ip": record_ip, "ip": record_ip or current_ip, "domain": domain})
             _record(False, f"Provider returned: {resp}")
             return jsonify({"error": f"Provider returned: {resp}"}), 400
         elif provider == "custom":
