@@ -591,7 +591,7 @@ function App({ tweaks, setTweaks, onLogout }) {
           updateAvailable={updateAvailable}
           onOpenSettings={() => { setSettingsOpen(true); setUpdateAvailable(false); }}
         />
-        <KPIThroughput currentRx={currentRx} currentTx={currentTx} dataIn={chartTraffic.rx} dataOut={chartTraffic.tx} />
+        <KPIThroughput currentRx={currentRx} currentTx={currentTx} dataIn={chartTraffic.rx} dataOut={chartTraffic.tx} smooth={tweaks.smoothThroughput} />
         <KPIDataToday total={totalToday} budget={dataBudget} peerBudgets={peerBudgets} onClick={() => setDataDrawerOpen(true)} />
         <KPIActiveSessions connectedCount={connectedCount} totalCount={peers.length} avgPingHistory={avgPingHistory} />
       </section>
@@ -827,7 +827,7 @@ function KPIServiceControl({ serviceActive, startedAt, servicePort, connectedCou
   );
 }
 
-function KPIThroughput({ currentRx, currentTx, dataIn, dataOut }) {
+function KPIThroughput({ currentRx, currentTx, dataIn, dataOut, smooth = false }) {
   const miniData = dataIn.slice(-20).map((v, i) => v + (dataOut[dataIn.length - 20 + i] || 0));
   const total = currentRx + currentTx;
   return (
@@ -841,7 +841,7 @@ function KPIThroughput({ currentRx, currentTx, dataIn, dataOut }) {
           <span className="kpi-unit">{window.WG.formatRate(total).split(' ')[1]}</span>
         </div>
         <div className="kpi-mini">
-          <MiniBars data={miniData} width={140} height={32} color="var(--accent)" />
+          <MiniBars data={miniData} width={140} height={32} color="var(--accent)" smooth={smooth} />
         </div>
       </div>
       <div className="kpi-foot">

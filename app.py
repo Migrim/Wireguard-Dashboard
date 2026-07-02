@@ -528,6 +528,38 @@ def _record_traffic_sample(sample: Dict[str, Any]) -> None:
         _save_traffic_history(history)
         app.config["_traffic_last_flush"] = sample["ts"]
 
+_traffic_snap_lock = threading.Lock()
+
+def _sample_traffic() -> Dict[str, Any]:
+    """Take one throughput sample (bps since last snapshot) and record it in history."""
+    iface, rx, tx = read_bytes()
+    now = time.time()
+    with _traffic_snap_lock:
+        snap = app.config.get("_snap")
+        if snap is None:
+            sample = {"ts": now, "rx_bps": 0.0, "tx_bps": 0.0, "rx": rx, "tx": tx}
+        else:
+            dt = max(1e-6, now - snap["ts"])
+            sample = {"ts": now,
+                      "rx_bps": max(0, (rx - snap["rx"]) / dt),
+                      "tx_bps": max(0, (tx - snap["tx"]) / dt),
+                      "rx": rx, "tx": tx}
+        app.config["_snap"] = {"ts": now, "rx": rx, "tx": tx}
+        _record_traffic_sample(sample)
+    return {"iface": iface, **sample}
+
+TRAFFIC_SAMPLE_INTERVAL = max(1, int(os.environ.get("TRAFFIC_SAMPLE_INTERVAL", "2")))
+
+def _bg_traffic_loop() -> None:
+    """Keep recording throughput history while no dashboard client is polling /api/traffic."""
+    time.sleep(_BG_INIT_DELAY)
+    while True:
+        try:
+            _sample_traffic()
+        except Exception:
+            pass
+        time.sleep(TRAFFIC_SAMPLE_INTERVAL)
+
 def _downsample_traffic(samples: List[Dict[str, Any]], max_points: int) -> List[Dict[str, Any]]:
     if max_points <= 0 or len(samples) <= max_points:
         return samples
@@ -2097,22 +2129,7 @@ def api_data_budget_export():
 
 @app.route("/api/traffic")
 def api_traffic():
-    iface,rx,tx=read_bytes()
-    now=time.time()
-    global _last_run
-    if "_snap" not in app.config:
-        app.config["_snap"]={"ts":now,"rx":rx,"tx":tx}
-        sample={"ts":now,"rx_bps":0.0,"tx_bps":0.0,"rx":rx,"tx":tx}
-        _record_traffic_sample(sample)
-        return jsonify({"iface":iface,**sample})
-    snap=app.config["_snap"]
-    dt=max(1e-6,now-snap["ts"])
-    rx_bps=max(0,(rx-snap["rx"])/dt)
-    tx_bps=max(0,(tx-snap["tx"])/dt)
-    app.config["_snap"]={"ts":now,"rx":rx,"tx":tx}
-    sample={"ts":now,"rx_bps":rx_bps,"tx_bps":tx_bps,"rx":rx,"tx":tx}
-    _record_traffic_sample(sample)
-    return jsonify({"iface":iface,**sample})
+    return jsonify(_sample_traffic())
 
 @app.route("/api/traffic/history")
 def api_traffic_history():
@@ -2723,6 +2740,7 @@ def api_update_apply():
 if os.environ.get("WERKZEUG_RUN_MAIN") != "false":
     threading.Thread(target=_bg_check_loop, daemon=True, name="bg-port-check").start()
     threading.Thread(target=_bg_budget_loop, daemon=True, name="bg-budget").start()
+    threading.Thread(target=_bg_traffic_loop, daemon=True, name="bg-traffic").start()
 
 def create_app():
     return app
