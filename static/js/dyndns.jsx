@@ -80,7 +80,6 @@ function TestButton({ resolving, resolveResult, onResolve, hasHostname }) {
 }
 
 function DynDNSDrawer({ onClose }) {
-  // Collapsible is defined in addpeer.jsx which loads before this file
   const Collapsible = window.Collapsible;
 
   const [cfg, setCfg]               = uSD(null);
@@ -88,11 +87,12 @@ function DynDNSDrawer({ onClose }) {
   const [saving, setSaving]         = uSD(false);
   const [tokenDirty, setTokenDirty] = uSD(false);
   const [providersOpen, setProvidersOpen] = uSD(false);
+  const [tokenRevealed, setTokenRevealed] = uSD(false);
+  const [revealingToken, setRevealingToken] = uSD(false);
 
   const [resolveResult, setResolveResult] = uSD(null);
   const [resolving, setResolving]         = uSD(false);
 
-  const [updateResult, setUpdateResult] = uSD(null);
   const [updating, setUpdating]         = uSD(false);
 
   uED(() => {
@@ -107,20 +107,25 @@ function DynDNSDrawer({ onClose }) {
       .catch(() => setLoading(false));
   }, []);
 
+  const persist = uCD(async () => {
+    if (!cfg) return;
+    const body = { ...cfg };
+    if (!tokenDirty) delete body.token;
+    await window.WG.apiCall('/api/dyndns', { method: 'POST', body: JSON.stringify(body), silent: true });
+  }, [cfg, tokenDirty]);
+
   const save = uCD(async () => {
     if (!cfg) return;
     setSaving(true);
     try {
-      const body = { ...cfg };
-      if (!tokenDirty) delete body.token;
-      await window.WG.apiCall('/api/dyndns', { method: 'POST', body: JSON.stringify(body) });
+      await persist();
       window.WG.toast?.success?.('Saved', 'DynDNS settings updated');
     } catch (e) {
       window.WG.toast?.error?.('Save failed', e?.message || 'Unknown error');
     } finally {
       setSaving(false);
     }
-  }, [cfg, tokenDirty]);
+  }, [persist]);
 
   const resolve = uCD(async () => {
     if (!cfg?.hostname) return;
@@ -141,19 +146,36 @@ function DynDNSDrawer({ onClose }) {
 
   const updateNow = uCD(async () => {
     setUpdating(true);
-    setUpdateResult(null);
     try {
-      const r = await window.WG.apiCall('/api/dyndns/update', { method: 'POST' });
-      setUpdateResult({ ok: true, response: r.response });
-      window.WG.toast?.success?.('Updated', 'DynDNS record pushed successfully');
+      await persist();
+      const r = await window.WG.apiCall('/api/dyndns/update', { method: 'POST', silent: true });
+      const lines = [`Provider: ${providerInfo?.label || cfg?.provider}`];
+      if (r.domain) lines.push(`Domain: ${r.domain}`);
+      if (r.ip) lines.push(`Public IP: ${r.ip}`);
+      if (r.response) lines.push(`Response: ${r.response}`);
+      window.WG.toast?.success?.('DynDNS record updated', lines.join('\n'));
     } catch (e) {
-      const msg = e?.message || 'Update failed';
-      setUpdateResult({ ok: false, error: msg });
-      window.WG.toast?.error?.('Update failed', msg);
+      const lines = [`Provider: ${providerInfo?.label || cfg?.provider || 'none'}`, e?.message || 'Update failed'];
+      window.WG.toast?.error?.('DynDNS update failed', lines.join('\n'));
     } finally {
       setUpdating(false);
     }
-  }, []);
+  }, [persist, providerInfo, cfg?.provider]);
+
+  const toggleReveal = uCD(async () => {
+    if (tokenRevealed) { setTokenRevealed(false); return; }
+    if (tokenDirty) { setTokenRevealed(true); return; }
+    setRevealingToken(true);
+    try {
+      const r = await window.WG.apiCall('/api/dyndns/token');
+      setCfg(prev => ({ ...prev, token: r.token || '' }));
+      setTokenRevealed(true);
+    } catch (e) {
+      window.WG.toast?.error?.('Reveal failed', e?.message || 'Unknown error');
+    } finally {
+      setRevealingToken(false);
+    }
+  }, [tokenRevealed, tokenDirty]);
 
   const set = (key, val) => setCfg(prev => ({ ...prev, [key]: val }));
 
@@ -307,14 +329,35 @@ function DynDNSDrawer({ onClose }) {
                         </div>
                         <div>
                           <label className="ap-label">{providerInfo?.tokenLabel || 'Token'}</label>
-                          <input
-                            className="ap-input mono"
-                            type="password"
-                            autoComplete="new-password"
-                            placeholder={cfg?.has_token ? '••••  (saved)' : providerInfo?.tokenHelp || ''}
-                            value={cfg?.token || ''}
-                            onChange={e => { set('token', e.target.value); setTokenDirty(true); }}
-                          />
+                          <div className="ap-input-wrap">
+                            <input
+                              className="ap-input mono"
+                              type={tokenRevealed ? 'text' : 'password'}
+                              autoComplete="new-password"
+                              placeholder={cfg?.has_token ? '••••  (saved)' : providerInfo?.tokenHelp || ''}
+                              value={cfg?.token || ''}
+                              onChange={e => { set('token', e.target.value); setTokenDirty(true); }}
+                            />
+                            {(cfg?.has_token || tokenDirty) && (
+                              <button
+                                type="button"
+                                className="login-eye"
+                                onClick={toggleReveal}
+                                disabled={revealingToken}
+                                tabIndex={-1}
+                                aria-label={tokenRevealed ? 'Hide token' : 'Show token'}
+                                title={tokenRevealed ? 'Hide token' : 'Show token'}
+                              >
+                                {revealingToken ? (
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ animation: 'spin 1s linear infinite' }}><path d="M21 12a9 9 0 11-18 0"/></svg>
+                                ) : tokenRevealed ? (
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M17.94 17.94A10.94 10.94 0 0112 20c-5.5 0-9.4-3.7-10.9-8 .58-1.6 1.5-3.1 2.7-4.32M9.9 4.24A10.9 10.9 0 0112 4c5.5 0 9.4 3.7 10.9 8a12.9 12.9 0 01-2.36 3.9M14.12 14.12a3 3 0 11-4.24-4.24"/><path d="M1 1l22 22"/></svg>
+                                ) : (
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                )}
+                              </button>
+                            )}
+                          </div>
                           {providerInfo?.tokenHelp && (
                             <div className="ap-hint">{providerInfo.tokenHelp}</div>
                           )}
@@ -356,27 +399,6 @@ function DynDNSDrawer({ onClose }) {
                             </div>
                           </div>
                         </div>
-
-                        {updateResult && (
-                          <div style={{
-                            marginTop: 8, fontSize: 12, padding: '7px 10px', borderRadius: 7,
-                            background: updateResult.ok ? 'var(--success-soft, rgba(34,197,94,.1))' : 'var(--danger-soft, rgba(239,68,68,.1))',
-                            color: updateResult.ok ? 'var(--success, #22c55e)' : 'var(--danger, #ef4444)',
-                            display: 'flex', alignItems: 'center', gap: 6,
-                          }}>
-                            {updateResult.ok ? (
-                              <>
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12l5 5L20 7"/></svg>
-                                Provider: <span style={{ fontFamily: 'var(--mono)' }}>{updateResult.response}</span>
-                              </>
-                            ) : (
-                              <>
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                                {updateResult.error}
-                              </>
-                            )}
-                          </div>
-                        )}
                       </div>
                     )}
                   </section>

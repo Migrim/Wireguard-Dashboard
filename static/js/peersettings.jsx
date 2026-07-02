@@ -547,16 +547,19 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
       id: 'meta', icon: ICN.tag, title: 'Tags & metadata',
       summary: (note ? `"${note.slice(0, 22)}${note.length > 22 ? '…' : ''}"` : 'no note') + (owner ? ` · ${owner}` : ''),
       modified: note !== seeds.note || owner !== seeds.owner || longNote !== seeds.longNote,
+      comingSoon: true,
     },
     {
       id: 'life', icon: ICN.clock, title: 'Lifecycle & expiry',
       summary: (expiry === 'never' ? 'never expires' : `expires in ${expiry}`) + (disableIdle ? ` · idle ${idleDays}d` : ''),
       modified: expiry !== 'never' || disableIdle,
+      comingSoon: true,
     },
     {
       id: 'bw', icon: ICN.gauge, title: 'Bandwidth & quotas',
       summary: (dataCap ? `${dataCap} GB / mo` : 'unlimited data') + (rateDown || rateUp ? ' · shaped' : ''),
       modified: !!(dataCap || rateDown || rateUp),
+      comingSoon: true,
     },
   ];
 
@@ -580,6 +583,7 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
       id: 'crypto', icon: ICN.key, title: 'Cryptography & keys',
       summary: `${rekeyed ? 'rotated key' : 'current key'} · ${usePsk ? 'PSK on' : 'no PSK'}`,
       modified: rekeyed !== saved.rekeyed || usePsk !== saved.usePsk,
+      comingSoon: true,
     },
     {
       id: 'scripts', icon: ICN.script, title: 'Routing scripts & firewall',

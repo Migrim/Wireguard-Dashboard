@@ -153,7 +153,6 @@ _geo_cache: Dict[str, Dict[str, Any]] = {}
 _bg_notifications: List[Dict[str, Any]] = []
 _bg_lock = threading.Lock()
 
-# Helper function to sudo cat a file, checking common locations for cat
 def _sudo_cat(path: str) -> Tuple[str, int]:
     for cat_bin in ("/bin/cat", "/usr/bin/cat"):
         out, rc = _sudo([cat_bin, path])
@@ -186,7 +185,6 @@ _AUTH_OPEN = {"/", "/welcome", "/mobile", "/manifest.json", "/service-worker.js"
 @app.before_request
 def _require_auth():
     if not DASHBOARD_PASSWORD_HASH:
-        # No password configured yet — only let /setup and static through.
         if request.path in {"/setup", "/api/setup"} or request.path.startswith("/static/"):
             return
         if request.path.startswith("/api/"):
@@ -968,16 +966,13 @@ def _apply_peer_throttle(name: str, addr: str, mbps: int) -> None:
     peer_ip = addr.split("/")[0]
     rate = f"{max(1, mbps)}mbit"
     _ensure_htb_qdisc()
-    # Add or update the HTB class for this peer
     o, _ = _sudo([TC_BIN, "class", "show", "dev", WG_IFACE, "classid", f"1:{handle}"])
     if str(handle) in o:
         _sudo([TC_BIN, "class", "change", "dev", WG_IFACE, "parent", "1:", "classid", f"1:{handle}", "htb", "rate", rate, "ceil", rate])
     else:
         _sudo([TC_BIN, "class", "add", "dev", WG_IFACE, "parent", "1:", "classid", f"1:{handle}", "htb", "rate", rate, "ceil", rate])
-    # Delete-then-add is more reliable than replace for fw filters
     _sudo([TC_BIN, "filter", "del", "dev", WG_IFACE, "parent", "1:0", "prio", "1", "handle", str(handle), "fw"])
     _sudo([TC_BIN, "filter", "add", "dev", WG_IFACE, "parent", "1:0", "protocol", "all", "prio", "1", "handle", str(handle), "fw", "classid", f"1:{handle}"])
-    # Mark in both FORWARD (routed VPN traffic) and OUTPUT (server-originated traffic)
     for chain in ("FORWARD", "OUTPUT"):
         _, c = _sudo([IPTABLES_BIN, "-t", "mangle", "-C", chain, "-d", peer_ip, "-j", "MARK", "--set-mark", str(handle)])
         if c != 0:
@@ -1086,9 +1081,6 @@ def _data_budget_state(issued: List[Dict[str, Any]], live: List[Dict[str, Any]],
         settings["reset_time"] = "00:00"
     period_start = _budget_period_start(settings["reset_time"])
     totals = _peer_current_totals(issued, live)
-    # Peers paused by budget enforcement are removed from the wg runtime, so
-    # their byte counter reads 0. Preserve the last known total so the budget
-    # stays at 100%+ and doesn't immediately unpause them.
     _enforce_snap = db.get("enforce_state", {})
     _last_snap = db.get("last_totals", {})
     for _name, _total in totals.items():
@@ -1229,27 +1221,17 @@ def _next_client_ip() -> str:
 def list_clients() -> List[Dict[str, Any]]:
     db = _load_peers_db()
 
-    # get live state from wg
     if os.path.exists("/usr/bin/wg"):
         show, c = _sudo(["/usr/bin/wg", "show", WG_IFACE, "dump"])
     else:
         show, c = _run(f"wg show {WG_IFACE} dump || true")
 
     live = []
-    lines = [ln for ln in show.splitlines()[1:] if ln.strip()]  # skip interface line
+    lines = [ln for ln in show.splitlines()[1:] if ln.strip()] 
     now = int(time.time())
 
     for ln in lines:
         p = ln.split("\t")
-        # peer line must have at least 8 fields
-        # 0 pubkey
-        # 1 psk
-        # 2 endpoint
-        # 3 allowed-ips
-        # 4 latest-handshake
-        # 5 transfer-rx
-        # 6 transfer-tx
-        # 7 keepalive
         if len(p) < 8:
             continue
 
@@ -1258,7 +1240,7 @@ def list_clients() -> List[Dict[str, Any]]:
         allowed = p[3].strip()
 
         try:
-            lh_raw = int(p[4])  # unix ts
+            lh_raw = int(p[4]) 
         except ValueError:
             lh_raw = 0
 
@@ -1272,14 +1254,12 @@ def list_clients() -> List[Dict[str, Any]]:
         except ValueError:
             tx = 0
 
-        # map to name from db (peers.json)
         name = None
         for k, v in db.items():
             if v.get("public_key") == pub:
                 name = k
                 break
 
-        # persist the handshake timestamp; fall back to cached value after a restart
         if lh_raw > 0 and lh_raw < now + 10:
             if name:
                 _update_handshake_cache(name, lh_raw)
@@ -1291,8 +1271,8 @@ def list_clients() -> List[Dict[str, Any]]:
             "name": name or pub[:8],
             "cn": name or pub[:8],
             "remote": endpoint,
-            "bytes_recv": rx,   # client → server
-            "bytes_sent": tx,   # server → client
+            "bytes_recv": rx,   
+            "bytes_sent": tx,   
             "last_handshake": effective_lh,
             "since": (
                 datetime.datetime.utcfromtimestamp(effective_lh).strftime("%Y-%m-%d %H:%M:%S")
@@ -1302,7 +1282,6 @@ def list_clients() -> List[Dict[str, Any]]:
             "public_key": pub,
         })
 
-    # issued peers from our DB
     issued = []
     for name, meta in db.items():
         issued.append({
@@ -1796,8 +1775,6 @@ def api_users_pause(name: str):
     if not meta:
         abort(404)
     pub = meta.get("public_key", "")
-    # Remove from the running WireGuard instance — blocks all traffic from this peer.
-    # The peer stays in the .conf so it auto-restores on wg-quick service restart.
     _sudo(["/usr/bin/wg", "set", WG_IFACE, "peer", pub, "remove"])
     meta["paused"] = True
     db[name] = meta
@@ -1812,7 +1789,6 @@ def api_users_resume(name: str):
         abort(404)
     pub = meta.get("public_key", "")
     addr = meta.get("address", "")
-    # Re-add the peer to the running WireGuard instance.
     _sudo(["/usr/bin/wg", "set", WG_IFACE, "peer", pub, "allowed-ips", addr])
     meta["paused"] = False
     db[name] = meta
@@ -2126,6 +2102,12 @@ def api_dyndns():
         return jsonify({"ok": False, "error": str(e)}), 500
     return jsonify({"ok": True})
 
+@app.route("/api/dyndns/token", methods=["GET"])
+def api_dyndns_token():
+    if r := _require_auth(): return r
+    cfg = _load_dyndns()
+    return jsonify({"token": cfg.get("token", "")})
+
 @app.route("/api/dyndns/resolve", methods=["POST"])
 def api_dyndns_resolve():
     if r := _require_auth(): return r
@@ -2159,7 +2141,7 @@ def api_dyndns_update():
             url = f"https://www.duckdns.org/update?domains={urllib.parse.quote(domain)}&token={urllib.parse.quote(token)}&ip="
             resp = urllib.request.urlopen(url, timeout=10).read().decode().strip()
             if resp.upper().startswith("OK"):
-                return jsonify({"ok": True, "response": resp})
+                return jsonify({"ok": True, "response": resp, "ip": current_ip, "domain": domain})
             return jsonify({"error": f"Duck DNS returned: {resp}"}), 400
         elif provider in ("noip", "dynu"):
             if not token or not domain:
@@ -2174,14 +2156,14 @@ def api_dyndns_update():
             req.add_header("User-Agent", "WG-Dashboard/1.0 python-urllib")
             resp = urllib.request.urlopen(req, timeout=10).read().decode().strip()
             if resp.startswith("good") or resp.startswith("nochg"):
-                return jsonify({"ok": True, "response": resp})
+                return jsonify({"ok": True, "response": resp, "ip": current_ip, "domain": domain})
             return jsonify({"error": f"Provider returned: {resp}"}), 400
         elif provider == "custom":
             if not custom_url:
                 return jsonify({"error": "Custom URL is required"}), 400
             url = custom_url.replace("{ip}", current_ip)
             resp = urllib.request.urlopen(url, timeout=10).read().decode().strip()
-            return jsonify({"ok": True, "response": resp})
+            return jsonify({"ok": True, "response": resp, "ip": current_ip})
         return jsonify({"error": "Unknown provider"}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 400
@@ -2264,13 +2246,11 @@ def api_fix():
             actions.append(f"Added NAT PostUp/PostDown (via {net_if})")
         else:
             errors.append("Could not detect outgoing network interface")
-    # 3. UFW allow port
     lp=int(iface_cfg.get("ListenPort",WG_PORT))
     if not ufw_allowed(lp,"udp"):
         _,c=_sudo(["/usr/sbin/ufw","allow",f"{lp}/udp"])
         if c==0:
             actions.append(f"Opened UDP {lp} in UFW")
-    # 4. Start / restart service
     svc_was=service_active()
     if svc_was and actions:
         o,c=_sudo(["/usr/bin/systemctl","restart",UNIT])
@@ -2347,7 +2327,6 @@ def download_conf(name: str):
     resp.headers["Content-Disposition"] = f'attachment; filename="{safe_name}.conf"'
     return resp
 
-# ── System info API ────────────────────────────────────────────────────────────
 def _read_os_release() -> dict:
     fields = {}
     try:
@@ -2385,7 +2364,6 @@ def api_system_info():
         "version": _local_version(),
     })
 
-# ── Update API ─────────────────────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_BRANCH = os.environ.get("REPO_BRANCH", "main")
 VERSION_FILE = ".version"
@@ -2592,9 +2570,6 @@ def api_update_apply():
     resp.headers["Cache-Control"] = "no-cache"
     return resp
 
-# ───────────────────────────────────────────────────────────────────────────────
-
-# Start background port-check thread (skip in Werkzeug reloader child process)
 if os.environ.get("WERKZEUG_RUN_MAIN") != "false":
     threading.Thread(target=_bg_check_loop, daemon=True, name="bg-port-check").start()
 

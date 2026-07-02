@@ -93,11 +93,12 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
       let nowMs;
       if (smoothRef.current) {
         const lastTs = all.length > 0 ? all[all.length - 1].ts : Date.now();
-        // Initialize (or reinitialize if drift > 10 s ahead of data)
-        if (nowMsRef.current === null || nowMsRef.current > lastTs + 10000) {
-          nowMsRef.current = lastTs;
-        }
-        nowMsRef.current += dt;
+        if (nowMsRef.current === null) nowMsRef.current = lastTs;
+        // Clamp forward drift to the same look-ahead window used for sampleCeil below,
+        // so a stalled poll (backgrounded tab, slow network) never lets nowMs run far
+        // ahead of real data — this avoids the hard "reset" jump that used to snap the
+        // window backward once drift exceeded 10 s, which was visible to the user.
+        nowMsRef.current = Math.min(nowMsRef.current + dt, lastTs + 6000);
         nowMs = nowMsRef.current;
       } else {
         nowMsRef.current = null; // reset so re-enabling smooth mode re-anchors
