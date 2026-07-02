@@ -4,6 +4,7 @@ const { useState: uS, useEffect: uE, useRef: uR, useMemo: uM, useCallback: uC } 
 const IS_MAC = /mac/i.test(navigator.userAgentData?.platform ?? navigator.userAgent);
 const LOG_VERBOSE_KEY = 'WG_LOG_VERBOSE';
 const DISMISSED_ALERTS_KEY = 'WG_DISMISSED_ALERTS';
+const BUDGET_TOASTED_KEY = 'WG_BUDGET_TOASTED';
 const AVG_PING_HISTORY_KEY = 'WG_AVG_PING_HISTORY';
 
 
@@ -99,6 +100,26 @@ function App({ tweaks, setTweaks, onLogout }) {
   uE(() => {
     localStorage.setItem(DISMISSED_ALERTS_KEY, JSON.stringify([...dismissedAlerts]));
   }, [dismissedAlerts]);
+
+  // Toast once per threshold per budget period when 70% / 90% is crossed
+  uE(() => {
+    if (!budgetAlerts) return;
+    const pct = budgetUsage.pct || 0;
+    const period = budgetUsage.period_start_iso || '';
+    const level = pct >= 90 ? '90' : pct >= 70 ? '70' : '';
+    if (!level || !period) return;
+    const key = `budget-${level}-${period}`;
+    let shown;
+    try { shown = new Set(JSON.parse(localStorage.getItem(BUDGET_TOASTED_KEY) || '[]')); }
+    catch { shown = new Set(); }
+    if (shown.has(key)) return;
+    shown.add(key);
+    localStorage.setItem(BUDGET_TOASTED_KEY, JSON.stringify([...shown].slice(-20)));
+    window.WG.toast?.warning?.(
+      level === '90' ? 'Budget nearly exhausted' : 'Budget at 70%',
+      `${pct.toFixed(0)}% of ${dataBudget} GB daily budget used.`
+    );
+  }, [budgetAlerts, budgetUsage.pct, budgetUsage.period_start_iso, dataBudget]);
 
   uE(() => {
     localStorage.setItem(AVG_PING_HISTORY_KEY, JSON.stringify(avgPingHistory));

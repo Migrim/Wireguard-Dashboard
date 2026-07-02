@@ -363,6 +363,66 @@ def logs_tail(n: int=200, verbose: bool=False) -> str:
     o, _ = _sudo(args)
     return o
 
+_JOURNAL_MONTHS = {"Jan":1,"Feb":2,"Mar":3,"Apr":4,"May":5,"Jun":6,"Jul":7,"Aug":8,"Sep":9,"Oct":10,"Nov":11,"Dec":12}
+_JOURNAL_TS_RE = re.compile(r"^([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{2}):(\d{2}):(\d{2})")
+
+def _journal_line_ts(line: str) -> float:
+    """Best-effort epoch timestamp of a journalctl short/short-precise line, or 0."""
+    m = _JOURNAL_TS_RE.match(line)
+    if not m:
+        return 0
+    now = datetime.datetime.now()
+    try:
+        d = datetime.datetime(now.year, _JOURNAL_MONTHS[m.group(1)], int(m.group(2)), int(m.group(3)), int(m.group(4)), int(m.group(5)))
+    except (KeyError, ValueError):
+        return 0
+    if (d - now).days >= 1:  # journal line from last year (Dec seen in Jan)
+        d = d.replace(year=now.year - 1)
+    return d.timestamp()
+
+def _budget_alert_log_lines() -> List[Tuple[float, str]]:
+    """Budget alert events formatted as journal-style lines, oldest first."""
+    try:
+        events = _load_data_budget_db().get("alert_log", [])
+        host = os.uname().nodename
+    except Exception:
+        return []
+    out = []
+    for ev in events:
+        try:
+            ts = int(ev.get("ts", 0) or 0)
+            level = str(ev.get("level", ""))
+            pct = float(ev.get("pct", 0) or 0)
+            used_gb = int(ev.get("used", 0) or 0) / (1024 ** 3)
+            budget_gb = ev.get("budget_gb", "?")
+        except (TypeError, ValueError):
+            continue
+        title = "data budget nearly exhausted" if level == "90" else "approaching data budget"
+        stamp = time.strftime("%b %d %H:%M:%S", time.localtime(ts))
+        out.append((float(ts), f"{stamp} {host} wg-dashboard[budget]: warning: {title} — {pct:.0f}% used ({used_gb:.1f} of {budget_gb} GB)"))
+    out.sort(key=lambda x: x[0])
+    return out
+
+def _merge_budget_alert_lines(lines: List[str]) -> List[str]:
+    """Interleave budget alert lines into journal output by timestamp."""
+    alerts = _budget_alert_log_lines()
+    if not alerts:
+        return lines
+    if lines:
+        first_ts = next((t for t in (_journal_line_ts(ln) for ln in lines) if t), 0)
+        alerts = [a for a in alerts if a[0] >= first_ts]
+    out = []
+    ai = 0
+    for ln in lines:
+        ts = _journal_line_ts(ln)
+        if ts:
+            while ai < len(alerts) and alerts[ai][0] <= ts:
+                out.append(alerts[ai][1])
+                ai += 1
+        out.append(ln)
+    out.extend(a[1] for a in alerts[ai:])
+    return out
+
 def _read_conf() -> Dict[str,Any]:
     data = {"Interface": {}, "Peers": []}
     content = ""
@@ -981,6 +1041,7 @@ def _load_data_budget_db() -> Dict[str, Any]:
     default["carryover"] = db.get("carryover") if isinstance(db.get("carryover"), dict) else {}
     default["last_totals"] = db.get("last_totals") if isinstance(db.get("last_totals"), dict) else {}
     default["alert_state"] = db.get("alert_state") if isinstance(db.get("alert_state"), dict) else {}
+    default["alert_log"] = db.get("alert_log") if isinstance(db.get("alert_log"), list) else []
     return default
 
 def _save_data_budget_db(db: Dict[str, Any]) -> None:
@@ -1262,6 +1323,9 @@ def _data_budget_state_locked(issued: List[Dict[str, Any]], live: List[Dict[str,
         level = "90" if pct >= 90 else "70" if pct >= 70 else ""
         if level and state.get("last_level") != level:
             app.logger.warning("data_budget_alert threshold=%s pct=%.1f used=%s budget_gb=%s", level, pct, total_used, settings["budget_gb"])
+            alert_log = db.setdefault("alert_log", [])
+            alert_log.append({"ts": int(time.time()), "level": level, "pct": round(pct, 1), "used": total_used, "budget_gb": settings["budget_gb"]})
+            del alert_log[:-50]
             state["last_level"] = level
             changed = True
         elif not level and state.get("last_level"):
@@ -2044,6 +2108,10 @@ def api_logs():
     n=int(request.args.get("n","200"))
     verbose=request.args.get("verbose","0")=="1"
     lines=logs_tail(n, verbose).splitlines()
+    try:
+        lines=_merge_budget_alert_lines(lines)
+    except Exception:
+        app.logger.exception("budget_alert_log_merge_failed")
     return jsonify({"lines":lines,"verbose":verbose,"count":len(lines)})
 
 @app.route("/api/logs/retention",methods=["POST"])
