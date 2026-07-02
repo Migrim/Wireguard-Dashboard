@@ -841,7 +841,7 @@ function KPIThroughput({ currentRx, currentTx, dataIn, dataOut, smooth = false }
           <span className="kpi-unit">{window.WG.formatRate(total).split(' ')[1]}</span>
         </div>
         <div className="kpi-mini">
-          <MiniBars data={miniData} width={140} height={32} color="var(--accent)" smooth={smooth} slots={20} />
+          <MiniBars data={miniData} width={140} height={40} color="var(--accent)" smooth={smooth} slots={20} />
         </div>
       </div>
       <div className="kpi-foot">
