@@ -101,25 +101,42 @@ function App({ tweaks, setTweaks, onLogout }) {
     localStorage.setItem(DISMISSED_ALERTS_KEY, JSON.stringify([...dismissedAlerts]));
   }, [dismissedAlerts]);
 
-  // Toast once per threshold per budget period when 70% / 90% is crossed
+  // Toast once per threshold per budget period when 70% / 90% is crossed (total + per-peer)
   uE(() => {
     if (!budgetAlerts) return;
-    const pct = budgetUsage.pct || 0;
     const period = budgetUsage.period_start_iso || '';
+    if (!period) return;
+    const pending = [];
+    const pct = budgetUsage.pct || 0;
     const level = pct >= 90 ? '90' : pct >= 70 ? '70' : '';
-    if (!level || !period) return;
-    const key = `budget-${level}-${period}`;
+    if (level) {
+      pending.push({
+        key: `budget-${level}-${period}`,
+        title: level === '90' ? 'Budget nearly exhausted' : 'Budget at 70%',
+        desc: `${pct.toFixed(0)}% of ${dataBudget} GB daily budget used.`,
+      });
+    }
+    (budgetUsage.peers || []).forEach(row => {
+      const pb = peerBudgets[row.name];
+      if (!pb || pb === 'inf') return;
+      const ppct = ((row.bytes || 0) / (pb * 1024 * 1024 * 1024)) * 100;
+      const plevel = ppct >= 90 ? '90' : ppct >= 70 ? '70' : '';
+      if (!plevel) return;
+      pending.push({
+        key: `budget-peer-${row.name}-${plevel}-${period}`,
+        title: plevel === '90' ? `${row.name}: budget nearly exhausted` : `${row.name}: budget at 70%`,
+        desc: `${ppct.toFixed(0)}% of ${pb} GB peer budget used.`,
+      });
+    });
+    if (!pending.length) return;
     let shown;
     try { shown = new Set(JSON.parse(localStorage.getItem(BUDGET_TOASTED_KEY) || '[]')); }
     catch { shown = new Set(); }
-    if (shown.has(key)) return;
-    shown.add(key);
-    localStorage.setItem(BUDGET_TOASTED_KEY, JSON.stringify([...shown].slice(-20)));
-    window.WG.toast?.warning?.(
-      level === '90' ? 'Budget nearly exhausted' : 'Budget at 70%',
-      `${pct.toFixed(0)}% of ${dataBudget} GB daily budget used.`
-    );
-  }, [budgetAlerts, budgetUsage.pct, budgetUsage.period_start_iso, dataBudget]);
+    const fresh = pending.filter(p => !shown.has(p.key));
+    if (!fresh.length) return;
+    fresh.forEach(p => { shown.add(p.key); window.WG.toast?.warning?.(p.title, p.desc); });
+    localStorage.setItem(BUDGET_TOASTED_KEY, JSON.stringify([...shown].slice(-40)));
+  }, [budgetAlerts, budgetUsage, dataBudget, peerBudgets]);
 
   uE(() => {
     localStorage.setItem(AVG_PING_HISTORY_KEY, JSON.stringify(avgPingHistory));
@@ -474,6 +491,22 @@ function App({ tweaks, setTweaks, onLogout }) {
         alerts.push({ level: 'warn', title: 'Budget at 70%', desc: `${bpct.toFixed(0)}% of ${dataBudget} GB daily budget used.`, key });
       }
     }
+    (budgetUsage.peers || []).forEach(row => {
+      const pb = peerBudgets[row.name];
+      if (!pb || pb === 'inf') return;
+      const ppct = ((row.bytes || 0) / (pb * 1024 * 1024 * 1024)) * 100;
+      const level = ppct >= 90 ? '90' : ppct >= 70 ? '70' : '';
+      if (!level) return;
+      const key = `budget-peer-${row.name}-${level}-${period}`;
+      if (!dismissedAlerts.has(key)) {
+        alerts.push({
+          level: 'warn',
+          title: level === '90' ? `${row.name}: budget nearly exhausted` : `${row.name}: budget at 70%`,
+          desc: `${ppct.toFixed(0)}% of ${pb} GB peer budget used.`,
+          key,
+        });
+      }
+    });
   }
   bgNotifs.forEach(n => {
     if (!dismissedAlerts.has(n.id)) {

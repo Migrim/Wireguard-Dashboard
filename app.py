@@ -397,7 +397,11 @@ def _budget_alert_log_lines() -> List[Tuple[float, str]]:
             budget_gb = ev.get("budget_gb", "?")
         except (TypeError, ValueError):
             continue
-        title = "data budget nearly exhausted" if level == "90" else "approaching data budget"
+        peer = str(ev.get("peer") or "").strip()
+        if peer:
+            title = f"peer '{peer}' budget nearly exhausted" if level == "90" else f"peer '{peer}' approaching budget"
+        else:
+            title = "data budget nearly exhausted" if level == "90" else "approaching data budget"
         stamp = time.strftime("%b %d %H:%M:%S", time.localtime(ts))
         out.append((float(ts), f"{stamp} {host} wg-dashboard[budget]: warning: {title} — {pct:.0f}% used ({used_gb:.1f} of {budget_gb} GB)"))
     out.sort(key=lambda x: x[0])
@@ -1331,6 +1335,32 @@ def _data_budget_state_locked(issued: List[Dict[str, Any]], live: List[Dict[str,
         elif not level and state.get("last_level"):
             state.pop("last_level", None)
             changed = True
+        peer_budgets = settings.get("peer_budgets", {})
+        peer_state = state.setdefault("peers", {})
+        seen = set()
+        for row in rows:
+            name = row["name"]
+            pb = peer_budgets.get(name)
+            if not pb or pb == "inf":
+                continue
+            seen.add(name)
+            peer_cap = int(pb) * 1024 * 1024 * 1024
+            ppct = (row["bytes"] / peer_cap * 100) if peer_cap else 0
+            plevel = "90" if ppct >= 90 else "70" if ppct >= 70 else ""
+            if plevel and peer_state.get(name) != plevel:
+                app.logger.warning("data_budget_peer_alert peer=%s threshold=%s pct=%.1f used=%s budget_gb=%s", name, plevel, ppct, row["bytes"], pb)
+                alert_log = db.setdefault("alert_log", [])
+                alert_log.append({"ts": int(time.time()), "level": plevel, "pct": round(ppct, 1), "used": row["bytes"], "budget_gb": pb, "peer": name})
+                del alert_log[:-50]
+                peer_state[name] = plevel
+                changed = True
+            elif not plevel and peer_state.get(name):
+                peer_state.pop(name, None)
+                changed = True
+        for name in list(peer_state.keys()):
+            if name not in seen:
+                peer_state.pop(name, None)
+                changed = True
     if persist:
         try:
             if _enforce_budgets(db, rows, settings, pct):

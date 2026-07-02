@@ -534,10 +534,7 @@ function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets
     setSaving(true);
     setMsg('');
     try {
-      const r = await updateBudgetSettings(patch);
-      setMsg('Saved');
-      setTimeout(() => setMsg(''), 2000);
-      return r;
+      return await updateBudgetSettings(patch);
     } catch (e) {
       setMsg('Error: ' + (e.message || 'save failed'));
     } finally {
