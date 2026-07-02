@@ -113,6 +113,9 @@ function DynDNSDrawer({ onClose }) {
         body: JSON.stringify({ hostname: host }),
         silent: true,
       });
+      // The server re-detects its own public IP on every check, so the
+      // sync comparison never uses a stale boot-time snapshot.
+      if (r.public_ip) setCfg(prev => prev ? { ...prev, public_ip: r.public_ip } : prev);
       setResolveResult({ ok: true, ip: r.ip, host });
     } catch (e) {
       setResolveResult({ ok: false, error: e?.message || 'Resolution failed', host });

@@ -24,7 +24,19 @@ def _detect_public_ip() -> str:
             continue
     return HOST_IP
 
-PUBLIC_IP = _detect_public_ip()
+# The public IP can change at any time (that is the whole point of DynDNS),
+# so never serve a boot-time snapshot: re-detect on demand with a short cache.
+_public_ip_cache = {"ts": 0.0, "ip": ""}
+
+def _current_public_ip(max_age: float = 60.0) -> str:
+    if os.environ.get("SERVER_PUBLIC_IP"):
+        return os.environ["SERVER_PUBLIC_IP"].strip()
+    if _public_ip_cache["ip"] and time.time() - _public_ip_cache["ts"] < max_age:
+        return _public_ip_cache["ip"]
+    ip = _detect_public_ip()
+    _public_ip_cache["ts"] = time.time()
+    _public_ip_cache["ip"] = ip
+    return ip
 
 PEERS_DB=os.path.join(WG_DIR,"peers.json")
 DYNDNS_DB=os.environ.get("DYNDNS_DB", os.path.join(WG_DIR, "dyndns.json"))
@@ -76,7 +88,7 @@ def _get_endpoint_host() -> str:
     cfg = _load_dyndns()
     if cfg.get("mode") == "dyndns" and cfg.get("hostname", "").strip():
         return cfg["hostname"].strip()
-    return PUBLIC_IP
+    return _current_public_ip()
 WELCOME_FLAG=os.path.join(WG_DIR,"welcomed.flag")
 _WELCOME_FLAG_FALLBACK=os.path.join(os.path.dirname(__file__),".welcomed")
 DATA_BUDGET_DB=os.environ.get("DATA_BUDGET_DB", os.path.join(WG_DIR, "data_budget.json"))
@@ -2084,7 +2096,7 @@ def api_dyndns():
         cfg = _load_dyndns()
         safe = {k: v for k, v in cfg.items() if k != "token"}
         safe["has_token"] = bool(cfg.get("token"))
-        safe["public_ip"] = PUBLIC_IP
+        safe["public_ip"] = _current_public_ip()
         return jsonify(safe)
     data = request.get_json(force=True, silent=True) or {}
     cfg = _load_dyndns()
@@ -2119,7 +2131,7 @@ def api_dyndns_resolve():
         return jsonify({"error": "hostname required"}), 400
     try:
         ip = socket.getaddrinfo(hostname, None)[0][4][0]
-        return jsonify({"ip": ip, "hostname": hostname})
+        return jsonify({"ip": ip, "hostname": hostname, "public_ip": _current_public_ip()})
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
@@ -2134,7 +2146,7 @@ def api_dyndns_update():
     custom_url = cfg.get("custom_url", "")
     if not provider:
         return jsonify({"error": "No provider configured"}), 400
-    current_ip = _detect_public_ip()
+    current_ip = _current_public_ip(0)
 
     def _record(ok: bool, detail: str = "") -> None:
         # Remember the outcome of the last real push attempt so the UI
@@ -2231,7 +2243,7 @@ def api_diag_vpn():
     wg_show,_=_sudo(["/usr/bin/wg","show"]) if os.path.exists("/usr/bin/wg") else ("","")
     journal,_=_sudo(["/usr/bin/journalctl","-u",UNIT,"-n","15","--no-pager"])
     return jsonify({
-        "public_ip": PUBLIC_IP,
+        "public_ip": _current_public_ip(),
         "host_ip": HOST_IP,
         "ip_forward": ip_fwd.strip()=="1",
         "has_postup": "PostUp" in iface_cfg,
