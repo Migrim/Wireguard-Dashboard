@@ -407,9 +407,83 @@ def _budget_alert_log_lines() -> List[Tuple[float, str]]:
     out.sort(key=lambda x: x[0])
     return out
 
-def _merge_budget_alert_lines(lines: List[str]) -> List[str]:
-    """Interleave budget alert lines into journal output by timestamp."""
-    alerts = _budget_alert_log_lines()
+DASH_EVENTS_DB = os.environ.get("DASH_EVENTS_DB", os.path.join(WG_DIR, "dashboard_events.json"))
+_dash_events_lock = threading.Lock()
+
+def _load_dash_events() -> List[Dict[str, Any]]:
+    try:
+        with open(DASH_EVENTS_DB, "r", encoding="utf-8") as f:
+            events = json.load(f)
+    except FileNotFoundError:
+        return []
+    except PermissionError:
+        out, rc = _sudo_cat(DASH_EVENTS_DB)
+        if rc != 0 or not out:
+            return []
+        try:
+            events = json.loads(out)
+        except Exception:
+            return []
+    except Exception:
+        return []
+    return events if isinstance(events, list) else []
+
+def _log_dashboard_event(msg: str, level: str = "info") -> None:
+    """Record a user-facing event shown in the dashboard Logs panel."""
+    app.logger.info("dashboard_event level=%s msg=%s", level, msg)
+    try:
+        with _dash_events_lock:
+            events = _load_dash_events()
+            events.append({"ts": int(time.time()), "level": level if level in ("info", "warn", "error") else "info", "msg": str(msg)[:300]})
+            del events[:-200]
+            import tempfile
+            fd, tmp_path = tempfile.mkstemp(prefix="dash-events.", suffix=".json.tmp", dir="/tmp")
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(events, f)
+                try:
+                    os.makedirs(os.path.dirname(DASH_EVENTS_DB), exist_ok=True)
+                    os.replace(tmp_path, DASH_EVENTS_DB)
+                    return
+                except Exception:
+                    pass
+                _sudo(["/usr/bin/install", "-m", "640", "-o", "root", "-g", "www-data", tmp_path, DASH_EVENTS_DB])
+            finally:
+                try:
+                    if os.path.exists(tmp_path):
+                        os.remove(tmp_path)
+                except:
+                    pass
+    except Exception:
+        app.logger.exception("dashboard_event_save_failed")
+
+def _dashboard_event_lines() -> List[Tuple[float, str]]:
+    """Dashboard events formatted as journal-style lines, oldest first."""
+    try:
+        events = _load_dash_events()
+        host = os.uname().nodename
+    except Exception:
+        return []
+    out = []
+    for ev in events:
+        try:
+            ts = int(ev.get("ts", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        msg = str(ev.get("msg", "")).strip()
+        if not ts or not msg:
+            continue
+        level = str(ev.get("level", "info"))
+        prefix = "warning: " if level == "warn" else "error: " if level == "error" else ""
+        stamp = time.strftime("%b %d %H:%M:%S", time.localtime(ts))
+        out.append((float(ts), f"{stamp} {host} wg-dashboard[events]: {prefix}{msg}"))
+    out.sort(key=lambda x: x[0])
+    return out
+
+def _merge_dashboard_log_lines(lines: List[str]) -> List[str]:
+    """Interleave budget alerts and dashboard events into journal output by timestamp."""
+    alerts = _budget_alert_log_lines() + _dashboard_event_lines()
+    alerts.sort(key=lambda x: x[0])
     if not alerts:
         return lines
     if lines:
@@ -1267,6 +1341,12 @@ def _enforce_budgets(db: Dict[str, Any], rows: List[Dict[str, Any]], settings: D
         if desired != prev:
             enforce_state[name] = desired
             app.logger.info("budget_enforce peer=%s prev=%s now=%s pct=%.1f action=%s", name, prev, desired, pct, action)
+            if desired == "throttled":
+                _log_dashboard_event(f"peer '{name}' throttled to {throttle_mbps} Mbps — budget at {pct:.0f}%", "warn")
+            elif desired == "paused":
+                _log_dashboard_event(f"peer '{name}' paused — budget exceeded ({pct:.0f}%)", "warn")
+            else:
+                _log_dashboard_event(f"peer '{name}' budget enforcement lifted")
             changed = True
 
     if peer_db_changed:
@@ -1292,6 +1372,8 @@ def _data_budget_state_locked(issued: List[Dict[str, Any]], live: List[Dict[str,
     changed = False
     if int(db.get("period_start", 0) or 0) != period_start:
         app.logger.info("data_budget_reset period_start=%s reset_time=%s peers=%s", period_start, settings["reset_time"], len(totals))
+        if int(db.get("period_start", 0) or 0):
+            _log_dashboard_event(f"data budget period reset (daily reset at {settings['reset_time']})")
         db["period_start"] = period_start
         db["baselines"] = {name: total for name, total in totals.items()}
         db["carryover"] = {}
@@ -1585,6 +1667,7 @@ def auth_login():
         session.permanent = True
         session["authenticated"] = True
         return jsonify({"ok": True})
+    _log_dashboard_event(f"failed dashboard login attempt from {request.remote_addr}", "warn")
     return jsonify({"error": "Invalid password"}), 401
 
 @app.route("/api/auth/logout", methods=["POST"])
@@ -1617,6 +1700,7 @@ def api_change_password():
     if not saved:
         return jsonify({"ok": False, "error": "save_failed", "hint": "Could not write password file"}), 500
     DASHBOARD_PASSWORD_HASH = h
+    _log_dashboard_event("dashboard password changed")
     return jsonify({"ok": True})
 
 @app.route("/setup")
@@ -1863,6 +1947,10 @@ def api_service():
             o, c = so, sc
     else:
         o,c=_sudo(["/usr/bin/systemctl",action,UNIT])
+    if c==0:
+        _log_dashboard_event(f"service {action} via dashboard ({UNIT})")
+    else:
+        _log_dashboard_event(f"service {action} failed ({UNIT})", "error")
     return jsonify({"ok":c==0,"out":o,"active":service_active(),"enabled":service_enabled()})
 
 @app.route("/api/users",methods=["GET","POST"])
@@ -1902,6 +1990,7 @@ def api_users():
     _write_conf(conf)
     db[name]={"public_key":client_pub,"private_key":client_priv,"address":addr,"created":datetime.datetime.utcnow().strftime("%Y-%m-%d")}
     _save_peers_db(db)
+    _log_dashboard_event(f"peer '{name}' added ({addr})")
     try:
         profile_text, _ = gen_client_conf(name)
     except Exception:
@@ -1921,6 +2010,8 @@ def api_users_rename(name: str):
         return jsonify({"ok":False,"error":"already_exists","hint":"A peer with that name already exists"}),409
     db[new_name]=db.pop(name)
     _save_peers_db(db)
+    if new_name!=name:
+        _log_dashboard_event(f"peer '{name}' renamed to '{new_name}'")
     return jsonify({"ok":True,"name":new_name})
 
 @app.route("/api/users/<name>/settings", methods=["PATCH"])
@@ -1981,6 +2072,7 @@ def api_users_revoke(name: str):
     del db[name]
     _save_peers_db(db)
     _sudo(["/usr/bin/systemctl","reload",UNIT])
+    _log_dashboard_event(f"peer '{name}' revoked", "warn")
     return jsonify({"ok":True})
 
 @app.route("/api/users/<name>/restore",methods=["POST"])
@@ -1998,6 +2090,7 @@ def api_users_restore(name: str):
         peers.append({"PublicKey":pub,"AllowedIPs":addr})
         conf["Peers"]=peers
         _write_conf(conf)
+    _log_dashboard_event(f"peer '{name}' restored ({addr})")
     return jsonify({"ok":True})
 
 @app.route("/api/users/<name>/pause", methods=["POST"])
@@ -2011,6 +2104,7 @@ def api_users_pause(name: str):
     meta["paused"] = True
     db[name] = meta
     _save_peers_db(db)
+    _log_dashboard_event(f"peer '{name}' paused")
     return jsonify({"ok": True})
 
 @app.route("/api/users/<name>/resume", methods=["POST"])
@@ -2030,6 +2124,7 @@ def api_users_resume(name: str):
         if bdb.get("enforce_state", {}).get(name) not in (None, "none"):
             bdb["enforce_state"][name] = "none"
             _save_data_budget_db(bdb)
+    _log_dashboard_event(f"peer '{name}' resumed")
     return jsonify({"ok": True})
 
 @app.route("/api/users/<name>/ovpn")
@@ -2139,9 +2234,9 @@ def api_logs():
     verbose=request.args.get("verbose","0")=="1"
     lines=logs_tail(n, verbose).splitlines()
     try:
-        lines=_merge_budget_alert_lines(lines)
+        lines=_merge_dashboard_log_lines(lines)
     except Exception:
-        app.logger.exception("budget_alert_log_merge_failed")
+        app.logger.exception("dashboard_log_merge_failed")
     return jsonify({"lines":lines,"verbose":verbose,"count":len(lines)})
 
 @app.route("/api/logs/retention",methods=["POST"])
@@ -2154,6 +2249,8 @@ def api_logs_retention():
         return jsonify({"ok":True,"retention":retention,"out":"No vacuum needed"})
     vacuum_map={"1d":"1d","7d":"7d","30d":"30d"}
     o,c=_sudo(["/usr/bin/journalctl",f"--vacuum-time={vacuum_map[retention]}"])
+    if c==0:
+        _log_dashboard_event(f"journal retention set to {retention}")
     return jsonify({"ok":c==0,"retention":retention,"out":o})
 
 @app.route("/api/data-budget", methods=["GET", "POST"])
@@ -2207,6 +2304,23 @@ def api_data_budget():
                 db["period_start"] = 0
             _save_data_budget_db(db)
         app.logger.info("data_budget_settings_update old=%s new=%s", old, settings)
+        changes = []
+        if old.get("budget_gb") != settings.get("budget_gb"):
+            changes.append(f"daily budget {old.get('budget_gb')} → {settings.get('budget_gb')} GB")
+        if old.get("alerts") != settings.get("alerts"):
+            changes.append(f"alerts {'enabled' if settings.get('alerts') else 'disabled'}")
+        if old.get("reset_time") != settings.get("reset_time"):
+            changes.append(f"reset time {old.get('reset_time')} → {settings.get('reset_time')}")
+        if old.get("peer_budgets") != settings.get("peer_budgets"):
+            opb = old.get("peer_budgets") or {}
+            npb = settings.get("peer_budgets") or {}
+            diffs = [f"{k} {opb.get(k, 'inf')} → {npb.get(k, 'inf')} GB" for k in sorted(set(opb) | set(npb)) if opb.get(k) != npb.get(k)]
+            changes.append("peer budgets: " + ", ".join(diffs[:4]) if diffs else "peer budgets updated")
+        if old.get("enforcement") != settings.get("enforcement"):
+            enf = settings.get("enforcement") or {}
+            changes.append(f"enforcement set to '{enf.get('action', 'none')}'" + (f" ({enf.get('throttle_mbps')} Mbps)" if enf.get("action") in ("throttle", "combined") else ""))
+        if changes:
+            _log_dashboard_event("budget settings changed: " + ", ".join(changes))
     state = _data_budget_state(issued, live)
     return jsonify({"ok": True, **state})
 
@@ -2270,6 +2384,10 @@ def api_ports():
         o,c=_sudo(["/usr/sbin/ufw","allow",f"{port}/{proto}"])
     else:
         o,c=_sudo(["/usr/sbin/ufw","delete","allow",f"{port}/{proto}"])
+    if c==0:
+        _log_dashboard_event(f"firewall rule {'added' if allow else 'removed'}: {port}/{proto}")
+    else:
+        _log_dashboard_event(f"firewall change failed for {port}/{proto}", "error")
     return jsonify({"ok":True,"out":o,"ufw_allowed":ufw_allowed(port,proto)})
 
 _SENSITIVE_KEYS = {"PrivateKey", "PreSharedKey"}
@@ -2302,6 +2420,8 @@ def api_config():
     conf["Interface"]=iface
     _write_conf(conf)
     _sudo(["/usr/bin/systemctl","restart",UNIT])
+    changed_keys=[k for k in ("ListenPort","DNS","Address") if k in data]
+    _log_dashboard_event(f"interface config changed ({', '.join(changed_keys) or 'no fields'}) — service restarted", "warn")
     return jsonify({"ok":True})
 
 @app.route("/api/dyndns", methods=["GET", "POST"])
@@ -2328,6 +2448,7 @@ def api_dyndns():
     except Exception as e:
         app.logger.error("dyndns_save_failed: %s", e)
         return jsonify({"ok": False, "error": str(e)}), 500
+    _log_dashboard_event(f"dyndns settings updated (mode: {cfg.get('mode') or 'static'}" + (f", provider: {cfg.get('provider')}" if cfg.get("provider") else "") + ")")
     return jsonify({"ok": True})
 
 @app.route("/api/dyndns/token", methods=["GET"])
@@ -2378,6 +2499,10 @@ def api_dyndns_update():
             _save_dyndns(cfg)
         except Exception as e:
             app.logger.error("dyndns_last_update_save_failed: %s", e)
+        if ok:
+            _log_dashboard_event(f"dyndns update ok — {provider}: {domain or custom_url} → {current_ip}")
+        else:
+            _log_dashboard_event(f"dyndns update failed — {provider}: {detail[:120]}", "error")
 
     try:
         if provider == "duckdns":
@@ -2826,6 +2951,7 @@ def api_update_apply():
 
             threading.Thread(target=_delayed_restart, daemon=True).start()
 
+            _log_dashboard_event(f"dashboard updated to {_local_version() or 'latest'} — restarting service")
             yield _sse({"event": "done", "version": _local_version(), "progress": 100})
         except Exception as e:
             yield _sse({"event": "error", "detail": str(e)})
