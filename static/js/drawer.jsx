@@ -514,6 +514,15 @@ function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets
   const pct = Math.min(100, (total / cap) * 100);
   const remaining = Math.max(0, cap - total);
 
+  const enforceState = budgetUsage?.enforce_state || {};
+  const throttledCount = Object.values(enforceState).filter(s => s === 'throttled').length;
+  const pausedCount = Object.values(enforceState).filter(s => s === 'paused').length;
+  const enfAction = enforcement.action || 'none';
+  const enfLabel = enfAction === 'pause' ? 'pause at 100%'
+    : enfAction === 'throttle' ? `throttle to ${enforcement.throttle_mbps || 5} Mbps at 100%`
+    : enfAction === 'combined' ? `throttle to ${enforcement.throttle_mbps || 5} Mbps at 80% · pause at 100%`
+    : '';
+
   const peerByName = new Map(peers.map(p => [p.name, p]));
   const peerBreakdown = (budgetUsage?.peers || []).map(row => {
     const p = peerByName.get(row.name) || {};
@@ -608,6 +617,16 @@ function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets
                   <span>{budget} GB</span>
                 </div>
               </div>
+              {enfAction !== 'none' && (
+                <div className="budget-enf">
+                  <span>{enfLabel}</span>
+                  <span className="budget-enf-counts">
+                    {throttledCount > 0 && <span className="pb-badge pb-badge-throttled">{throttledCount} throttled</span>}
+                    {pausedCount > 0 && <span className="pb-badge pb-badge-paused">{pausedCount} paused</span>}
+                    {throttledCount === 0 && pausedCount === 0 && <span>no peers limited</span>}
+                  </span>
+                </div>
+              )}
             </div>
           </section>
 
@@ -624,11 +643,16 @@ function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets
                 const ppct = isInf ? 0 : Math.min(100, (p.total / pcap) * 100);
                 const over = !isInf && p.total > pcap;
                 const fillColor = over ? 'var(--danger)' : ppct > 80 ? 'var(--warn)' : 'var(--accent)';
+                const enf = enforceState[p.id] || 'none';
                 return (
                   <div key={p.id} className={`pb-row${isInf ? ' is-inf' : ''}`}>
                     <div className="pb-top">
                       <div className="pb-id">
-                        <span className="pb-name">{p.name}</span>
+                        <span className="pb-name">
+                          {p.name}
+                          {enf === 'throttled' && <span className="pb-badge pb-badge-throttled">throttled</span>}
+                          {enf === 'paused' && <span className="pb-badge pb-badge-paused">paused</span>}
+                        </span>
                         <span className="pb-device">{p.device || ''}</span>
                       </div>
                       <div className="pb-ctrl">

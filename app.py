@@ -169,6 +169,7 @@ _geo_cache: Dict[str, Dict[str, Any]] = {}
 
 _bg_notifications: List[Dict[str, Any]] = []
 _bg_lock = threading.Lock()
+_budget_lock = threading.Lock()
 
 def _sudo_cat(path: str) -> Tuple[str, int]:
     for cat_bin in ("/bin/cat", "/usr/bin/cat"):
@@ -310,6 +311,14 @@ def _bg_run_port_check() -> None:
             "title": "Server has no internet connectivity",
             "desc":  "Cannot reach 1.1.1.1 — peer traffic may not route correctly."})
 
+    def _throttle_broken():
+        enf = _load_data_budget_db()["settings"].get("enforcement", {})
+        return enf.get("action") in ("throttle", "combined") and not _tc_available()
+    if _chk(_throttle_broken):
+        findings.append({"id": "bg-tc-missing", "level": "warn",
+            "title": "Speed throttling unavailable",
+            "desc":  f"Budget enforcement wants to reduce speed, but '{TC_BIN}' cannot run via sudo. Re-run install.sh or add it to /etc/sudoers.d/wg-dashboard."})
+
     for f in findings:
         f["ts"]         = ts
         f["checked_at"] = when
@@ -326,6 +335,23 @@ def _bg_check_loop() -> None:
         except Exception:
             pass
         time.sleep(_BG_INTERVAL)
+
+_BUDGET_ENFORCE_INTERVAL = int(os.environ.get("BUDGET_ENFORCE_INTERVAL", "60"))
+
+def _bg_budget_loop() -> None:
+    """Track usage and enforce budgets even when no dashboard client is polling /api/status."""
+    time.sleep(_BG_INIT_DELAY)
+    try:
+        _ensure_tc_sudo()
+    except Exception:
+        app.logger.exception("tc_sudo_check_failed")
+    while True:
+        try:
+            issued, live = list_clients()
+            _data_budget_state(issued, live)
+        except Exception:
+            app.logger.exception("bg_budget_enforce_failed")
+        time.sleep(_BUDGET_ENFORCE_INTERVAL)
 
 def timedate_ntp() -> str:
     o,c=_run("timedatectl 2>/dev/null | awk -F': ' '/NTP service:|System clock synchronized:/{print $2}' | xargs | sed 's/ /, /g'")
@@ -972,34 +998,80 @@ def _tc_peer_handle(name: str) -> int:
         h = ((h << 5) + h + b) & 0xFFFFFFFF
     return h % 9000 + 1000
 
+def _tc_available() -> bool:
+    _, rc = _sudo([TC_BIN, "qdisc", "show", "dev", WG_IFACE])
+    return rc == 0
+
+def _ensure_tc_sudo() -> bool:
+    """Older installs miss /usr/sbin/tc in sudoers; drop in an extra rule so throttling works after updates."""
+    if _tc_available():
+        return True
+    import tempfile
+    fd, tmp_path = tempfile.mkstemp(prefix="wg-dash-sudo.", dir="/tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(f"www-data ALL=(root) NOPASSWD: {TC_BIN}\n")
+        _sudo(["/usr/bin/install", "-m", "440", "-o", "root", "-g", "root", tmp_path, "/etc/sudoers.d/wg-dashboard-tc"])
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+    ok = _tc_available()
+    if ok:
+        app.logger.info("tc_sudo_selfheal_ok bin=%s", TC_BIN)
+    else:
+        app.logger.error("tc_unavailable: throttling disabled — add '%s' to /etc/sudoers.d/wg-dashboard", TC_BIN)
+    return ok
+
 def _ensure_htb_qdisc() -> None:
-    o, _ = _sudo([TC_BIN, "qdisc", "show", "dev", WG_IFACE])
+    o, rc = _sudo([TC_BIN, "qdisc", "show", "dev", WG_IFACE])
+    if rc != 0:
+        raise RuntimeError(f"tc unavailable: {o[:200]}")
     if "htb" not in o:
         _sudo([TC_BIN, "qdisc", "add", "dev", WG_IFACE, "root", "handle", "1:", "htb", "default", "1"])
         _sudo([TC_BIN, "class", "add", "dev", WG_IFACE, "parent", "1:", "classid", "1:1", "htb", "rate", "10gbit"])
 
+def _ensure_ingress_qdisc() -> None:
+    o, _ = _sudo([TC_BIN, "qdisc", "show", "dev", WG_IFACE, "ingress"])
+    if "ingress" not in o:
+        _sudo([TC_BIN, "qdisc", "add", "dev", WG_IFACE, "handle", "ffff:", "ingress"])
+
 def _apply_peer_throttle(name: str, addr: str, mbps: int) -> None:
     handle = _tc_peer_handle(name)
     peer_ip = addr.split("/")[0]
+    if not peer_ip:
+        raise RuntimeError("peer has no address")
     rate = f"{max(1, mbps)}mbit"
+    burst = f"{max(32, mbps * 16)}k"
     _ensure_htb_qdisc()
+    # Download (server -> peer): HTB class on wg egress, packets selected via fwmark.
     o, _ = _sudo([TC_BIN, "class", "show", "dev", WG_IFACE, "classid", f"1:{handle}"])
-    if str(handle) in o:
-        _sudo([TC_BIN, "class", "change", "dev", WG_IFACE, "parent", "1:", "classid", f"1:{handle}", "htb", "rate", rate, "ceil", rate])
-    else:
-        _sudo([TC_BIN, "class", "add", "dev", WG_IFACE, "parent", "1:", "classid", f"1:{handle}", "htb", "rate", rate, "ceil", rate])
+    verb = "change" if str(handle) in o else "add"
+    _, rc = _sudo([TC_BIN, "class", verb, "dev", WG_IFACE, "parent", "1:", "classid", f"1:{handle}", "htb", "rate", rate, "ceil", rate])
+    if rc != 0:
+        raise RuntimeError(f"tc class {verb} failed for {name}")
     _sudo([TC_BIN, "filter", "del", "dev", WG_IFACE, "parent", "1:0", "prio", "1", "handle", str(handle), "fw"])
-    _sudo([TC_BIN, "filter", "add", "dev", WG_IFACE, "parent", "1:0", "protocol", "all", "prio", "1", "handle", str(handle), "fw", "classid", f"1:{handle}"])
+    _, rc = _sudo([TC_BIN, "filter", "add", "dev", WG_IFACE, "parent", "1:0", "protocol", "all", "prio", "1", "handle", str(handle), "fw", "classid", f"1:{handle}"])
+    if rc != 0:
+        raise RuntimeError(f"tc filter add failed for {name}")
     for chain in ("FORWARD", "OUTPUT"):
         _, c = _sudo([IPTABLES_BIN, "-t", "mangle", "-C", chain, "-d", peer_ip, "-j", "MARK", "--set-mark", str(handle)])
         if c != 0:
             _sudo([IPTABLES_BIN, "-t", "mangle", "-A", chain, "-d", peer_ip, "-j", "MARK", "--set-mark", str(handle)])
+    # Upload (peer -> server): police on wg ingress; per-peer prio doubles as deletable filter id.
+    _ensure_ingress_qdisc()
+    _sudo([TC_BIN, "filter", "del", "dev", WG_IFACE, "parent", "ffff:", "prio", str(handle)])
+    _sudo([TC_BIN, "filter", "add", "dev", WG_IFACE, "parent", "ffff:", "protocol", "ip", "prio", str(handle),
+           "u32", "match", "ip", "src", f"{peer_ip}/32", "police", "rate", rate, "burst", burst, "drop", "flowid", ":1"])
 
 def _remove_peer_throttle(name: str, addr: str) -> None:
     handle = _tc_peer_handle(name)
     peer_ip = addr.split("/")[0]
-    for chain in ("FORWARD", "OUTPUT"):
-        _sudo([IPTABLES_BIN, "-t", "mangle", "-D", chain, "-d", peer_ip, "-j", "MARK", "--set-mark", str(handle)])
+    if peer_ip:
+        for chain in ("FORWARD", "OUTPUT"):
+            _sudo([IPTABLES_BIN, "-t", "mangle", "-D", chain, "-d", peer_ip, "-j", "MARK", "--set-mark", str(handle)])
+    _sudo([TC_BIN, "filter", "del", "dev", WG_IFACE, "parent", "ffff:", "prio", str(handle)])
     _sudo([TC_BIN, "filter", "del", "dev", WG_IFACE, "parent", "1:0", "prio", "1", "handle", str(handle), "fw"])
     _sudo([TC_BIN, "class", "del", "dev", WG_IFACE, "classid", f"1:{handle}"])
 
@@ -1035,12 +1107,25 @@ def _enforce_budgets(db: Dict[str, Any], rows: List[Dict[str, Any]], settings: D
             _save_peers_db(peer_db)
         return changed
 
+    known = {row["name"] for row in rows}
+    for name in list(enforce_state.keys()):
+        if name in known or enforce_state.get(name) == "none":
+            continue
+        meta = peer_db.get(name, {})
+        if enforce_state[name] == "throttled":
+            try: _remove_peer_throttle(name, meta.get("address", ""))
+            except Exception: pass
+        enforce_state.pop(name, None)
+        changed = True
+
     for row in rows:
         name = row["name"]
         used = row["bytes"]
         meta = peer_db.get(name, {})
         pub = meta.get("public_key", "")
         addr = meta.get("address", "")
+        if not pub or not addr:
+            continue
         pb = peer_budgets.get(name)
         if pb and pb != "inf":
             peer_cap = int(pb) * 1024 * 1024 * 1024
@@ -1092,6 +1177,10 @@ def _enforce_budgets(db: Dict[str, Any], rows: List[Dict[str, Any]], settings: D
     return changed
 
 def _data_budget_state(issued: List[Dict[str, Any]], live: List[Dict[str, Any]], persist: bool = True) -> Dict[str, Any]:
+    with _budget_lock:
+        return _data_budget_state_locked(issued, live, persist)
+
+def _data_budget_state_locked(issued: List[Dict[str, Any]], live: List[Dict[str, Any]], persist: bool = True) -> Dict[str, Any]:
     db = _load_data_budget_db()
     settings = db["settings"]
     if not _valid_reset_time(settings.get("reset_time")):
@@ -1810,6 +1899,11 @@ def api_users_resume(name: str):
     meta["paused"] = False
     db[name] = meta
     _save_peers_db(db)
+    with _budget_lock:
+        bdb = _load_data_budget_db()
+        if bdb.get("enforce_state", {}).get(name) not in (None, "none"):
+            bdb["enforce_state"][name] = "none"
+            _save_data_budget_db(bdb)
     return jsonify({"ok": True})
 
 @app.route("/api/users/<name>/ovpn")
@@ -1935,52 +2029,53 @@ def api_logs_retention():
 @app.route("/api/data-budget", methods=["GET", "POST"])
 def api_data_budget():
     issued, live = list_clients()
-    db = _load_data_budget_db()
     if request.method == "POST":
         data = request.get_json(force=True, silent=True) or {}
-        settings = db.setdefault("settings", {})
-        old = dict(settings)
-        if "budget_gb" in data:
-            try:
-                settings["budget_gb"] = max(1, min(100000, int(data.get("budget_gb") or 1)))
-            except (TypeError, ValueError):
-                return jsonify({"ok": False, "error": "invalid_budget_gb"}), 400
-        if "alerts" in data:
-            settings["alerts"] = bool(data.get("alerts"))
-        if "reset_time" in data:
-            rt = str(data.get("reset_time", "")).strip()
-            if not _valid_reset_time(rt):
-                return jsonify({"ok": False, "error": "invalid_reset_time"}), 400
-            settings["reset_time"] = rt
-        if "peer_budgets" in data:
-            raw = data.get("peer_budgets") or {}
-            if isinstance(raw, dict):
-                peer_budgets = {}
-                for k, v in raw.items():
-                    if not _valid_name(k):
-                        continue
-                    if v == "inf":
-                        peer_budgets[k] = "inf"
-                    else:
-                        try:
-                            peer_budgets[k] = max(1, min(100000, int(v or 1)))
-                        except (TypeError, ValueError):
-                            pass
-                settings["peer_budgets"] = peer_budgets
-        if "enforcement" in data:
-            enf = data.get("enforcement") or {}
-            enf_action = str(enf.get("action", "none")).lower()
-            if enf_action not in {"none", "throttle", "pause", "combined"}:
-                enf_action = "none"
-            try:
-                enf_mbps = max(1, min(1000, int(enf.get("throttle_mbps", 5) or 5)))
-            except (TypeError, ValueError):
-                enf_mbps = 5
-            settings["enforcement"] = {"action": enf_action, "throttle_mbps": enf_mbps}
-        db["settings"] = settings
-        if old.get("reset_time") != settings.get("reset_time"):
-            db["period_start"] = 0
-        _save_data_budget_db(db)
+        with _budget_lock:
+            db = _load_data_budget_db()
+            settings = db.setdefault("settings", {})
+            old = dict(settings)
+            if "budget_gb" in data:
+                try:
+                    settings["budget_gb"] = max(1, min(100000, int(data.get("budget_gb") or 1)))
+                except (TypeError, ValueError):
+                    return jsonify({"ok": False, "error": "invalid_budget_gb"}), 400
+            if "alerts" in data:
+                settings["alerts"] = bool(data.get("alerts"))
+            if "reset_time" in data:
+                rt = str(data.get("reset_time", "")).strip()
+                if not _valid_reset_time(rt):
+                    return jsonify({"ok": False, "error": "invalid_reset_time"}), 400
+                settings["reset_time"] = rt
+            if "peer_budgets" in data:
+                raw = data.get("peer_budgets") or {}
+                if isinstance(raw, dict):
+                    peer_budgets = {}
+                    for k, v in raw.items():
+                        if not _valid_name(k):
+                            continue
+                        if v == "inf":
+                            peer_budgets[k] = "inf"
+                        else:
+                            try:
+                                peer_budgets[k] = max(1, min(100000, int(v or 1)))
+                            except (TypeError, ValueError):
+                                pass
+                    settings["peer_budgets"] = peer_budgets
+            if "enforcement" in data:
+                enf = data.get("enforcement") or {}
+                enf_action = str(enf.get("action", "none")).lower()
+                if enf_action not in {"none", "throttle", "pause", "combined"}:
+                    enf_action = "none"
+                try:
+                    enf_mbps = max(1, min(1000, int(enf.get("throttle_mbps", 5) or 5)))
+                except (TypeError, ValueError):
+                    enf_mbps = 5
+                settings["enforcement"] = {"action": enf_action, "throttle_mbps": enf_mbps}
+            db["settings"] = settings
+            if old.get("reset_time") != settings.get("reset_time"):
+                db["period_start"] = 0
+            _save_data_budget_db(db)
         app.logger.info("data_budget_settings_update old=%s new=%s", old, settings)
     state = _data_budget_state(issued, live)
     return jsonify({"ok": True, **state})
@@ -2627,6 +2722,7 @@ def api_update_apply():
 
 if os.environ.get("WERKZEUG_RUN_MAIN") != "false":
     threading.Thread(target=_bg_check_loop, daemon=True, name="bg-port-check").start()
+    threading.Thread(target=_bg_budget_loop, daemon=True, name="bg-budget").start()
 
 def create_app():
     return app

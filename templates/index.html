@@ -592,6 +592,10 @@ html.theme-switching .theme-toggle-icon {
 .pb-status { color: var(--muted); font-size: 10.5px; }
 .pb-status-inf { color: var(--muted-2); letter-spacing: 0.04em; }
 .pb-status-over { color: var(--danger); font-weight: 500; }
+.pb-name { display: inline-flex; align-items: center; gap: 6px; }
+.pb-badge { font-family: var(--mono); font-size: 9.5px; font-weight: 400; padding: 1px 6px; border-radius: 4px; letter-spacing: 0.04em; flex-shrink: 0; }
+.pb-badge-throttled { color: var(--danger); background: color-mix(in oklch, var(--danger) 12%, transparent); }
+.pb-badge-paused { color: var(--warn); background: color-mix(in oklch, var(--warn) 12%, transparent); }
 
 /* Settings drawer — accent grid */
 .set-accent-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
@@ -680,6 +684,8 @@ html.theme-switching .theme-toggle-icon {
 .budget-bar-fill { height: 100%; border-radius: 4px 0 0 4px; transition: width 0.6s ease, background 0.3s; }
 .budget-marker { position: absolute; top: -3px; bottom: -3px; width: 1px; background: var(--muted); opacity: 0.4; }
 .budget-bar-labels { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10px; color: var(--muted); }
+.budget-enf { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: -4px; padding-top: 12px; border-top: 1px solid var(--border); font-family: var(--mono); font-size: 10.5px; color: var(--muted); flex-wrap: wrap; }
+.budget-enf-counts { display: flex; align-items: center; gap: 6px; }
 .peer-usage-list { display: flex; flex-direction: column; gap: 8px; }
 .peer-usage-row { display: grid; grid-template-columns: 100px 1fr 70px; gap: 12px; align-items: center; font-size: 12px; }
 .peer-usage-name { color: var(--ink); font-weight: 500; }
