@@ -958,6 +958,12 @@ html.theme-switching .theme-toggle-icon {
 }
 .log-error .log-msg { color: var(--ink); }
 
+/* Logs drawer: allow horizontal scrolling of long lines */
+.logs-stream-tall.logs-stream { overflow-x: auto; }
+.logs-stream-tall .log-line { grid-template-columns: 60px 48px max-content; width: max-content; min-width: 100%; }
+.logs-stream-tall .log-line.no-ts { grid-template-columns: 48px max-content; }
+.logs-stream-tall .log-msg { overflow: visible; text-overflow: clip; }
+
 /* PEERS TABLE */
 .peers-card { padding: 2px 0 4px; }
 .peers-empty-state {

@@ -780,6 +780,106 @@ function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets
 }
 
 // ============================================================
+// buildLogsPdf — dependency-free PDF export of log lines, colored
+// by level to match the dashboard (info blue, warn amber, error red)
+// ============================================================
+function buildLogsPdf(entries, meta = {}) {
+  const W = 595.28, H = 841.89, M = 40;              // A4 portrait, 40pt margins
+  const FS = 7.5, LH = 10.2, CW = FS * 0.6;          // Courier metrics
+  const maxCols = Math.floor((W - 2 * M) / CW);
+  const headerH = 46, footerY = 24;
+
+  const esc = s => s.replace(/[\\()]/g, m => '\\' + m);
+  const UMAP = { '—': 151, '–': 150, '‘': 145, '’': 146, '“': 147, '”': 148, '•': 149, '…': 133 };
+  const enc = s => Array.from(String(s)).map(ch => {
+    const c = ch.codePointAt(0);
+    if (c < 128) return ch;
+    if (ch === '→') return '->';
+    if (UMAP[ch]) return String.fromCharCode(UMAP[ch]);
+    return c <= 255 ? ch : '?';
+  }).join('');
+
+  const LEVEL_COLOR = { info: '0.25 0.50 0.85', warn: '0.83 0.49 0.05', error: '0.84 0.19 0.19' };
+  const MSG_COLOR   = { info: '0.15 0.17 0.21', warn: '0.62 0.40 0.07', error: '0.70 0.15 0.15' };
+  const TIME_COLOR  = '0.55 0.55 0.55';
+
+  // Flatten entries into visual rows of positioned, colored segments,
+  // wrapping long messages with a hanging indent.
+  const indent = 15; // "HH:MM:SS LEVEL "
+  const msgCols = Math.max(20, maxCols - indent);
+  const rows = [];
+  entries.forEach(l => {
+    const ts = new Date(l.t).toTimeString().slice(0, 8);
+    const lvl = String(l.level || 'info').toUpperCase().padEnd(5).slice(0, 5);
+    const lc = LEVEL_COLOR[l.level] || LEVEL_COLOR.info;
+    const mc = MSG_COLOR[l.level] || MSG_COLOR.info;
+    const msg = enc(l.msg || '');
+    for (let i = 0; i < msg.length || i === 0; i += msgCols) {
+      const chunk = msg.slice(i, i + msgCols);
+      if (i === 0) rows.push([{ x: 0, text: ts, color: TIME_COLOR }, { x: 9, text: lvl, color: lc }, { x: indent, text: chunk, color: mc }]);
+      else rows.push([{ x: indent, text: chunk, color: mc }]);
+    }
+  });
+
+  const capFirst = Math.floor((H - M - headerH - footerY - 10) / LH);
+  const capRest = Math.floor((H - 2 * M - footerY + 10) / LH);
+  const pages = [];
+  let cur = [];
+  rows.forEach(r => {
+    if (cur.length >= (pages.length === 0 ? capFirst : capRest)) { pages.push(cur); cur = []; }
+    cur.push(r);
+  });
+  pages.push(cur);
+
+  const nPages = pages.length;
+  const streams = pages.map((pageRows, pi) => {
+    let s = '';
+    let y;
+    if (pi === 0) {
+      s += `BT /F2 13 Tf 0.10 0.12 0.16 rg 1 0 0 1 ${M} ${(H - M - 8).toFixed(2)} Tm (${esc(enc(meta.title || 'WireGuard logs'))}) Tj ET\n`;
+      if (meta.sub) s += `BT /F1 7.5 Tf 0.45 0.45 0.45 rg 1 0 0 1 ${M} ${(H - M - 22).toFixed(2)} Tm (${esc(enc(meta.sub))}) Tj ET\n`;
+      y = H - M - headerH;
+    } else {
+      y = H - M;
+    }
+    s += `BT /F1 ${FS} Tf\n`;
+    pageRows.forEach(r => {
+      r.forEach(seg => {
+        s += `1 0 0 1 ${(M + seg.x * CW).toFixed(2)} ${y.toFixed(2)} Tm ${seg.color} rg (${esc(seg.text)}) Tj\n`;
+      });
+      y -= LH;
+    });
+    s += 'ET\n';
+    s += `BT /F1 7 Tf 0.6 0.6 0.6 rg 1 0 0 1 ${(W / 2 - 22).toFixed(2)} ${footerY} Tm (Page ${pi + 1} of ${nPages}) Tj ET\n`;
+    return s;
+  });
+
+  const objs = [];
+  objs[1] = '<< /Type /Catalog /Pages 2 0 R >>';
+  objs[2] = `<< /Type /Pages /Kids [${pages.map((_, i) => `${5 + i * 2} 0 R`).join(' ')}] /Count ${nPages} >>`;
+  objs[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>';
+  objs[4] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>';
+  pages.forEach((_, i) => {
+    const pn = 5 + i * 2;
+    objs[pn] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${pn + 1} 0 R >>`;
+    objs[pn + 1] = `<< /Length ${streams[i].length} >>\nstream\n${streams[i]}\nendstream`;
+  });
+
+  let pdf = '%PDF-1.4\n';
+  const offsets = [];
+  for (let i = 1; i < objs.length; i++) {
+    offsets[i] = pdf.length;
+    pdf += `${i} 0 obj\n${objs[i]}\nendobj\n`;
+  }
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objs.length}\n0000000000 65535 f \n`;
+  for (let i = 1; i < objs.length; i++) pdf += offsets[i].toString().padStart(10, '0') + ' 00000 n \n';
+  pdf += `trailer\n<< /Size ${objs.length} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+
+  return Uint8Array.from(pdf, ch => ch.charCodeAt(0) & 0xFF);
+}
+
+// ============================================================
 // LogsDrawer — full log history, own polling, verbose, retention, download
 // ============================================================
 function LogsDrawer({ alerts, onClose, verbose, setVerbose, onDismiss }) {
@@ -861,6 +961,21 @@ function LogsDrawer({ alerts, onClose, verbose, setVerbose, onDismiss }) {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `wg0-logs-${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const downloadPdfLogs = () => {
+    const bytes = buildLogsPdf(localLogs, {
+      title: 'WireGuard logs',
+      sub: `exported ${new Date().toLocaleString()} · ${localLogs.length} lines${verbose ? ' · verbose' : ''}`,
+    });
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `wg0-logs-${new Date().toISOString().slice(0, 10)}.pdf`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -1019,6 +1134,10 @@ function LogsDrawer({ alerts, onClose, verbose, setVerbose, onDismiss }) {
               <button className="btn btn-primary" onClick={downloadLogs} disabled={localLogs.length === 0}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
                 Download logs ({localLogs.length} lines)
+              </button>
+              <button className="btn" onClick={downloadPdfLogs} disabled={localLogs.length === 0}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9z"/><path d="M14 3v6h6"/></svg>
+                Download PDF (formatted)
               </button>
             </div>
           </section>
