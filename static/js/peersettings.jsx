@@ -71,6 +71,17 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
     presharedKey: window.randKey(),
   }));
 
+  // Global endpoint sources (server's current public IP + the DynDNS hostname,
+  // if configured) — offered as quick picks for this peer's endpoint below.
+  const [netCfg, setNetCfg] = pS(null);
+  pE(() => {
+    let cancelled = false;
+    window.WG.apiCall('/api/dyndns', { silent: true })
+      .then((d) => { if (!cancelled) setNetCfg(d); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   // Server-side / instant state
   const [note, setNote] = pS(seeds.note);
   const [owner, setOwner] = pS(seeds.owner);
@@ -361,12 +372,27 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
         </div>
       </>
     );
-    if (id === 'tune') return (
+    if (id === 'tune') {
+      const epIdx = endpoint.lastIndexOf(':');
+      const epHost = epIdx === -1 ? endpoint : endpoint.slice(0, epIdx);
+      const epPort = epIdx === -1 ? '51820' : endpoint.slice(epIdx + 1);
+      const setEndpointHost = (host) => setEndpoint(`${host}:${epPort}`);
+      return (
       <>
         <div className="ap2-field">
           <label className="ap-label">Server endpoint</label>
           <input type="text" className="ap-input mono" value={endpoint}
             onChange={(e) => setEndpoint(e.target.value)} placeholder="host:port" />
+          <div className="ap-dns-presets">
+            {netCfg?.public_ip && (
+              <button className={`mini-btn ${epHost === netCfg.public_ip ? 'on' : ''}`}
+                onClick={() => setEndpointHost(netCfg.public_ip)}>Public IP · {netCfg.public_ip}</button>
+            )}
+            {netCfg?.hostname && (
+              <button className={`mini-btn ${epHost === netCfg.hostname ? 'on' : ''}`}
+                onClick={() => setEndpointHost(netCfg.hostname)}>DynDNS · {netCfg.hostname}</button>
+            )}
+          </div>
         </div>
         <div className="ap2-mini-grid c3">
           <div className="ap2-field">
@@ -385,7 +411,8 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
         </div>
         <div className="ap2-help">Keepalive keeps NAT mappings warm — 25s suits most mobile clients. Leave MTU at 1420 unless you see fragmentation.</div>
       </>
-    );
+      );
+    }
     if (id === 'crypto') return (
       <>
         <div className="ap2-field">

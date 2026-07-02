@@ -2084,6 +2084,7 @@ def api_dyndns():
         cfg = _load_dyndns()
         safe = {k: v for k, v in cfg.items() if k != "token"}
         safe["has_token"] = bool(cfg.get("token"))
+        safe["public_ip"] = PUBLIC_IP
         return jsonify(safe)
     data = request.get_json(force=True, silent=True) or {}
     cfg = _load_dyndns()
