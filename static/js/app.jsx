@@ -107,25 +107,30 @@ function App({ tweaks, setTweaks, onLogout }) {
     const period = budgetUsage.period_start_iso || '';
     if (!period) return;
     const pending = [];
+    const levelOf = (p) => p >= 100 ? '100' : p >= 90 ? '90' : p >= 70 ? '70' : '';
+    const enfAction = enforcement.action || 'none';
+    const enfNote = (plural) => enfAction === 'pause' || enfAction === 'combined'
+      ? (plural ? ' Peers are paused until the next reset.' : ' Peer is paused until the next reset.')
+      : enfAction === 'throttle' ? ` Speed is capped at ${enforcement.throttle_mbps || 5} Mbps.` : '';
     const pct = budgetUsage.pct || 0;
-    const level = pct >= 90 ? '90' : pct >= 70 ? '70' : '';
+    const level = levelOf(pct);
     if (level) {
       pending.push({
         key: `budget-${level}-${period}`,
-        title: level === '90' ? 'Budget nearly exhausted' : 'Budget at 70%',
-        desc: `${pct.toFixed(0)}% of ${dataBudget} GB daily budget used.`,
+        title: level === '100' ? 'Budget exceeded' : level === '90' ? 'Budget nearly exhausted' : 'Budget at 70%',
+        desc: `${pct.toFixed(0)}% of ${dataBudget} GB daily budget used.` + (level === '100' ? enfNote(true) : ''),
       });
     }
     (budgetUsage.peers || []).forEach(row => {
       const pb = peerBudgets[row.name];
       if (!pb || pb === 'inf') return;
       const ppct = ((row.bytes || 0) / (pb * 1024 * 1024 * 1024)) * 100;
-      const plevel = ppct >= 90 ? '90' : ppct >= 70 ? '70' : '';
+      const plevel = levelOf(ppct);
       if (!plevel) return;
       pending.push({
         key: `budget-peer-${row.name}-${plevel}-${period}`,
-        title: plevel === '90' ? `${row.name}: budget nearly exhausted` : `${row.name}: budget at 70%`,
-        desc: `${ppct.toFixed(0)}% of ${pb} GB peer budget used.`,
+        title: plevel === '100' ? `${row.name}: budget exceeded` : plevel === '90' ? `${row.name}: budget nearly exhausted` : `${row.name}: budget at 70%`,
+        desc: `${ppct.toFixed(0)}% of ${pb} GB peer budget used.` + (plevel === '100' ? enfNote(false) : ''),
       });
     });
     if (!pending.length) return;
@@ -136,7 +141,7 @@ function App({ tweaks, setTweaks, onLogout }) {
     if (!fresh.length) return;
     fresh.forEach(p => { shown.add(p.key); window.WG.toast?.warning?.(p.title, p.desc); });
     localStorage.setItem(BUDGET_TOASTED_KEY, JSON.stringify([...shown].slice(-40)));
-  }, [budgetAlerts, budgetUsage, dataBudget, peerBudgets]);
+  }, [budgetAlerts, budgetUsage, dataBudget, peerBudgets, enforcement]);
 
   uE(() => {
     localStorage.setItem(AVG_PING_HISTORY_KEY, JSON.stringify(avgPingHistory));
@@ -480,29 +485,35 @@ function App({ tweaks, setTweaks, onLogout }) {
   if (budgetAlerts) {
     const bpct = budgetUsage.pct || 0;
     const period = budgetUsage.period_start_iso || '';
-    if (bpct >= 90) {
-      const key = `budget-90-${period}`;
+    const levelOf = (p) => p >= 100 ? '100' : p >= 90 ? '90' : p >= 70 ? '70' : '';
+    const enfAction = enforcement.action || 'none';
+    const enfNote = (plural) => enfAction === 'pause' || enfAction === 'combined'
+      ? (plural ? ' Peers are paused until the next reset.' : ' Peer is paused until the next reset.')
+      : enfAction === 'throttle' ? ` Speed is capped at ${enforcement.throttle_mbps || 5} Mbps.` : '';
+    const blevel = levelOf(bpct);
+    if (blevel) {
+      const key = `budget-${blevel}-${period}`;
       if (!dismissedAlerts.has(key)) {
-        alerts.push({ level: 'warn', title: 'Budget nearly exhausted', desc: `${bpct.toFixed(0)}% of ${dataBudget} GB daily budget used.`, key });
-      }
-    } else if (bpct >= 70) {
-      const key = `budget-70-${period}`;
-      if (!dismissedAlerts.has(key)) {
-        alerts.push({ level: 'warn', title: 'Budget at 70%', desc: `${bpct.toFixed(0)}% of ${dataBudget} GB daily budget used.`, key });
+        alerts.push({
+          level: 'warn',
+          title: blevel === '100' ? 'Budget exceeded' : blevel === '90' ? 'Budget nearly exhausted' : 'Budget at 70%',
+          desc: `${bpct.toFixed(0)}% of ${dataBudget} GB daily budget used.` + (blevel === '100' ? enfNote(true) : ''),
+          key,
+        });
       }
     }
     (budgetUsage.peers || []).forEach(row => {
       const pb = peerBudgets[row.name];
       if (!pb || pb === 'inf') return;
       const ppct = ((row.bytes || 0) / (pb * 1024 * 1024 * 1024)) * 100;
-      const level = ppct >= 90 ? '90' : ppct >= 70 ? '70' : '';
+      const level = levelOf(ppct);
       if (!level) return;
       const key = `budget-peer-${row.name}-${level}-${period}`;
       if (!dismissedAlerts.has(key)) {
         alerts.push({
           level: 'warn',
-          title: level === '90' ? `${row.name}: budget nearly exhausted` : `${row.name}: budget at 70%`,
-          desc: `${ppct.toFixed(0)}% of ${pb} GB peer budget used.`,
+          title: level === '100' ? `${row.name}: budget exceeded` : level === '90' ? `${row.name}: budget nearly exhausted` : `${row.name}: budget at 70%`,
+          desc: `${ppct.toFixed(0)}% of ${pb} GB peer budget used.` + (level === '100' ? enfNote(false) : ''),
           key,
         });
       }

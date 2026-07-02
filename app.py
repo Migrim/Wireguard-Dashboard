@@ -399,9 +399,9 @@ def _budget_alert_log_lines() -> List[Tuple[float, str]]:
             continue
         peer = str(ev.get("peer") or "").strip()
         if peer:
-            title = f"peer '{peer}' budget nearly exhausted" if level == "90" else f"peer '{peer}' approaching budget"
+            title = {"100": f"peer '{peer}' budget exceeded", "90": f"peer '{peer}' budget nearly exhausted"}.get(level, f"peer '{peer}' approaching budget")
         else:
-            title = "data budget nearly exhausted" if level == "90" else "approaching data budget"
+            title = {"100": "data budget exceeded", "90": "data budget nearly exhausted"}.get(level, "approaching data budget")
         stamp = time.strftime("%b %d %H:%M:%S", time.localtime(ts))
         out.append((float(ts), f"{stamp} {host} wg-dashboard[budget]: warning: {title} — {pct:.0f}% used ({used_gb:.1f} of {budget_gb} GB)"))
     out.sort(key=lambda x: x[0])
@@ -1406,7 +1406,7 @@ def _data_budget_state_locked(issued: List[Dict[str, Any]], live: List[Dict[str,
     pct = (total_used / budget_bytes * 100) if budget_bytes else 0
     if settings.get("alerts", True):
         state = db.setdefault("alert_state", {})
-        level = "90" if pct >= 90 else "70" if pct >= 70 else ""
+        level = "100" if pct >= 100 else "90" if pct >= 90 else "70" if pct >= 70 else ""
         if level and state.get("last_level") != level:
             app.logger.warning("data_budget_alert threshold=%s pct=%.1f used=%s budget_gb=%s", level, pct, total_used, settings["budget_gb"])
             alert_log = db.setdefault("alert_log", [])
@@ -1428,7 +1428,7 @@ def _data_budget_state_locked(issued: List[Dict[str, Any]], live: List[Dict[str,
             seen.add(name)
             peer_cap = int(pb) * 1024 * 1024 * 1024
             ppct = (row["bytes"] / peer_cap * 100) if peer_cap else 0
-            plevel = "90" if ppct >= 90 else "70" if ppct >= 70 else ""
+            plevel = "100" if ppct >= 100 else "90" if ppct >= 90 else "70" if ppct >= 70 else ""
             if plevel and peer_state.get(name) != plevel:
                 app.logger.warning("data_budget_peer_alert peer=%s threshold=%s pct=%.1f used=%s budget_gb=%s", name, plevel, ppct, row["bytes"], pb)
                 alert_log = db.setdefault("alert_log", [])

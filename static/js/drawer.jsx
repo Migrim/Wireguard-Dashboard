@@ -719,8 +719,8 @@ function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets
               </div>
               <div className="setting-row">
                 <div>
-                  <div className="setting-title">Alerts at 70% / 90%</div>
-                  <div className="setting-desc">Notification + log entry when approaching budget limit</div>
+                  <div className="setting-title">Alerts at 70% / 90% / 100%</div>
+                  <div className="setting-desc">Notification + log entry when approaching or exceeding budget limit</div>
                 </div>
                 <div className="setting-control">
                   <button className={`toggle ${alerts ? 'on' : ''}`} disabled={saving} onClick={() => saveSettings({ alerts: !alerts })} aria-pressed={alerts}>
