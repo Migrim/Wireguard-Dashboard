@@ -580,7 +580,7 @@ html.theme-switching .theme-toggle-icon {
 .pb-ctrl { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .stepper-sm button { width: 22px; height: 21px; font-size: 13px; }
 .stepper-sm span { min-width: 46px; font-size: 11px; }
-.pb-inf-btn { width: 28px; height: 27px; flex-shrink: 0; display: grid; place-items: center; background: var(--card); border: 1px solid var(--border); border-radius: 7px; cursor: pointer; color: var(--muted); font-size: 16px; line-height: 1; transition: all 0.12s; }
+.pb-inf-btn { width: 28px; height: 27px; padding: 0; flex-shrink: 0; display: grid; place-items: center; background: var(--card); border: 1px solid var(--border); border-radius: 7px; cursor: pointer; color: var(--muted); transition: all 0.12s; }
 .pb-inf-btn:hover { color: var(--ink); border-color: var(--border-strong); }
 .pb-inf-btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .pb-bar { position: relative; height: 6px; background: var(--card); border-radius: 3px; overflow: hidden; border: 1px solid var(--border); }
@@ -1159,6 +1159,7 @@ html.theme-switching .theme-toggle-icon {
   color: var(--muted); cursor: pointer;
 }
 .mini-btn:hover { color: var(--accent); border-color: var(--accent); }
+.mini-btn-icon { display: inline-flex; align-items: center; justify-content: center; padding: 0; width: 22px; height: 20px; flex-shrink: 0; }
 .action-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .cs-grid { display: flex; flex-direction: column; gap: 6px; }
 .cs-chip { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 12px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; }

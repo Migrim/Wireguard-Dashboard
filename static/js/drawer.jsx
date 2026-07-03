@@ -309,8 +309,10 @@ function PeerDrawer({ peer, onClose, throughputBuffers, peerPingHistory = {}, on
                   <dt>Public key</dt>
                   <dd className="mono key-val">
                     <span className="truncate">{peer.pubKey}</span>
-                    <button className="mini-btn" onClick={() => copy(peer.pubKey, 'pk')}>
-                      {copied === 'pk' ? '✓' : 'copy'}
+                    <button className="mini-btn mini-btn-icon" title="Copy public key" onClick={() => copy(peer.pubKey, 'pk')}>
+                      {copied === 'pk'
+                        ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                        : <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>}
                     </button>
                   </dd>
                 </>
@@ -668,7 +670,7 @@ function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets
                           className={`pb-inf-btn${isInf ? ' on' : ''}`}
                           onClick={() => setPeerBudget(p.id, isInf ? 5 : 'inf')}
                           title={isInf ? 'Set a daily limit' : 'Remove limit'}
-                        >∞</button>
+                        ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18.178 8c5.096 0 5.096 8 0 8-5.095 0-7.133-8-12.739-8-4.585 0-4.585 8 0 8 5.606 0 7.644-8 12.74-8z"/></svg></button>
                       </div>
                     </div>
                     <div className={`pb-bar${isInf ? ' inf' : ''}`}>
