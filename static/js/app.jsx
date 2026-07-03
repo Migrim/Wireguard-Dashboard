@@ -825,7 +825,8 @@ function App({ tweaks, setTweaks, onLogout }) {
 // ============================================================
 function KPIServiceControl({ serviceActive, startedAt, servicePort, connectedCount, totalCount, doService, serviceLoading, updateAvailable, onOpenSettings }) {
   const uptime = (() => {
-    if (!startedAt || !serviceActive) return '—';
+    if (!serviceActive) return 'stopped';
+    if (!startedAt) return '—';
     const mins = Math.floor((Date.now() - startedAt) / 60000);
     const hrs = Math.floor(mins / 60);
     return hrs > 0 ? `${hrs}h ${mins % 60}m` : `${mins}m`;
