@@ -109,6 +109,7 @@ HANDSHAKE_FLUSH_SECONDS=30
 DNS_STATS_DB=os.environ.get("DNS_STATS_DB", os.path.join(WG_DIR, "dns_stats.json"))
 DNS_STATS_RETENTION_SECONDS=24*60*60
 DNS_STATS_FLUSH_SECONDS=15
+DNS_MONITOR_LOCK=os.environ.get("DNS_MONITOR_LOCK", "/tmp/wg-dashboard-dns.lock")
 _dns_stats_lock=threading.Lock()
 GEO_CACHE_SECONDS=6*60*60
 SUDO_BIN=os.environ.get("SUDO_BIN","/usr/bin/sudo")
@@ -1116,20 +1117,44 @@ def _dns_capture_session(stats: Dict[str, Any], recent: Dict[Tuple[str, str], fl
     _update_dns_meta(stats, capturing=False, error=err, force_save=True)
     return err
 
+def _dns_acquire_capture_lock():
+    import fcntl
+    try:
+        f = open(DNS_MONITOR_LOCK, "w")
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return f
+    except Exception:
+        try:
+            f.close()
+        except Exception:
+            pass
+        return None
+
 def _bg_dns_monitor_loop() -> None:
     """Own the tcpdump capture: start it while any peer opts in, stop otherwise."""
     time.sleep(_BG_INIT_DELAY)
     recent: Dict[Tuple[str, str], float] = {}
+    lock_fd = None
+    warned_missing = False
     while True:
         try:
             if not _dns_enabled_peer_map():
                 time.sleep(5)
                 continue
+            # Make sure exactly one worker owns the capture.
+            if lock_fd is None:
+                lock_fd = _dns_acquire_capture_lock()
+            if lock_fd is None:
+                time.sleep(7)
+                continue
             if not _tcpdump_bin():
-                stats = _load_dns_stats()
-                _update_dns_meta(stats, capturing=False, error="tcpdump is not installed on the server", force_save=True)
+                if not warned_missing:
+                    stats = _load_dns_stats()
+                    _update_dns_meta(stats, capturing=False, error="tcpdump is not installed on the server", force_save=True)
+                    warned_missing = True
                 time.sleep(30)
                 continue
+            warned_missing = False
             stats = _load_dns_stats()
             err = _dns_capture_session(stats, recent)
             if err:
