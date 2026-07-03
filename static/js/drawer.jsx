@@ -62,6 +62,147 @@ function PingBars({ data, height = 68, color = 'var(--accent-2)' }) {
 }
 
 // ============================================================
+// DnsActivity — opt-in "top visited domains (24h)" tab body
+// ============================================================
+function DnsActivity({ peer, onPeerUpdated }) {
+  const [data, setData] = _useState(null);
+  const [loading, setLoading] = _useState(true);
+  const [busy, setBusy] = _useState(false);
+  const enabled = data ? !!data.enabled : !!peer.monitorDns;
+
+  const load = async () => {
+    try {
+      const r = await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/dns', { silent: true });
+      setData(r);
+    } catch (_) {
+      // leave previous data in place on a transient error
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  _useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    const tick = async () => { if (!cancelled) await load(); };
+    tick();
+    const id = setInterval(tick, 10000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [peer && peer.name]);
+
+  const toggle = async () => {
+    const next = !enabled;
+    setBusy(true);
+    const t = window.WG.toast?.loading?.(next ? 'Enabling domain monitoring…' : 'Disabling…');
+    try {
+      await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/settings', {
+        silent: true, method: 'PATCH', body: JSON.stringify({ monitor_dns: next }),
+      });
+      setData(d => ({ ...(d || {}), enabled: next, domains: next ? (d?.domains || []) : [], total: next ? (d?.total || 0) : 0, unique: next ? (d?.unique || 0) : 0 }));
+      if (onPeerUpdated) onPeerUpdated();
+      t?.success?.(next ? 'Monitoring on' : 'Monitoring off',
+        next ? `Now recording domains for "${peer.name}"` : `Cleared captured history for "${peer.name}"`);
+      load();
+    } catch (e) {
+      t?.error?.('Could not update', e.message || 'API error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const domains = (data && data.domains) || [];
+  const maxCount = domains.reduce((m, d) => Math.max(m, d.count), 0) || 1;
+  const capturing = data && data.capturing;
+  const unavailable = data && data.available === false;
+  const err = data && data.error;
+
+  return (
+    <>
+      <section className="drawer-section">
+        <div className="setting-row" style={{ borderTop: 'none', paddingTop: 0 }}>
+          <div>
+            <div className="setting-label">Monitor visited domains</div>
+            <div className="setting-desc">
+              Records the top domains this peer looks up, kept for {(data && data.retention_hours) || 24}h.
+            </div>
+          </div>
+          <div className="setting-control">
+            <button className={`toggle ${enabled ? 'on' : ''}`} onClick={toggle} disabled={busy || unavailable} aria-pressed={enabled}>
+              <span className="toggle-knob" />
+            </button>
+          </div>
+        </div>
+        <div className="dns-privacy">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7l7-4z"/></svg>
+          <span>
+            Only <strong>domain names</strong> are visible from the server (via DNS) — full page URLs are
+            encrypted by HTTPS and are never captured. This is browsing activity for whoever uses this peer.
+          </span>
+        </div>
+      </section>
+
+      {unavailable && (
+        <section className="drawer-section">
+          <div className="dns-note dns-note-warn">
+            <code>tcpdump</code> is not installed on the server, so monitoring can't run. Install it with
+            {' '}<code>apt install tcpdump</code> and reload the dashboard.
+          </div>
+        </section>
+      )}
+
+      {enabled && !unavailable && (
+        <section className="drawer-section">
+          <div className="section-head">
+            <span className="section-label">TOP DOMAINS · LAST {(data && data.retention_hours) || 24}H</span>
+            <span className="section-meta">
+              <span className={`dns-dot ${capturing ? 'on' : ''}`} />
+              {capturing ? 'capturing' : 'idle'}
+            </span>
+          </div>
+
+          {err ? (
+            <div className="dns-note dns-note-warn" style={{ marginBottom: 10 }}>{err}</div>
+          ) : null}
+
+          {domains.length > 0 ? (
+            <>
+              <div className="dns-summary">
+                <span><strong>{data.total.toLocaleString()}</strong> lookups</span>
+                <span><strong>{data.unique.toLocaleString()}</strong> unique domains</span>
+              </div>
+              <ol className="dns-list">
+                {domains.map((d, i) => (
+                  <li key={d.domain} className="dns-item">
+                    <span className="dns-rank">{i + 1}</span>
+                    <span className="dns-name" title={d.domain}>{d.domain}</span>
+                    <span className="dns-bar-wrap">
+                      <span className="dns-bar" style={{ width: `${Math.max(4, (d.count / maxCount) * 100)}%` }} />
+                    </span>
+                    <span className="dns-count">{d.count.toLocaleString()}</span>
+                  </li>
+                ))}
+              </ol>
+            </>
+          ) : (
+            <div className="empty-chart" style={{ height: 90 }}>
+              {loading ? 'Loading…' : 'No DNS queries captured yet — activity appears once this peer browses.'}
+            </div>
+          )}
+        </section>
+      )}
+
+      {!enabled && !unavailable && (
+        <section className="drawer-section">
+          <div className="empty-chart" style={{ height: 90, lineHeight: 1.5, padding: '0 16px', textAlign: 'center' }}>
+            Monitoring is off. Turn on the toggle above to start recording the most visited domains for this peer.
+          </div>
+        </section>
+      )}
+    </>
+  );
+}
+
+// ============================================================
 // PeerDrawer — slide-out detail with charts + controls
 // ============================================================
 function PeerDrawer({ peer, onClose, throughputBuffers, peerPingHistory = {}, onRevoke, onPeerUpdated, tweaks = {} }) {
@@ -221,6 +362,10 @@ function PeerDrawer({ peer, onClose, throughputBuffers, peerPingHistory = {}, on
 
         <div className="drawer-tabs">
           <button className={`drawer-tab ${tab === 'overview' ? 'on' : ''}`} onClick={() => setTab('overview')}>Overview</button>
+          <button className={`drawer-tab ${tab === 'activity' ? 'on' : ''}`} onClick={() => setTab('activity')}>
+            Activity
+            {peer.monitorDns && <span className="drawer-tab-dot drawer-tab-dot-live" title="Domain monitoring is on" />}
+          </button>
           <button className={`drawer-tab ${tab === 'settings' ? 'on' : ''}`} onClick={() => setTab('settings')}>
             Settings
             {settingsDirty && <span className="drawer-tab-dot" title="Unsaved config changes" />}
@@ -230,6 +375,10 @@ function PeerDrawer({ peer, onClose, throughputBuffers, peerPingHistory = {}, on
         {tab === 'settings' ? (
           <div className="drawer-body">
             <window.PeerSettings peer={peer} onDirtyChange={setSettingsDirty} onPeerUpdated={onPeerUpdated} />
+          </div>
+        ) : tab === 'activity' ? (
+          <div className="drawer-body">
+            <DnsActivity peer={peer} onPeerUpdated={onPeerUpdated} />
           </div>
         ) : (
         <div className="drawer-body">

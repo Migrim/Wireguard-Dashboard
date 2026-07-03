@@ -106,6 +106,10 @@ PEER_THROUGHPUT_RETENTION_SECONDS=2*60
 PEER_SPARK_FLUSH_SECONDS=10
 HANDSHAKE_CACHE=os.environ.get("HANDSHAKE_CACHE", os.path.join(WG_DIR, "handshakes.json"))
 HANDSHAKE_FLUSH_SECONDS=30
+DNS_STATS_DB=os.environ.get("DNS_STATS_DB", os.path.join(WG_DIR, "dns_stats.json"))
+DNS_STATS_RETENTION_SECONDS=24*60*60
+DNS_STATS_FLUSH_SECONDS=15
+_dns_stats_lock=threading.Lock()
 GEO_CACHE_SECONDS=6*60*60
 SUDO_BIN=os.environ.get("SUDO_BIN","/usr/bin/sudo")
 BASH_BIN=os.environ.get("BASH_BIN","/bin/bash")
@@ -920,6 +924,254 @@ def _peer_throughput_payload(history: Dict[str, List[Dict[str, Any]]] = None) ->
         out[name] = {"rx": rx, "tx": tx}
     return out
 
+# ── Per-peer visited-domain monitoring (opt-in, rolling 24h) ──
+# Sniffs DNS queries on the WG interface with tcpdump and aggregates
+# queried domains into hourly buckets per peer. Only peers whose
+# `monitor_dns` flag is set in peers.json are recorded; nothing runs
+# while no peer has it enabled.
+
+def _tcpdump_bin() -> str:
+    return next((p for p in ("/usr/bin/tcpdump", "/usr/sbin/tcpdump") if os.path.exists(p)), "")
+
+def _load_dns_stats() -> Dict[str, Any]:
+    default = {"meta": {"capturing": False, "error": "", "updated": 0}, "peers": {}}
+    content = ""
+    try:
+        with open(DNS_STATS_DB, "r", encoding="utf-8") as f:
+            content = f.read()
+    except FileNotFoundError:
+        return default
+    except PermissionError:
+        out, rc = _sudo_cat(DNS_STATS_DB)
+        if rc != 0 or not out:
+            return default
+        content = out
+    except Exception:
+        return default
+    try:
+        stats = json.loads(content)
+    except Exception:
+        return default
+    if not isinstance(stats, dict):
+        return default
+    if not isinstance(stats.get("meta"), dict):
+        stats["meta"] = dict(default["meta"])
+    if not isinstance(stats.get("peers"), dict):
+        stats["peers"] = {}
+    return stats
+
+def _save_dns_stats(stats: Dict[str, Any]) -> None:
+    _write_json_file_root(DNS_STATS_DB, stats)
+
+def _prune_dns_stats(stats: Dict[str, Any], now: float = None) -> Dict[str, Any]:
+    cutoff_bucket = int(((now if now is not None else time.time()) - DNS_STATS_RETENTION_SECONDS) // 3600)
+    peers = stats.get("peers", {})
+    for name in list(peers.keys()):
+        buckets = peers[name]
+        if not isinstance(buckets, dict):
+            del peers[name]
+            continue
+        for b in list(buckets.keys()):
+            try:
+                if int(b) < cutoff_bucket:
+                    del buckets[b]
+            except (TypeError, ValueError):
+                del buckets[b]
+        if not buckets:
+            del peers[name]
+    return stats
+
+def _update_dns_meta(stats: Dict[str, Any], capturing: bool = None, error: str = None, force_save: bool = False) -> None:
+    meta = stats.setdefault("meta", {"capturing": False, "error": "", "updated": 0})
+    changed = force_save
+    if capturing is not None and bool(meta.get("capturing")) != capturing:
+        meta["capturing"] = capturing
+        changed = True
+    if error is not None and str(meta.get("error", "")) != error:
+        meta["error"] = error
+        changed = True
+    if changed:
+        meta["updated"] = int(time.time())
+        _save_dns_stats(stats)
+
+def _dns_enabled_peer_map() -> Dict[str, str]:
+    """Tunnel IP -> peer name for every peer with domain monitoring switched on."""
+    out = {}
+    for name, meta in _load_peers_db().items():
+        if isinstance(meta, dict) and meta.get("monitor_dns"):
+            ip = _ip_from_allowed_ips(meta.get("address", ""))
+            if ip:
+                out[ip] = name
+    return out
+
+# tcpdump -n line: "12:00:00.000000 IP 10.8.0.2.55555 > 1.1.1.1.53: 123+ [1au] A? example.com. (40)"
+_DNS_QUERY_RE = re.compile(r"\bIP6?\s+(\S+)\.\d+\s+>\s+\S+\.(?:53|domain):\s+(.*)$")
+_DNS_QNAME_RE = re.compile(r"\s(?:A|AAAA|HTTPS)\?\s+(\S+)")
+_DNS_DOMAIN_OK = re.compile(r"[a-z0-9._-]{1,253}")
+
+def _parse_dns_query(line: str) -> Tuple[str, str]:
+    m = _DNS_QUERY_RE.search(line)
+    if not m:
+        return None
+    q = _DNS_QNAME_RE.search(" " + m.group(2))
+    if not q:
+        return None
+    domain = q.group(1).rstrip(".").lower()
+    if "." not in domain or domain.endswith(".arpa") or not _DNS_DOMAIN_OK.fullmatch(domain):
+        return None
+    return m.group(1), domain
+
+def _record_dns_query(stats: Dict[str, Any], name: str, domain: str, now: float) -> None:
+    bucket = str(int(now // 3600))
+    hour = stats.setdefault("peers", {}).setdefault(name, {}).setdefault(bucket, {})
+    try:
+        hour[domain] = int(hour.get(domain, 0)) + 1
+    except (TypeError, ValueError):
+        hour[domain] = 1
+
+def _dns_capture_session(stats: Dict[str, Any], recent: Dict[Tuple[str, str], float]) -> str:
+    """Run one tcpdump session until all toggles turn off or tcpdump dies.
+    Returns '' on clean stop or an error string for the UI."""
+    import select
+    proc = subprocess.Popen(
+        [SUDO_BIN, "-n", _tcpdump_bin(), "-i", WG_IFACE, "-l", "-n", "udp", "dst", "port", "53"],
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    _update_dns_meta(stats, capturing=True, error="")
+    ip_map = _dns_enabled_peer_map()
+    ip_map_ts = time.time()
+    last_save = time.time()
+    last_prune = time.time()
+    err = ""
+    try:
+        while True:
+            now = time.time()
+            # Refresh the enabled-peer map and stop the session if the last
+            # toggle was switched off.
+            if now - ip_map_ts >= 5:
+                ip_map = _dns_enabled_peer_map()
+                ip_map_ts = now
+                enabled_names = set(ip_map.values())
+                for pname in list(stats.get("peers", {}).keys()):
+                    if pname not in enabled_names:
+                        del stats["peers"][pname]
+                if not ip_map:
+                    break
+            if proc.poll() is not None:
+                tail = ""
+                try:
+                    tail = (proc.stdout.read() or "").strip().splitlines()[-1:]
+                    tail = tail[0] if tail else ""
+                except Exception:
+                    tail = ""
+                err = tail or "tcpdump stopped unexpectedly"
+                break
+            ready, _, _ = select.select([proc.stdout], [], [], 1.0)
+            if not ready:
+                # Idle tick: prune the dedup cache and flush to disk.
+                for k in [k for k, t in recent.items() if now - t > 30]:
+                    recent.pop(k, None)
+                if now - last_save >= DNS_STATS_FLUSH_SECONDS:
+                    _prune_dns_stats(stats, now)
+                    _save_dns_stats(stats)
+                    last_save = now
+                continue
+            line = proc.stdout.readline()
+            if not line:
+                continue
+            low = line.lower()
+            if "password is required" in low or "permission denied" in low or "no such device" in low or "syntax error" in low:
+                err = line.strip()
+                break
+            parsed = _parse_dns_query(line)
+            if not parsed:
+                continue
+            ip, domain = parsed
+            name = ip_map.get(ip)
+            if not name:
+                continue
+            key = (ip, domain)
+            # Browsers fire duplicate A/AAAA lookups back to back — collapse
+            # repeats of the same (peer, domain) within a couple of seconds.
+            if now - recent.get(key, 0) < 2.0:
+                continue
+            recent[key] = now
+            _record_dns_query(stats, name, domain, now)
+            if now - last_prune >= 60:
+                _prune_dns_stats(stats, now)
+                last_prune = now
+            if now - last_save >= DNS_STATS_FLUSH_SECONDS:
+                _save_dns_stats(stats)
+                last_save = now
+    finally:
+        try:
+            if proc.poll() is None:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=3)
+                except Exception:
+                    proc.kill()
+        except Exception:
+            pass
+    _prune_dns_stats(stats, time.time())
+    _update_dns_meta(stats, capturing=False, error=err, force_save=True)
+    return err
+
+def _bg_dns_monitor_loop() -> None:
+    """Own the tcpdump capture: start it while any peer opts in, stop otherwise."""
+    time.sleep(_BG_INIT_DELAY)
+    recent: Dict[Tuple[str, str], float] = {}
+    while True:
+        try:
+            if not _dns_enabled_peer_map():
+                time.sleep(5)
+                continue
+            if not _tcpdump_bin():
+                stats = _load_dns_stats()
+                _update_dns_meta(stats, capturing=False, error="tcpdump is not installed on the server", force_save=True)
+                time.sleep(30)
+                continue
+            stats = _load_dns_stats()
+            err = _dns_capture_session(stats, recent)
+            if err:
+                app.logger.warning("dns_monitor session ended: %s", err)
+                time.sleep(10)
+        except Exception:
+            app.logger.exception("dns_monitor_loop_failed")
+            time.sleep(10)
+
+def _dns_top_domains(name: str, limit: int = 30) -> Dict[str, Any]:
+    stats = _load_dns_stats()
+    _prune_dns_stats(stats, time.time())
+    buckets = stats.get("peers", {}).get(name, {})
+    counts: Dict[str, int] = {}
+    last: Dict[str, int] = {}
+    if isinstance(buckets, dict):
+        for b, hour in buckets.items():
+            try:
+                bt = int(b) * 3600
+            except (TypeError, ValueError):
+                bt = 0
+            if not isinstance(hour, dict):
+                continue
+            for d, c in hour.items():
+                try:
+                    c = int(c)
+                except (TypeError, ValueError):
+                    continue
+                counts[d] = counts.get(d, 0) + c
+                last[d] = max(last.get(d, 0), bt)
+    ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:limit]
+    meta = stats.get("meta", {}) if isinstance(stats.get("meta"), dict) else {}
+    peer_meta = _load_peers_db().get(name) or {}
+    return {
+        "enabled": bool(peer_meta.get("monitor_dns")),
+        "capturing": bool(meta.get("capturing")),
+        "error": str(meta.get("error", "")),
+        "total": sum(counts.values()),
+        "unique": len(counts),
+        "domains": [{"domain": d, "count": counts[d], "last": last[d]} for d, _ in ranked],
+    }
+
 def _endpoint_ip(endpoint: str) -> str:
     endpoint = str(endpoint or "").strip()
     if not endpoint or endpoint == "(none)" or endpoint == "—":
@@ -1658,6 +1910,7 @@ def list_clients() -> List[Dict[str, Any]]:
             "endpoint": meta.get("endpoint", ""),
             "device": meta.get("device", ""),
             "paused": bool(meta.get("paused", False)),
+            "monitor_dns": bool(meta.get("monitor_dns", False)),
         })
 
     return issued, live
@@ -2162,6 +2415,16 @@ def api_users_settings(name: str):
     if "long_note" in data:
         meta["long_note"] = str(data["long_note"])[:2000].strip()
 
+    if "monitor_dns" in data:
+        on = bool(data["monitor_dns"])
+        meta["monitor_dns"] = on
+        if not on:
+            # Turning monitoring off discards this peer's captured history.
+            with _dns_stats_lock:
+                stats = _load_dns_stats()
+                if stats.get("peers", {}).pop(name, None) is not None:
+                    _save_dns_stats(stats)
+
     err = _apply_peer_config_fields(meta, data)
     if err:
         return err
@@ -2290,6 +2553,17 @@ def api_users_diag(name: str):
         "ping_status": ping["status"],
         "location": location,
     })
+
+@app.route("/api/users/<name>/dns")
+def api_users_dns(name: str):
+    if name not in _load_peers_db():
+        abort(404)
+    payload = _dns_top_domains(name)
+    payload["ok"] = True
+    payload["name"] = name
+    payload["retention_hours"] = DNS_STATS_RETENTION_SECONDS // 3600
+    payload["available"] = bool(_tcpdump_bin())
+    return jsonify(payload)
 
 @app.route("/api/diag/peers")
 def api_diag_peers():
@@ -3091,6 +3365,7 @@ if os.environ.get("WERKZEUG_RUN_MAIN") != "false":
     threading.Thread(target=_bg_budget_loop, daemon=True, name="bg-budget").start()
     threading.Thread(target=_bg_traffic_loop, daemon=True, name="bg-traffic").start()
     threading.Thread(target=_bg_retention_loop, daemon=True, name="bg-retention").start()
+    threading.Thread(target=_bg_dns_monitor_loop, daemon=True, name="bg-dns-monitor").start()
 
 def create_app():
     return app

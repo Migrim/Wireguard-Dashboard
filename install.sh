@@ -3,7 +3,7 @@ set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get update
-apt-get install -y wireguard wireguard-tools ufw python3 python3-venv python3-pip git acl build-essential jq curl
+apt-get install -y wireguard wireguard-tools ufw python3 python3-venv python3-pip git acl build-essential jq curl tcpdump
 
 WG_IFACE=${WG_IFACE:-wg0}
 WG_DIR=${WG_DIR:-/etc/wireguard}
@@ -133,7 +133,7 @@ chmod 640 /etc/wg-dashboard.env
 
 # 11) sudoers
 cat >/etc/sudoers.d/wg-dashboard <<'SUD'
-www-data ALL=(root) NOPASSWD: /usr/bin/wg, /usr/bin/wg-quick, /usr/bin/systemctl, /usr/bin/install, /usr/sbin/ufw, /bin/cat, /usr/bin/journalctl, /usr/bin/sysctl, /usr/sbin/iptables, /usr/sbin/tc
+www-data ALL=(root) NOPASSWD: /usr/bin/wg, /usr/bin/wg-quick, /usr/bin/systemctl, /usr/bin/install, /usr/sbin/ufw, /bin/cat, /usr/bin/journalctl, /usr/bin/sysctl, /usr/sbin/iptables, /usr/sbin/tc, /usr/bin/tcpdump, /usr/sbin/tcpdump
 SUD
 chmod 440 /etc/sudoers.d/wg-dashboard
 visudo -c

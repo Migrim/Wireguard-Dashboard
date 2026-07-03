@@ -83,6 +83,7 @@ function mapApiPeers(issued, live) {
       deviceType: iss.device || '',
       paused: iss.paused || false,
       throttled: iss.throttled || false,
+      monitorDns: iss.monitor_dns || false,
     };
   });
 }
