@@ -256,7 +256,11 @@ function PeerDrawer({ peer, onClose, throughputBuffers, peerPingHistory = {}, on
               <span className="section-meta">{latestPing != null ? `${latestPing} ms` : '—'}</span>
             </div>
             <div className="drawer-chart">
-              <PingBars data={pingHistory} height={68} color="var(--accent-2)" />
+              {pingHistory.some(v => v > 0) ? (
+                <PingBars data={pingHistory} height={68} color="var(--accent-2)" />
+              ) : (
+                <div className="empty-chart" style={{ height: 68 }}>No recent activity</div>
+              )}
             </div>
           </section>
 
