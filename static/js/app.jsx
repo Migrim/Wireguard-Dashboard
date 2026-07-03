@@ -584,9 +584,12 @@ function App({ tweaks, setTweaks, onLogout }) {
                     e.preventDefault();
                     setFilter('');
                     searchRef.current?.blur();
-                  } else if (e.key === 'Enter' && filtered.length === 1) {
+                  } else if (e.key === 'Enter' && filter && filtered.length > 0) {
                     e.preventDefault();
-                    setSelectedPeer(filtered[0].id);
+                    const suggested = searchSuggestion
+                      ? filtered.find(p => p.name === searchSuggestion || p.addr === searchSuggestion)
+                      : null;
+                    setSelectedPeer((suggested || filtered[0]).id);
                     setFilter('');
                     searchRef.current?.blur();
                   }
@@ -719,11 +722,7 @@ function App({ tweaks, setTweaks, onLogout }) {
         </div>
         <div className="peers-table">
           <PeerTableHeader />
-          {filtered.length === 0 && !peersLoaded && (
-            <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 12 }}>
-              Loading peers…
-            </div>
-          )}
+          {!peersLoaded && [0, 1, 2, 3].map(i => <PeerRowSkeleton key={i} seed={i} />)}
           {peersLoaded && peers.length === 0 && (
             <div className="peers-empty-state">
               <div className="peers-empty-icon">
@@ -797,7 +796,6 @@ function App({ tweaks, setTweaks, onLogout }) {
         />
       )}
       {settingsOpen && <SettingsDrawer tweaks={tweaks} setTweaks={setTweaks} connectedCount={connectedCount} totalPeers={peers.length} onClose={() => setSettingsOpen(false)} onUpdateAvailable={setUpdateAvailable} />}
-      {tweaks._tweaksOpen && <TweaksPanel tweaks={tweaks} setTweaks={setTweaks} />}
       {dyndnsOpen && <DynDNSDrawer onClose={() => setDyndnsOpen(false)} />}
       {portCheckOpen && <PortCheckDrawer peers={peers} onClose={() => setPortCheckOpen(false)} />}
       {logsDrawerOpen && <LogsDrawer alerts={alerts} onClose={() => setLogsDrawerOpen(false)} verbose={logsVerbose} setVerbose={setLogsVerbose} onDismiss={dismissAlert} />}
@@ -829,6 +827,8 @@ function KPIServiceControl({ serviceActive, startedAt, servicePort, connectedCou
     if (!startedAt) return '—';
     const mins = Math.floor((Date.now() - startedAt) / 60000);
     const hrs = Math.floor(mins / 60);
+    const days = Math.floor(hrs / 24);
+    if (days > 0) return `${days}d ${hrs % 24}h`;
     return hrs > 0 ? `${hrs}h ${mins % 60}m` : `${mins}m`;
   })();
 
@@ -987,6 +987,32 @@ function OfflinePlaceholder({ width = 110, height = 30 }) {
   );
 }
 
+function PeerRowSkeleton({ seed = 0 }) {
+  // Vary widths per row so the placeholder reads as real content
+  const w = (base, spread) => base + ((seed * 37) % spread);
+  return (
+    <div className="peers-row row-skeleton" aria-hidden="true">
+      <div className="peer-status-cell"><span className="skel skel-dot" /></div>
+      <div className="peer-name-cell">
+        <span className="skel skel-avatar" />
+        <div>
+          <div><span className="skel" style={{ width: w(72, 44) }} /></div>
+          <div><span className="skel skel-sub" style={{ width: w(42, 26), marginTop: 4 }} /></div>
+        </div>
+      </div>
+      <div><span className="skel" style={{ width: w(78, 28) }} /></div>
+      <div><span className="skel" style={{ width: 92, height: 8 }} /></div>
+      <div className="num"><span className="skel" style={{ width: w(46, 18) }} /></div>
+      <div className="num" style={{ paddingRight: 16 }}><span className="skel" style={{ width: w(46, 22) }} /></div>
+      <div>
+        <div><span className="skel" style={{ width: w(58, 32) }} /></div>
+        <div><span className="skel skel-sub" style={{ width: w(74, 20), marginTop: 4 }} /></div>
+      </div>
+      <div />
+    </div>
+  );
+}
+
 function PeerRow({ peer, spark, onClick }) {
   const statusColor = peer.paused ? 'var(--warn)' : peer.throttled ? 'var(--danger)' : peer.status === 'connected' ? 'var(--success)' : 'var(--muted)';
   const isOnline = peer.status === 'connected';
@@ -1054,58 +1080,6 @@ function PeerTableHeader() {
       <div className="num">Bytes out</div>
       <div>Last handshake</div>
       <div />
-    </div>
-  );
-}
-
-// ============================================================
-// Tweaks panel
-// ============================================================
-function TweaksPanel({ tweaks, setTweaks }) {
-  const update = (k, v) => {
-    const next = { ...tweaks, [k]: v };
-    setTweaks(next);
-  };
-  return (
-    <div className="tweaks-panel">
-      <div className="tweaks-head">
-        <span>Tweaks</span>
-        <button className="icon-btn-sm" onClick={() => setTweaks({ ...tweaks, _tweaksOpen: false })}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
-        </button>
-      </div>
-      <div className="tweaks-body">
-        <div className="tweak-row">
-          <label>Theme</label>
-          <div className="seg">
-            {['light', 'dark'].map(v => (
-              <button key={v} className={tweaks.theme === v ? 'on' : ''} onClick={() => update('theme', v)}>{v}</button>
-            ))}
-          </div>
-        </div>
-        <div className="tweak-row">
-          <label>Density</label>
-          <div className="seg">
-            {['compact', 'dense', 'spacious'].map(v => (
-              <button key={v} className={tweaks.density === v ? 'on' : ''} onClick={() => update('density', v)}>{v}</button>
-            ))}
-          </div>
-        </div>
-        <div className="tweak-row">
-          <label>Accent</label>
-          <div className="swatches">
-            {[
-              { id: 'terracotta', c: 'oklch(59% 0.15 33)' },
-              { id: 'forest', c: 'oklch(55% 0.11 150)' },
-              { id: 'ink', c: 'oklch(40% 0.04 250)' },
-              { id: 'plum', c: 'oklch(48% 0.12 330)' },
-              { id: 'amber', c: 'oklch(70% 0.15 75)' },
-            ].map(s => (
-              <button key={s.id} className={`swatch ${tweaks.accent === s.id ? 'on' : ''}`} style={{ background: s.c }} onClick={() => update('accent', s.id)} />
-            ))}
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -1237,4 +1211,4 @@ function AuthWrapper({ tweaks, setTweaks }) {
   return <App tweaks={tweaks} setTweaks={setTweaks} onLogout={handleLogout} />;
 }
 
-Object.assign(window, { App, AuthWrapper, LoginScreen, PeerRow, TweaksPanel, KPIServiceControl, KPIThroughput, KPIDataToday, KPIActiveSessions, OfflinePlaceholder });
+Object.assign(window, { App, AuthWrapper, LoginScreen, PeerRow, KPIServiceControl, KPIThroughput, KPIDataToday, KPIActiveSessions, OfflinePlaceholder });

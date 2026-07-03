@@ -183,9 +183,26 @@ function DnsActivity({ peer, onPeerUpdated }) {
                 ))}
               </ol>
             </>
+          ) : loading ? (
+            <div aria-hidden="true">
+              <div className="dns-summary">
+                <span className="skel" style={{ width: 88 }} />
+                <span className="skel" style={{ width: 118 }} />
+              </div>
+              <ol className="dns-list">
+                {[0, 1, 2, 3, 4].map(i => (
+                  <li key={i} className="dns-item">
+                    <span className="dns-rank"><span className="skel" style={{ width: 12, height: 9 }} /></span>
+                    <span className="dns-name"><span className="skel" style={{ width: `${76 - ((i * 23) % 42)}%` }} /></span>
+                    <span className="dns-bar-wrap"><span className="skel" style={{ display: 'block', width: `${Math.max(10, 85 - i * 17)}%`, height: 6, borderRadius: 99 }} /></span>
+                    <span className="dns-count"><span className="skel" style={{ width: 26, height: 9 }} /></span>
+                  </li>
+                ))}
+              </ol>
+            </div>
           ) : (
             <div className="empty-chart" style={{ height: 90 }}>
-              {loading ? 'Loading…' : 'No DNS queries captured yet — activity appears once this peer browses.'}
+              No DNS queries captured yet — activity appears once this peer browses.
             </div>
           )}
         </section>
@@ -1273,7 +1290,13 @@ function LogsDrawer({ alerts, onClose, verbose, setVerbose, onDismiss }) {
           <section className="drawer-section">
             <div className="logs-stream logs-stream-tall" ref={streamRef} onScroll={onScroll}>
               {loading ? (
-                <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 11 }}>Loading…</div>
+                [0, 1, 2, 3, 4, 5, 6, 7].map(i => (
+                  <div key={i} className={`log-line${verbose ? ' no-ts' : ''}`} aria-hidden="true">
+                    {!verbose && <span className="log-time"><span className="skel" style={{ width: 52, height: 9 }} /></span>}
+                    <span style={{ alignSelf: 'center' }}><span className="skel" style={{ width: 34, height: 9 }} /></span>
+                    <span className="log-msg"><span className="skel" style={{ width: 170 + ((i * 67) % 250), height: 9 }} /></span>
+                  </div>
+                ))
               ) : filtered.length === 0 ? (
                 <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 11 }}>No matching logs</div>
               ) : filtered.map((l, i) => (
