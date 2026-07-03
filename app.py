@@ -1652,6 +1652,11 @@ def list_clients() -> List[Dict[str, Any]]:
             "dns": meta.get("dns", ""),
             "client_allowed_ips": meta.get("client_allowed_ips", ""),
             "keepalive": meta.get("keepalive", "25"),
+            "search_domains": meta.get("search_domains", ""),
+            "mtu": meta.get("mtu", ""),
+            "listen_port": meta.get("listen_port", ""),
+            "endpoint": meta.get("endpoint", ""),
+            "device": meta.get("device", ""),
             "paused": bool(meta.get("paused", False)),
         })
 
@@ -1673,16 +1678,24 @@ def gen_client_conf(name: str) -> Tuple[str,str]:
     client_addr=meta["address"]
     conf=_read_conf()
     dns=meta.get("dns","").strip() or conf.get("Interface",{}).get("DNS","").strip() or CLIENT_DNS
+    search_domains=meta.get("search_domains","").strip()
+    mtu=meta.get("mtu","").strip()
+    client_lp=meta.get("listen_port","").strip()
     srv_pub=_server_pubkey()
     lp=conf.get("Interface",{}).get("ListenPort",str(WG_PORT))
-    endpoint=f"{_get_endpoint_host()}:{lp}"
+    endpoint=meta.get("endpoint","").strip() or f"{_get_endpoint_host()}:{lp}"
     allowed_client=meta.get("client_allowed_ips","").strip() or "0.0.0.0/0, ::/0"
     keepalive=str(meta.get("keepalive","25") or "25")
     txt=[]
     txt.append("[Interface]")
     txt.append(f"PrivateKey = {client_priv}")
     txt.append(f"Address = {client_addr}")
-    txt.append(f"DNS = {dns}")
+    if dns.lower()!="none":
+        txt.append(f"DNS = {dns}" + (f", {search_domains}" if search_domains else ""))
+    if mtu:
+        txt.append(f"MTU = {mtu}")
+    if client_lp:
+        txt.append(f"ListenPort = {client_lp}")
     txt.append("")
     txt.append("[Peer]")
     txt.append(f"PublicKey = {srv_pub}")
@@ -2011,6 +2024,12 @@ def api_users():
     db=_load_peers_db()
     if name in db:
         return jsonify({"ok": False, "error": "already_exists", "hint": "Peer already exists"}), 409
+    # Validate optional config fields before touching wg/conf so a bad value
+    # can't leave a half-created peer behind
+    extra_fields={}
+    err=_apply_peer_config_fields(extra_fields,data)
+    if err:
+        return err
     o_priv,c=_sudo(["/usr/bin/wg","genkey"])
     if c!=0 or not o_priv.strip():
         return jsonify({"ok":False,"error":"keygen_failed","out":o_priv}),500
@@ -2030,7 +2049,8 @@ def api_users():
     peers.append({"PublicKey":client_pub,"AllowedIPs":addr})
     conf["Peers"]=peers
     _write_conf(conf)
-    db[name]={"public_key":client_pub,"private_key":client_priv,"address":addr,"created":datetime.datetime.utcnow().strftime("%Y-%m-%d")}
+    meta={"public_key":client_pub,"private_key":client_priv,"address":addr,"created":datetime.datetime.utcnow().strftime("%Y-%m-%d"),**extra_fields}
+    db[name]=meta
     _save_peers_db(db)
     _log_dashboard_event(f"peer '{name}' added ({addr})")
     try:
@@ -2056,6 +2076,75 @@ def api_users_rename(name: str):
         _log_dashboard_event(f"peer '{name}' renamed to '{new_name}'")
     return jsonify({"ok":True,"name":new_name})
 
+def _apply_peer_config_fields(meta: dict, data: dict):
+    """Validate and apply client-config fields shared by peer create and PATCH.
+    Returns None on success or an (json, status) error tuple."""
+    if "dns" in data:
+        dns_val = str(data["dns"]).strip()
+        # "none" = omit the DNS line from the generated config entirely
+        if dns_val and dns_val.lower() != "none" and not re.match(r'^[\d\s.,a-fA-F:]+$', dns_val):
+            return jsonify({"ok": False, "error": "invalid_dns", "hint": "Use comma-separated IP addresses, or 'none'"}), 400
+        meta["dns"] = dns_val
+
+    if "search_domains" in data:
+        sd_val = str(data["search_domains"]).strip()[:500]
+        if sd_val and not re.match(r'^[A-Za-z0-9.\-_,\s]+$', sd_val):
+            return jsonify({"ok": False, "error": "invalid_search_domains", "hint": "Use comma-separated domain names"}), 400
+        meta["search_domains"] = sd_val
+
+    if "client_allowed_ips" in data:
+        raw_ips = str(data["client_allowed_ips"]).strip()
+        try:
+            for cidr in raw_ips.split(","):
+                ipaddress.ip_network(cidr.strip(), strict=False)
+        except ValueError:
+            return jsonify({"ok": False, "error": "invalid_allowed_ips", "hint": "Use comma-separated CIDR prefixes e.g. 0.0.0.0/0, ::/0"}), 400
+        meta["client_allowed_ips"] = raw_ips
+
+    if "keepalive" in data:
+        try:
+            ka_int = int(data["keepalive"])
+            if ka_int < 0 or ka_int > 65535:
+                return jsonify({"ok": False, "error": "invalid_keepalive", "hint": "0–65535 seconds (0 = disabled)"}), 400
+            meta["keepalive"] = str(ka_int)
+        except (ValueError, TypeError):
+            return jsonify({"ok": False, "error": "invalid_keepalive", "hint": "Must be a number"}), 400
+
+    if "mtu" in data:
+        mtu_val = str(data["mtu"]).strip()
+        if mtu_val:
+            try:
+                mtu_int = int(mtu_val)
+                if mtu_int < 576 or mtu_int > 9200:
+                    return jsonify({"ok": False, "error": "invalid_mtu", "hint": "576–9200"}), 400
+                mtu_val = str(mtu_int)
+            except (ValueError, TypeError):
+                return jsonify({"ok": False, "error": "invalid_mtu", "hint": "Must be a number"}), 400
+        meta["mtu"] = mtu_val
+
+    if "listen_port" in data:
+        lp_val = str(data["listen_port"]).strip()
+        if lp_val:
+            try:
+                lp_int = int(lp_val)
+                if lp_int < 1 or lp_int > 65535:
+                    return jsonify({"ok": False, "error": "invalid_listen_port", "hint": "1–65535"}), 400
+                lp_val = str(lp_int)
+            except (ValueError, TypeError):
+                return jsonify({"ok": False, "error": "invalid_listen_port", "hint": "Must be a number"}), 400
+        meta["listen_port"] = lp_val
+
+    if "endpoint" in data:
+        ep_val = str(data["endpoint"]).strip()[:256]
+        if ep_val and not re.match(r'^[A-Za-z0-9.\-\[\]:]+:\d{1,5}$', ep_val):
+            return jsonify({"ok": False, "error": "invalid_endpoint", "hint": "Use host:port"}), 400
+        meta["endpoint"] = ep_val
+
+    if "device" in data:
+        meta["device"] = str(data["device"])[:32].strip()
+
+    return None
+
 @app.route("/api/users/<name>/settings", methods=["PATCH"])
 def api_users_settings(name: str):
     data = request.get_json(force=True, silent=True) or {}
@@ -2073,30 +2162,9 @@ def api_users_settings(name: str):
     if "long_note" in data:
         meta["long_note"] = str(data["long_note"])[:2000].strip()
 
-    if "dns" in data:
-        dns_val = str(data["dns"]).strip()
-        if dns_val and not re.match(r'^[\d\s.,a-fA-F:]+$', dns_val):
-            return jsonify({"ok": False, "error": "invalid_dns", "hint": "Use comma-separated IP addresses"}), 400
-        meta["dns"] = dns_val
-
-    if "client_allowed_ips" in data:
-        raw_ips = str(data["client_allowed_ips"]).strip()
-        try:
-            for cidr in raw_ips.split(","):
-                ipaddress.ip_network(cidr.strip(), strict=False)
-        except ValueError:
-            return jsonify({"ok": False, "error": "invalid_allowed_ips", "hint": "Use comma-separated CIDR prefixes e.g. 0.0.0.0/0, ::/0"}), 400
-        meta["client_allowed_ips"] = raw_ips
-
-    if "keepalive" in data:
-        ka = data["keepalive"]
-        try:
-            ka_int = int(ka)
-            if ka_int < 0 or ka_int > 65535:
-                return jsonify({"ok": False, "error": "invalid_keepalive", "hint": "0–65535 seconds (0 = disabled)"}), 400
-            meta["keepalive"] = str(ka_int)
-        except (ValueError, TypeError):
-            return jsonify({"ok": False, "error": "invalid_keepalive", "hint": "Must be a number"}), 400
+    err = _apply_peer_config_fields(meta, data)
+    if err:
+        return err
 
     db[name] = meta
     _save_peers_db(db)
@@ -2480,6 +2548,15 @@ def api_dyndns():
         safe = {k: v for k, v in cfg.items() if k != "token"}
         safe["has_token"] = bool(cfg.get("token"))
         safe["public_ip"], safe["public_ip_source"] = _public_ip_info()
+        try:
+            safe["server_public_key"] = _server_pubkey()
+        except Exception:
+            safe["server_public_key"] = ""
+        safe["endpoint_host"] = _get_endpoint_host()
+        try:
+            safe["listen_port"] = _read_conf().get("Interface", {}).get("ListenPort", str(WG_PORT))
+        except Exception:
+            safe["listen_port"] = str(WG_PORT)
         return jsonify(safe)
     data = request.get_json(force=True, silent=True) or {}
     cfg = _load_dyndns()

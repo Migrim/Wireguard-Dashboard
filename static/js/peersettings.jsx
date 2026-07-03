@@ -30,13 +30,14 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
   const seeds = pM(() => ({
     routingPreset: routingPresetFromAllowedIps(peer.clientAllowedIps),
     allowedIps: peer.clientAllowedIps || '0.0.0.0/0, ::/0',
-    dns: peer.dns || '1.1.1.1, 1.0.0.1',
-    searchDomains: '',
+    dns: peer.dns === 'none' ? '' : (peer.dns || '1.1.1.1, 1.0.0.1'),
+    searchDomains: peer.searchDomains || '',
     blockAds: false,
-    endpoint: normalizeEndpoint(peer.endpoint),
-    mtu: '1420',
+    // '' = no per-peer override; the server default is filled in once netCfg loads
+    endpoint: peer.cfgEndpoint || '',
+    mtu: peer.mtu || '1420',
     keepalive: (peer.keepalive && peer.keepalive !== '0') ? String(peer.keepalive) : '25',
-    listenPort: '',
+    listenPort: peer.listenPort || '',
     table: 'auto',
     fwmark: '',
     preUp: '', postUp: '', preDown: '', postDown: '',
@@ -81,6 +82,22 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
       .catch(() => {});
     return () => { cancelled = true; };
   }, []);
+
+  // The endpoint the server writes into configs when there is no per-peer
+  // override. Fills the (empty) endpoint field without marking it dirty.
+  const defaultEndpoint = (netCfg && (netCfg.endpoint_host || netCfg.public_ip))
+    ? `${netCfg.endpoint_host || netCfg.public_ip}:${netCfg.listen_port || 51820}`
+    : '';
+  pE(() => {
+    if (!defaultEndpoint) return;
+    setEndpoint((e) => e || defaultEndpoint);
+    setSaved((s) => (s.endpoint === '' ? { ...s, endpoint: defaultEndpoint } : s));
+  }, [defaultEndpoint, peer.name]);
+
+  // The server's address inside the WG subnet — used for "Server" DNS
+  const serverDns = /^\d+\.\d+\.\d+\.\d+/.test(peer.addr || '')
+    ? peer.addr.split('/')[0].split('.').slice(0, 3).join('.') + '.1'
+    : '10.7.0.1';
 
   // Server-side / instant state
   const [note, setNote] = pS(seeds.note);
@@ -203,14 +220,14 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
   const previewConfig = window.buildConfig({
     name: peer.name,
     address: peer.addr,
-    dns: blockAds ? '10.7.0.1' : dns,
+    dns: blockAds ? serverDns : dns,
     searchDomains, mtu, keepalive, listenPort,
     table, fwmark, preUp, postUp, preDown, postDown,
-    endpoint,
+    endpoint: endpoint || defaultEndpoint || 'host:port',
     allowedIps: routingPreset === 'all' ? '0.0.0.0/0, ::/0' : allowedIps,
     presharedKey: usePsk ? keys.presharedKey : '',
     privateKey: rekeyed ? keys.privateKey : '‹kept on device — unchanged›',
-    serverPubKey: peer.pubKey || '(server public key)',
+    serverPubKey: netCfg?.server_public_key || '(server public key)',
   });
 
   const [showPreview, setShowPreview] = pS(false);
@@ -228,7 +245,10 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
   function buildConfigPatch() {
     const patch = {};
     if (current.dns !== saved.dns || current.blockAds !== saved.blockAds) {
-      patch.dns = blockAds ? '10.7.0.1' : dns;
+      patch.dns = blockAds ? serverDns : (dns.trim() || 'none');
+    }
+    if (current.searchDomains !== saved.searchDomains) {
+      patch.search_domains = searchDomains.trim();
     }
     if (current.routingPreset !== saved.routingPreset || current.allowedIps !== saved.allowedIps) {
       patch.client_allowed_ips = routingPreset === 'split' ? allowedIps : '';
@@ -236,6 +256,15 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
     if (current.keepalive !== saved.keepalive) {
       const ka = parseInt(keepalive, 10);
       if (!isNaN(ka)) patch.keepalive = ka;
+    }
+    if (current.mtu !== saved.mtu) {
+      patch.mtu = mtu.trim() === '1420' ? '' : mtu.trim();
+    }
+    if (current.listenPort !== saved.listenPort) {
+      patch.listen_port = listenPort.trim();
+    }
+    if (current.endpoint !== saved.endpoint) {
+      patch.endpoint = endpoint.trim() === defaultEndpoint ? '' : endpoint.trim();
     }
     return patch;
   }
@@ -348,7 +377,7 @@ function PeerSettings({ peer, onDirtyChange, onPeerUpdated }) {
               { lbl: 'Cloudflare', val: '1.1.1.1, 1.0.0.1' },
               { lbl: 'Quad9',      val: '9.9.9.9, 149.112.112.112' },
               { lbl: 'Google',     val: '8.8.8.8, 8.8.4.4' },
-              { lbl: 'Server',     val: '10.7.0.1' },
+              { lbl: 'Server',     val: serverDns },
               { lbl: 'None',       val: '' },
             ].map((p) => (
               <button key={p.lbl} className={`mini-btn ${dns === p.val ? 'on' : ''}`}

@@ -76,6 +76,11 @@ function mapApiPeers(issued, live) {
       dns: iss.dns || '',
       clientAllowedIps: iss.client_allowed_ips || '',
       keepalive: iss.keepalive != null ? String(iss.keepalive) : '25',
+      searchDomains: iss.search_domains || '',
+      mtu: iss.mtu || '',
+      listenPort: iss.listen_port || '',
+      cfgEndpoint: iss.endpoint || '',
+      deviceType: iss.device || '',
       paused: iss.paused || false,
       throttled: iss.throttled || false,
     };

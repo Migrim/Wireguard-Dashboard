@@ -212,6 +212,31 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
   const [notes, setNotes] = aS('');
 
   const subnetLabel = aM(() => detectSubnetPrefix(peers) + '.0/24', [peers]);
+  // Server DNS = the server's own address inside the WG subnet
+  const serverDns = aM(() => detectSubnetPrefix(peers) + '.1', [peers]);
+  // Best guess for the browser's LAN subnet (dashboard is usually reached over the LAN)
+  const lanCidr = aM(() => {
+    const h = window.location.hostname;
+    return /^\d+\.\d+\.\d+\.\d+$/.test(h) ? h.split('.').slice(0, 3).join('.') + '.0/24' : '192.168.1.0/24';
+  }, []);
+
+  // The real endpoint the server puts into generated configs (DynDNS hostname
+  // if active, else public IP + actual listen port). The browser hostname is
+  // only the placeholder until this arrives; the field is sent as an override
+  // only when the user edits it away from this default.
+  const [endpointDefault, setEndpointDefault] = aS(PRESET_DEFAULTS.endpoint);
+  aE(() => {
+    let cancelled = false;
+    window.WG.apiCall('/api/dyndns', { silent: true }).then((d) => {
+      if (cancelled || !d) return;
+      const host = (d.endpoint_host || d.public_ip || '').trim();
+      if (!host) return;
+      const def = `${host}:${d.listen_port || 51820}`;
+      setEndpointDefault(def);
+      setEndpoint((e) => (e === PRESET_DEFAULTS.endpoint ? def : e));
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const [copied, setCopied] = aS('');
   const copy = (val, key) => {
@@ -231,7 +256,7 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
 
   aE(() => {
     if (routingPreset === 'all') setAllowedIps('0.0.0.0/0, ::/0');
-    else if (routingPreset === 'lan') setAllowedIps('10.7.0.0/24, 192.168.1.0/24');
+    else if (routingPreset === 'lan') setAllowedIps(`${subnetLabel}, ${lanCidr}`);
   }, [routingPreset]);
 
   aE(() => {
@@ -285,7 +310,7 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
     {
       id: 'tune', icon: I.tune, title: 'Connection tuning',
       summary: `MTU ${mtu} · keepalive ${keepalive}s${listenPort ? ` · port ${listenPort}` : ''}`,
-      modified: mtu !== '1420' || keepalive !== '25' || listenPort !== '' || endpoint !== PRESET_DEFAULTS.endpoint,
+      modified: mtu !== '1420' || keepalive !== '25' || listenPort !== '' || endpoint !== endpointDefault,
     },
     {
       id: 'scripts', icon: I.script, title: 'Routing scripts & firewall',
@@ -328,7 +353,20 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
     setCreating(true);
     try {
       const ipRaw = address.split('/')[0];
-      const r = await window.WG.apiCall('/api/users', { silent: true, method: 'POST', body: JSON.stringify({ name, ip: ipRaw }) });
+      const body = {
+        name,
+        ip: ipRaw,
+        device,
+        // '' in the field means "no DNS line" — the API's 'none' sentinel
+        dns: blockAds ? serverDns : (dns.trim() || 'none'),
+        search_domains: searchDomains.trim(),
+        client_allowed_ips: allowedIps.trim(),
+        keepalive: parseInt(keepalive, 10) || 0,
+        mtu: mtu.trim() === '1420' ? '' : mtu.trim(),
+        listen_port: listenPort.trim(),
+      };
+      if (endpoint.trim() && endpoint.trim() !== endpointDefault) body.endpoint = endpoint.trim();
+      const r = await window.WG.apiCall('/api/users', { silent: true, method: 'POST', body: JSON.stringify(body) });
       if (!r?.profile) {
         window.WG.toast?.error?.('Config generation failed', `Peer "${name}" was created but the server failed to generate its config. Refresh to see it.`);
         onCreated?.();
@@ -421,7 +459,7 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
               { lbl: 'Cloudflare', val: '1.1.1.1, 1.0.0.1' },
               { lbl: 'Quad9',      val: '9.9.9.9, 149.112.112.112' },
               { lbl: 'Google',     val: '8.8.8.8, 8.8.4.4' },
-              { lbl: 'Server',     val: '10.7.0.1' },
+              { lbl: 'Server',     val: serverDns },
               { lbl: 'None',       val: '' },
             ].map((p) => (
               <button key={p.lbl} className={`mini-btn ${dns === p.val ? 'on' : ''}`} onClick={() => setDns(p.val)} disabled={blockAds}>{p.lbl}</button>
@@ -731,6 +769,9 @@ function AddPeerDrawer({ peers, onClose, onCreated }) {
 // CreatedView — post-create provisioning screen
 // ============================================================
 function CreatedView({ name, address, endpoint, allowedIps, profile, copy, copied, onAddAnother, onClose }) {
+  // Show what the server actually put into the config, not the form values
+  const profEndpoint = ((profile || '').match(/^Endpoint\s*=\s*(.+)$/m) || [])[1] || endpoint;
+  const profRoutes = ((profile || '').match(/^AllowedIPs\s*=\s*(.+)$/m) || [])[1] || allowedIps;
   const [tab, setTab] = aS('qr');
   const [qrUrl, setQrUrl] = aS('');
 
@@ -834,11 +875,11 @@ function CreatedView({ name, address, endpoint, allowedIps, profile, copy, copie
             </div>
             <div className="ap-detail-strip-item">
               <span className="ap-detail-lbl">Endpoint</span>
-              <span className="mono">{endpoint}</span>
+              <span className="mono">{profEndpoint}</span>
             </div>
             <div className="ap-detail-strip-item">
               <span className="ap-detail-lbl">Routes</span>
-              <span className="mono ap-kv-truncate">{allowedIps}</span>
+              <span className="mono ap-kv-truncate">{profRoutes}</span>
             </div>
           </div>
 
