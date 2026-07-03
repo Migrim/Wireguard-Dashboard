@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<meta name="theme-color" content="#924f6f" />
+<meta name="theme-color" content="#F5EEE2" />
+<meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="WG Dashboard" />
@@ -14,16 +15,21 @@
 (function () {
   var t = localStorage.getItem('WG_THEME');
   if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+  var mt = document.querySelector('meta[name="theme-color"]');
+  if (mt) mt.setAttribute('content', t === 'dark' ? '#14100C' : '#F5EEE2');
   var a = localStorage.getItem('WG_ACCENT');
   if (a && a !== 'terracotta') document.documentElement.classList.add('accent-' + a);
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/service-worker.js', { scope: '/' }).catch(function () {});
   }
   function setAppH() {
-    document.documentElement.style.setProperty('--app-h', window.innerHeight + 'px');
+    var h = (window.visualViewport && window.visualViewport.height >= window.innerHeight)
+      ? window.visualViewport.height : window.innerHeight;
+    document.documentElement.style.setProperty('--app-h', h + 'px');
   }
   setAppH();
   window.addEventListener('resize', setAppH);
+  window.addEventListener('pageshow', setAppH);
   window.addEventListener('orientationchange', function() { setTimeout(setAppH, 300); });
 }());
 </script>
@@ -87,6 +93,7 @@
   --shadow-sm:   0 1px 2px rgba(0,0,0,0.4);
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { background: var(--bg); }
 html, body { height: 100%; overscroll-behavior: none; }
 body {
   font-family: var(--sans);
@@ -100,7 +107,10 @@ body {
 #root { height: 100%; display: flex; flex-direction: column; }
 
 /* ── App shell ── */
-.m-app { display: flex; flex-direction: column; height: var(--app-h, 100dvh); background: var(--bg); }
+.m-app { display: flex; flex-direction: column; height: var(--app-h, 100vh); background: var(--bg); }
+@supports (height: 100dvh) {
+  .m-app { height: 100dvh; }
+}
 .m-header {
   flex-shrink: 0;
   padding: calc(var(--safe-top) + 12px) 16px 12px;
@@ -160,9 +170,15 @@ body {
   gap: 3px; border: none; background: none; cursor: pointer; color: var(--muted);
   font-family: var(--sans); font-size: 10px; font-weight: 500; letter-spacing: 0.02em;
   -webkit-tap-highlight-color: transparent; transition: color 0.15s;
+  position: relative;
 }
 .m-nav-btn.on { color: var(--accent); }
 .m-nav-btn svg { width: 22px; height: 22px; stroke: currentColor; }
+.m-nav-dot {
+  position: absolute; top: 8px; left: calc(50% + 8px);
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent); border: 1.5px solid var(--card);
+}
 
 /* ── Cards ── */
 .m-section { padding: 0px 14px 0; }
@@ -183,7 +199,6 @@ body {
 .m-svc-info { flex: 1; min-width: 0; }
 .m-svc-name { font-family: var(--mono); font-size: 12px; color: var(--muted); }
 .m-svc-uptime { font-size: 13px; color: var(--ink-2); margin-top: 2px; }
-.m-svc-btns { display: flex; gap: 6px; margin-top: 14px; }
 .m-btn {
   flex: 1; height: 38px; border-radius: 9px; border: 1px solid var(--border);
   background: var(--bg-2); color: var(--ink); font-family: var(--sans);
@@ -238,22 +253,12 @@ body {
 .m-search svg { flex-shrink: 0; color: var(--muted); }
 .m-search input {
   flex: 1; border: none; background: none; outline: none;
-  font-family: var(--sans); font-size: 14px; color: var(--ink);
+  font-family: var(--sans); font-size: 16px; color: var(--ink);
 }
 .m-search input::placeholder { color: var(--muted); }
 .m-search-clear { background: none; border: none; color: var(--muted); cursor: pointer; padding: 2px; display: grid; place-items: center; }
 
 .m-peer-list { padding: 0 14px; display: flex; flex-direction: column; gap: 8px; }
-.m-peer-card {
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow: hidden;
-  transition: border-color 0.15s;
-}
-.m-peer-card.expanded { border-color: var(--border-strong); }
-.m-peer-head {
-  padding: 14px 16px; display: flex; align-items: center; gap: 12px; cursor: pointer;
-  -webkit-tap-highlight-color: transparent; user-select: none;
-}
 .m-peer-avatar {
   width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
   background: var(--accent-soft); color: var(--accent);
@@ -262,56 +267,186 @@ body {
 }
 .m-peer-avatar.offline { background: var(--border); color: var(--muted); }
 .m-peer-avatar.paused { background: var(--warn-soft); color: var(--warn); }
-.m-peer-main { flex: 1; min-width: 0; }
-.m-peer-name { font-size: 14px; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 7px; }
 .m-peer-status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .m-peer-status-dot.online { background: var(--success); }
 .m-peer-status-dot.offline { background: var(--muted-2); }
 .m-peer-status-dot.paused { background: var(--warn); animation: mpulse 1.4s steps(1) infinite; }
-.m-peer-sub { font-size: 12px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
-.m-peer-chev { color: var(--muted); flex-shrink: 0; transition: transform 0.22s; }
-.m-peer-chev.open { transform: rotate(180deg); }
 
-.m-peer-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); border-top: 1px solid var(--border); }
-.m-peer-stat { background: var(--card); padding: 10px 14px; }
-.m-peer-stat-lbl { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-.m-peer-stat-val { font-family: var(--mono); font-size: 13px; color: var(--ink); margin-top: 2px; font-weight: 500; }
-
-.m-peer-expand { border-top: 1px solid var(--border); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
-.m-peer-kv { display: flex; flex-direction: column; gap: 8px; }
-.m-peer-kv-row { display: flex; gap: 10px; align-items: flex-start; }
-.m-peer-kv-key { font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); min-width: 72px; padding-top: 2px; flex-shrink: 0; }
-.m-peer-kv-val { font-family: var(--mono); font-size: 12px; color: var(--ink); word-break: break-all; }
-.m-peer-actions { display: flex; gap: 8px; }
-
-/* ── Config modal ── */
-.m-modal-scrim {
+/* ── Sheets (bottom drawers) ── */
+.m-sheet-scrim {
   position: fixed; inset: 0; z-index: 100;
   background: rgba(20,15,10,0.5); backdrop-filter: blur(3px);
-  display: flex; align-items: flex-end; padding: 0;
+  display: flex; align-items: flex-end;
+  animation: scrimIn 0.22s ease;
 }
-.m-modal {
+@keyframes scrimIn { from { opacity: 0; } to { opacity: 1; } }
+.m-sheet {
   width: 100%; background: var(--card); border-radius: 20px 20px 0 0;
   border: 1px solid var(--border); border-bottom: none;
-  padding: 20px 20px calc(20px + var(--safe-bot));
   max-height: 92dvh; display: flex; flex-direction: column;
   animation: slideUp 0.3s cubic-bezier(0.2,0.9,0.3,1);
 }
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-.m-modal-handle { width: 36px; height: 4px; background: var(--border-strong); border-radius: 2px; margin: -12px auto 16px; }
-.m-modal-title { font-family: var(--serif); font-size: 22px; color: var(--ink); margin-bottom: 14px; }
-.m-config-pre {
-  flex: 1; overflow-y: auto; font-family: var(--mono); font-size: 12px; line-height: 1.6;
-  color: var(--ink); background: var(--bg-2); border: 1px solid var(--border);
-  border-radius: 8px; padding: 12px 14px; white-space: pre; margin-bottom: 14px;
+.m-modal-handle { width: 36px; height: 4px; background: var(--border-strong); border-radius: 2px; }
+.m-sheet-grab { padding: 10px 0 4px; display: flex; justify-content: center; flex-shrink: 0; }
+.m-sheet-head { display: flex; align-items: flex-start; justify-content: space-between; padding: 4px 20px 12px; flex-shrink: 0; gap: 12px; }
+.m-sheet-title { font-family: var(--serif); font-size: 24px; color: var(--ink); line-height: 1.15; word-break: break-word; }
+.m-sheet-sub { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+.m-sheet-x {
+  width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--bg-2); display: grid; place-items: center; cursor: pointer;
+  color: var(--ink-2); flex-shrink: 0; -webkit-tap-highlight-color: transparent;
 }
-.m-modal-btns { display: flex; gap: 8px; }
+.m-sheet-body { padding: 0 20px 24px; overflow-y: auto; -webkit-overflow-scrolling: touch; flex: 1; min-height: 0; }
+.m-sheet-foot {
+  flex-shrink: 0; padding: 12px 20px calc(12px + var(--safe-bot));
+  border-top: 1px solid var(--border); display: flex; gap: 10px; background: var(--card);
+}
+.m-sheet-foot .m-btn { height: 48px; border-radius: 12px; font-size: 14px; }
+.m-sheet-divider { height: 1px; background: var(--border); margin: 16px -20px; }
+
+/* ── Forms ── */
+.m-field { margin-bottom: 14px; }
+.m-flabel {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 6px;
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+}
+.m-input {
+  width: 100%; padding: 11px 13px; border: 1px solid var(--border);
+  border-radius: 10px; background: var(--bg-2); color: var(--ink);
+  font-family: var(--sans); font-size: 16px; outline: none;
+  transition: border-color 0.15s; -webkit-appearance: none; appearance: none;
+}
+.m-input:focus { border-color: var(--accent); }
+.m-input.mono { font-family: var(--mono); font-size: 14px; }
+.m-input:disabled { opacity: 0.5; }
+select.m-input { background-image: none; }
+.m-hint { font-size: 11.5px; color: var(--muted); margin-top: 5px; line-height: 1.45; }
+.m-err-text { font-size: 12px; color: var(--danger); margin-top: 5px; }
+.m-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.m-chip {
+  padding: 7px 13px; border-radius: 99px; border: 1px solid var(--border);
+  background: var(--bg-2); font-family: var(--sans); font-size: 12.5px; color: var(--ink-2);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.m-chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 500; }
+.m-chip:disabled { opacity: 0.4; pointer-events: none; }
+
+/* ── Row lists (settings-style) ── */
+.m-row-btn {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 13px 16px; background: none; border: none; cursor: pointer;
+  text-align: left; -webkit-tap-highlight-color: transparent;
+  color: var(--ink); font-family: var(--sans); font-size: 14px;
+}
+.m-row-btn:active { background: var(--bg-2); }
+.m-row-btn + .m-row-btn { border-top: 1px solid var(--border); }
+.m-row-ic {
+  width: 30px; height: 30px; border-radius: 8px;
+  background: var(--accent-soft); color: var(--accent);
+  display: grid; place-items: center; flex-shrink: 0;
+}
+.m-row-main { flex: 1; min-width: 0; }
+.m-row-title { font-size: 14px; font-weight: 500; color: var(--ink); }
+.m-row-sub { font-size: 11.5px; color: var(--muted); margin-top: 1px; font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-row-chev { color: var(--muted-2); flex-shrink: 0; }
+.m-badge {
+  font-family: var(--mono); font-size: 10px; padding: 2px 8px; border-radius: 99px;
+  background: var(--accent-soft); color: var(--accent); flex-shrink: 0;
+}
+.m-badge.warn { background: var(--warn-soft); color: var(--warn); }
+.m-badge.ok { background: var(--success-soft); color: var(--success); }
+.m-badge.err { background: var(--danger-soft); color: var(--danger); }
+
+/* ── Checklist ── */
+.m-check-row {
+  display: flex; align-items: center; gap: 10px; padding: 11px 0;
+  border-bottom: 1px solid var(--border); font-size: 13px; color: var(--ink);
+}
+.m-check-row:last-child { border-bottom: none; }
+.m-check-ic { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; }
+.m-check-ic.ok   { background: var(--success-soft); color: var(--success); }
+.m-check-ic.bad  { background: var(--danger-soft); color: var(--danger); }
+.m-check-ic.warn { background: var(--warn-soft); color: var(--warn); }
+.m-check-val { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: right; word-break: break-all; }
+
+/* ── FAB ── */
+.m-fab {
+  position: fixed; right: 18px;
+  bottom: calc(var(--nav-h) + var(--safe-bot) + 18px);
+  width: 54px; height: 54px; border-radius: 18px;
+  background: var(--ink); color: var(--bg); border: none;
+  box-shadow: var(--shadow); display: grid; place-items: center;
+  cursor: pointer; z-index: 50; -webkit-tap-highlight-color: transparent;
+  transition: transform 0.12s;
+}
+.m-fab:active { transform: scale(0.94); }
+
+/* ── Confirm dialog ── */
+.m-confirm-scrim {
+  position: fixed; inset: 0; z-index: 400;
+  background: rgba(20,15,10,0.55); backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center; padding: 28px;
+  animation: scrimIn 0.2s ease;
+}
+.m-confirm {
+  width: 100%; max-width: 340px; background: var(--card-raised);
+  border: 1px solid var(--border); border-radius: 18px; padding: 22px 20px;
+  box-shadow: var(--shadow); animation: mFadeIn 0.22s cubic-bezier(0.2,0.9,0.3,1);
+}
+.m-confirm-title { font-family: var(--serif); font-size: 21px; color: var(--ink); margin-bottom: 8px; }
+.m-confirm-body { font-size: 13px; color: var(--ink-2); line-height: 1.55; margin-bottom: 18px; }
+.m-confirm-btns { display: flex; gap: 8px; }
+.m-confirm-btns .m-btn { height: 44px; border-radius: 11px; }
+
+/* ── QR ── */
+.m-qr-wrap { display: flex; justify-content: center; padding: 16px 0 6px; }
+.m-qr-box { background: #ffffff; padding: 14px; border-radius: 14px; border: 1px solid var(--border); line-height: 0; }
+
+/* ── Progress ── */
+.m-prog { height: 8px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+.m-prog-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.4s ease; }
+
+/* ── Stepper ── */
+.m-stepper {
+  display: inline-flex; align-items: center; border: 1px solid var(--border);
+  border-radius: 10px; background: var(--bg-2); overflow: hidden;
+}
+.m-stepper button {
+  width: 42px; height: 42px; border: none; background: none; color: var(--ink);
+  font-size: 19px; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  display: grid; place-items: center;
+}
+.m-stepper button:active { background: var(--border); }
+.m-stepper input {
+  width: 66px; text-align: center; border: none; background: none; outline: none;
+  font-family: var(--mono); font-size: 16px; color: var(--ink);
+  border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+  height: 42px; -webkit-appearance: none; appearance: none; border-radius: 0;
+}
+
+/* ── Config text ── */
+.m-config-pre {
+  overflow: auto; font-family: var(--mono); font-size: 12px; line-height: 1.6;
+  color: var(--ink); background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px; white-space: pre;
+  -webkit-overflow-scrolling: touch;
+}
+.m-raw-pre {
+  overflow: auto; font-family: var(--mono); font-size: 10.5px; line-height: 1.55;
+  color: var(--ink-2); background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 12px; white-space: pre;
+  max-height: 240px; -webkit-overflow-scrolling: touch;
+}
 
 /* ── Logs ── */
 .m-logs-wrap { padding: 14px; display: flex; flex-direction: column; gap: 0; height: 100%; box-sizing: border-box; }
-.m-logs-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-shrink: 0; }
+.m-logs-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-shrink: 0; gap: 8px; }
 .m-logs-title { font-size: 14px; font-weight: 600; color: var(--ink); }
 .m-logs-count { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.m-logs-controls { display: flex; gap: 6px; align-items: center; margin-bottom: 10px; flex-shrink: 0; flex-wrap: wrap; }
 .m-log-stream {
   background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 10px 12px; font-family: var(--mono); font-size: 11.5px; line-height: 1.65;
@@ -328,7 +463,7 @@ body {
 .m-log-error .m-log-msg { color: var(--ink); }
 
 /* ── Toasts ── */
-.m-toast-wrap { position: fixed; top: calc(var(--safe-top) + 70px); left: 12px; right: 12px; z-index: 200; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.m-toast-wrap { position: fixed; top: calc(var(--safe-top) + 70px); left: 12px; right: 12px; z-index: 500; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
 .m-toast {
   background: var(--card-raised); border: 1px solid var(--border); border-radius: 12px;
   padding: 12px 14px; font-size: 13px; color: var(--ink);
@@ -378,6 +513,7 @@ body {
   border-radius: 50%;
   animation: spin 0.75s cubic-bezier(0.4,0,0.2,1) infinite;
 }
+.m-spinner-ring.sm { width: 22px; height: 22px; border-width: 2px; }
 .m-spinner-label {
   font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em;
   text-transform: uppercase; color: var(--muted);
@@ -417,15 +553,17 @@ body {
 [data-theme="dark"].accent-amber { --accent: oklch(75% 0.16 75); --accent-soft: oklch(30% 0.09 75); --accent-2: oklch(65% 0.11 210); }
 
 /* ── Settings tab ── */
-.m-settings { padding: 16px; display: flex; flex-direction: column; gap: 20px; }
+.m-settings { padding: 16px 14px; display: flex; flex-direction: column; gap: 20px; }
 .m-settings-title { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
-.m-settings-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.m-settings-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); }
 .m-settings-row { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; gap: 12px; }
-.m-settings-row + .m-settings-row { border-top: 1px solid var(--border); }
+.m-settings-row + .m-settings-row, .m-settings-row + .m-row-btn, .m-row-btn + .m-settings-row { border-top: 1px solid var(--border); }
 .m-settings-lbl { font-size: 14px; color: var(--ink); }
+.m-settings-sub { font-size: 11.5px; color: var(--muted); font-family: var(--mono); margin-top: 1px; }
 .m-seg { display: flex; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 2px; gap: 2px; }
-.m-seg-btn { padding: 5px 14px; border-radius: 6px; border: none; background: none; font-family: var(--mono); font-size: 12px; color: var(--muted); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.m-seg-btn { padding: 5px 12px; border-radius: 6px; border: none; background: none; font-family: var(--mono); font-size: 12px; color: var(--muted); cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .m-seg-btn.on { background: var(--card); color: var(--ink); box-shadow: var(--shadow-sm); }
+.m-seg-btn:disabled { opacity: 0.4; pointer-events: none; }
 .m-swatches { display: flex; gap: 10px; }
 .m-swatch { width: 28px; height: 28px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; outline: 2px solid transparent; outline-offset: 2px; -webkit-tap-highlight-color: transparent; transition: outline-color 0.15s; }
 .m-swatch.on { outline-color: var(--ink-2); }
@@ -440,6 +578,7 @@ body {
 <body data-base="{{ request.script_root or '' }}">
 <div id="root"></div>
 
+<script src="{{ url_for('static', filename='js/qrcode.min.js') }}?v={{ app_version }}"></script>
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
@@ -485,6 +624,10 @@ function fmtRel(ms) {
   if (d < 86_400_000) return `${Math.floor(d/3_600_000)}h ago`;
   return `${Math.floor(d/86_400_000)}d ago`;
 }
+function fmtRelSec(s) {
+  if (!s) return '—';
+  return fmtRel(s * 1000);
+}
 function fmtUptime(startedMs) {
   if (!startedMs) return null;
   const s = Math.floor((Date.now() - startedMs) / 1000);
@@ -510,6 +653,18 @@ function mapPeers(issued, live) {
       endpoint: lv?.remote || '—',
       pubKey: iss.public_key || '',
       paused: iss.paused || false,
+      throttled: iss.throttled || false,
+      created: iss.created || '',
+      note: iss.note || '',
+      owner: iss.owner || '',
+      device: iss.device || '',
+      dns: iss.dns || '',
+      clientAllowedIps: iss.client_allowed_ips || '',
+      keepalive: iss.keepalive || '25',
+      mtu: iss.mtu || '',
+      listenPort: iss.listen_port || '',
+      endpointOverride: iss.endpoint || '',
+      monitorDns: !!iss.monitor_dns,
     };
   });
 }
@@ -534,6 +689,38 @@ function timeStr(ms) {
   const d = new Date(ms);
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
 }
+function downloadText(filename, text, mime = 'text/plain') {
+  const blob = new Blob([text], { type: mime });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+async function shareText(filename, text, title) {
+  if (navigator.share) {
+    try {
+      const file = new File([text], filename, { type: 'text/plain' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: title || filename });
+        return true;
+      }
+      await navigator.share({ title: title || filename, text });
+      return true;
+    } catch (e) {
+      if (e.name === 'AbortError') return true;
+      return false;
+    }
+  }
+  return false;
+}
+function subnetFromPeers(peers) {
+  for (const p of peers) {
+    const m = String(p.addr || '').match(/^(\d+\.\d+\.\d+)\.\d+/);
+    if (m) return `${m[1]}.0/24`;
+  }
+  return '10.8.0.0/24';
+}
+const NAME_RE = /^[A-Za-z0-9._-]{1,64}$/;
 
 /* ─── Icons (inline SVG) ─── */
 const Icon = ({ n, size=20 }) => {
@@ -545,16 +732,38 @@ const Icon = ({ n, size=20 }) => {
     sun:     <><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></>,
     moon:    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>,
     chev:    <polyline points="6 9 12 15 18 9"/>,
+    chevr:   <polyline points="9 18 15 12 9 6"/>,
     x:       <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
+    plus:    <><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>,
     search:  <><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>,
     dl:      <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>,
+    share:   <><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></>,
     pause:   <><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></>,
     play:    <polygon points="5 3 19 12 5 21 5 3"/>,
     refresh: <><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></>,
+    rotate:  <><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></>,
     copy:    <><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>,
     check:   <polyline points="20 6 9 17 4 12"/>,
     settings:<><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></>,
     trash:   <><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></>,
+    edit:    <><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></>,
+    globe:   <><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></>,
+    activity:<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>,
+    zap:     <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>,
+    server:  <><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></>,
+    key:     <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>,
+    alert:   <><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></>,
+    db:      <><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></>,
+    clock:   <><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>,
+    power:   <><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></>,
+    logout:  <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></>,
+    wifi:    <><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></>,
+    lock:    <><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>,
+    wrench:  <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>,
+    upload:  <><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></>,
+    qr:      <><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><line x1="14" y1="14" x2="17" y2="14"/><line x1="14" y1="17" x2="14" y2="21"/><line x1="17" y1="17" x2="21" y2="17"/><line x1="21" y1="14" x2="21" y2="14.01"/><line x1="17" y1="21" x2="21" y2="21"/></>,
+    sliders: <><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></>,
+    info:    <><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></>,
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -624,15 +833,177 @@ function Login({ onAuth }) {
   );
 }
 
+/* ─── Generic bottom sheet ─── */
+function Sheet({ title, sub, onClose, children, footer, headerExtra }) {
+  const [dragY, setDragY] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const startY = useRef(0);
+
+  const onTouchStart = e => { startY.current = e.touches[0].clientY; setDragging(true); };
+  const onTouchMove  = e => { if (dragging) setDragY(Math.max(0, e.touches[0].clientY - startY.current)); };
+  const onTouchEnd   = () => {
+    setDragging(false);
+    if (dragY > 90) { setDragY(900); setTimeout(onClose, 240); }
+    else setDragY(0);
+  };
+
+  return (
+    <div className="m-sheet-scrim" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div
+        className="m-sheet"
+        style={{
+          transform: `translateY(${dragY}px)`,
+          transition: dragging ? 'none' : 'transform 0.28s cubic-bezier(0.2,0.9,0.3,1)',
+        }}
+      >
+        <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{touchAction:'none', flexShrink:0, cursor:'grab'}}>
+          <div className="m-sheet-grab"><div className="m-modal-handle"/></div>
+          <div className="m-sheet-head">
+            <div style={{flex:1, minWidth:0}}>
+              <div className="m-sheet-title">{title}</div>
+              {sub && <div className="m-sheet-sub">{sub}</div>}
+            </div>
+            {headerExtra}
+            <button className="m-sheet-x" onClick={onClose}><Icon n="x" size={16}/></button>
+          </div>
+        </div>
+        <div className="m-sheet-body">{children}</div>
+        {footer && <div className="m-sheet-foot">{footer}</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Confirm dialog ─── */
+function Confirm({ title, body, label='Confirm', danger, onConfirm, onCancel, busy }) {
+  return (
+    <div className="m-confirm-scrim" onClick={e => e.target === e.currentTarget && !busy && onCancel()}>
+      <div className="m-confirm">
+        <div className="m-confirm-title">{title}</div>
+        <div className="m-confirm-body">{body}</div>
+        <div className="m-confirm-btns">
+          <button className="m-btn" onClick={onCancel} disabled={busy}>Cancel</button>
+          <button className={`m-btn ${danger ? 'danger' : 'primary'}`} onClick={onConfirm} disabled={busy}>
+            {busy ? 'Working…' : label}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Form bits ─── */
+function Field({ label, hint, error, right, children }) {
+  return (
+    <div className="m-field">
+      {label && <div className="m-flabel"><span>{label}</span>{right}</div>}
+      {children}
+      {hint && !error && <div className="m-hint">{hint}</div>}
+      {error && <div className="m-err-text">{error}</div>}
+    </div>
+  );
+}
+function Toggle({ value, onChange, disabled }) {
+  return (
+    <label className="m-toggle" style={disabled ? {opacity:0.5, pointerEvents:'none'} : null}>
+      <input type="checkbox" checked={!!value} onChange={e => onChange(e.target.checked)} />
+      <span className="m-toggle-slot" />
+      <span className="m-toggle-knob" />
+    </label>
+  );
+}
+function Seg({ options, value, onChange }) {
+  return (
+    <div className="m-seg">
+      {options.map(o => (
+        <button
+          key={o.value} disabled={o.disabled}
+          className={`m-seg-btn ${value === o.value ? 'on' : ''}`}
+          onClick={() => onChange(o.value)}
+        >{o.label}</button>
+      ))}
+    </div>
+  );
+}
+function Stepper({ value, onChange, min=1, max=100000, step=5 }) {
+  const clamp = v => Math.max(min, Math.min(max, v));
+  return (
+    <div className="m-stepper">
+      <button onClick={() => onChange(clamp((parseInt(value,10)||min) - step))}>−</button>
+      <input
+        type="number" inputMode="numeric" value={value}
+        onChange={e => onChange(e.target.value)}
+        onBlur={e => onChange(clamp(parseInt(e.target.value,10) || min))}
+      />
+      <button onClick={() => onChange(clamp((parseInt(value,10)||min) + step))}>+</button>
+    </div>
+  );
+}
+
+/* ─── QR code (QRious) ─── */
+function QRCanvas({ text, size=224 }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (ref.current && window.QRious && text) {
+      try {
+        new QRious({
+          element: ref.current, value: text, size: size * 2,
+          level: 'M', background: '#ffffff', foreground: '#141008', padding: 0,
+        });
+      } catch (_) {}
+    }
+  }, [text, size]);
+  return <canvas ref={ref} style={{width:size, height:size}}/>;
+}
+
+/* ─── Small building blocks ─── */
+function KV({ k, v, mono=true }) {
+  return (
+    <div style={{padding:'12px 16px'}}>
+      <div style={{fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--muted)', marginBottom:5}}>{k}</div>
+      <div style={{fontFamily: mono ? 'var(--mono)' : 'var(--serif)', fontSize: mono ? 13 : 20, color:'var(--ink)', lineHeight:1.25, wordBreak:'break-all'}}>{v}</div>
+    </div>
+  );
+}
+function CheckRow({ ok, warn, label, val }) {
+  const cls = ok ? 'ok' : warn ? 'warn' : 'bad';
+  return (
+    <div className="m-check-row">
+      <span className={`m-check-ic ${cls}`}>
+        <Icon n={ok ? 'check' : warn ? 'alert' : 'x'} size={12}/>
+      </span>
+      <span>{label}</span>
+      {val != null && <span className="m-check-val">{val}</span>}
+    </div>
+  );
+}
+function RowBtn({ icon, title, sub, badge, onClick, danger }) {
+  return (
+    <button className="m-row-btn" onClick={onClick}>
+      <span className="m-row-ic" style={danger ? {background:'var(--danger-soft)', color:'var(--danger)'} : null}>
+        <Icon n={icon} size={15}/>
+      </span>
+      <span className="m-row-main">
+        <div className="m-row-title" style={danger ? {color:'var(--danger)'} : null}>{title}</div>
+        {sub && <div className="m-row-sub">{sub}</div>}
+      </span>
+      {badge}
+      <span className="m-row-chev"><Icon n="chevr" size={16}/></span>
+    </button>
+  );
+}
+
 /* ─── Home tab ─── */
-function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService, svcBusy, peers, sessionStarts, sparks, onSeeAllPeers, onPeerClick }) {
+function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService, svcBusy, peers, sessionStarts, sparks, onSeeAllPeers, onPeerClick, onOpenBudget, onRestart }) {
   const svc    = status?.service || {};
   const active  = svc.active;
   const uptime  = fmtUptime(svc.started_at);
   const totalPeers  = peers.length;
   const onlinePeers = peers.filter(p => p.status === 'online').length;
-  const pct = totalPeers ? Math.round((onlinePeers / totalPeers) * 100) : 0;
   const topPeers = peers.filter(p => p.status === 'online').sort((a,b) => (b.bytesIn + b.bytesOut) - (a.bytesIn + a.bytesOut));
+  const budget = status?.data_budget;
+  const pct = Math.min(100, Math.max(0, budget?.pct || 0));
+  const barColor = pct >= 90 ? 'var(--danger)' : pct >= 70 ? 'var(--warn)' : 'var(--accent)';
 
   return (
     <div className="m-scroll-pad">
@@ -647,12 +1018,17 @@ function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService,
               {uptime && active && <div className="m-svc-uptime">Uptime: {uptime}</div>}
               {!active && <div className="m-svc-uptime" style={{color:'var(--danger)'}}>Inactive</div>}
             </div>
+            {active && (
+              <button className="m-btn" onClick={onRestart} disabled={!!svcBusy} style={{flex:'0 0 auto', width:42, padding:0}} aria-label="Restart">
+                <Icon n="rotate" size={15}/>
+              </button>
+            )}
             {active ? (
-              <button className="m-btn primary" onClick={() => onService('stop')} disabled={!!svcBusy} style={{flex:'0 0 auto', minWidth:100}}>
+              <button className="m-btn primary" onClick={() => onService('stop')} disabled={!!svcBusy} style={{flex:'0 0 auto', minWidth:96}}>
                 <Icon n="pause" size={14}/> Stop
               </button>
             ) : (
-              <button className="m-btn primary" onClick={() => onService('start')} disabled={!!svcBusy} style={{flex:'0 0 auto', minWidth:100}}>
+              <button className="m-btn primary" onClick={() => onService('start')} disabled={!!svcBusy} style={{flex:'0 0 auto', minWidth:96}}>
                 <Icon n="play" size={14}/> Start
               </button>
             )}
@@ -690,6 +1066,25 @@ function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService,
         </div>
       </div>
 
+      {/* Data budget */}
+      {budget && (
+        <div className="m-section" style={{marginTop:14}}>
+          <div className="m-card m-budget-card" onClick={onOpenBudget} style={{cursor:'pointer', WebkitTapHighlightColor:'transparent'}}>
+            <div className="m-budget-head">
+              <span className="m-budget-title">Data today</span>
+              <span className="m-budget-pct">{Math.round(budget.pct || 0)}%</span>
+            </div>
+            <div className="m-budget-bar-bg">
+              <div className="m-budget-bar-fill" style={{width:`${pct}%`, background:barColor}}/>
+            </div>
+            <div className="m-budget-foot">
+              <span>{fmtBytes(budget.total || 0)} used</span>
+              <span>of {budget.settings?.budget_gb ?? '—'} GB · resets {budget.settings?.reset_time || '00:00'}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Active Sessions */}
       <div className="m-section" style={{marginTop:14}}>
         <div className="m-card" style={{padding:'14px 16px'}}>
@@ -726,10 +1121,11 @@ function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService,
   );
 }
 
-/* ─── Config modal ─── */
-function ConfigModal({ peerName, onClose, toast }) {
+/* ─── Config sheet (QR + text + share) ─── */
+function ConfigSheet({ peerName, onClose, toast }) {
   const [config, setConfig] = useState('');
   const [loading, setLoading] = useState(true);
+  const [view, setView] = useState('qr');
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -745,48 +1141,60 @@ function ConfigModal({ peerName, onClose, toast }) {
       setTimeout(() => setCopied(false), 2000);
     }).catch(() => toast('Copy failed', 'err'));
   };
-
   const download = () => {
-    const blob = new Blob([config], { type: 'text/plain' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url; a.download = `${peerName}.conf`; a.click();
-    URL.revokeObjectURL(url);
+    downloadText(`${peerName}.conf`, config);
     toast('Download started', 'ok');
+  };
+  const share = async () => {
+    const ok = await shareText(`${peerName}.conf`, config, `WireGuard config · ${peerName}`);
+    if (!ok) { copy(); }
   };
 
   return (
-    <div className="m-modal-scrim" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="m-modal">
-        <div className="m-modal-handle"/>
-        <div className="m-modal-title">{peerName}.conf</div>
-        {loading ? <div className="m-spinner" style={{height:'auto', padding:'32px 0'}}>
-            <div className="m-spinner-ring"/>
-            <div className="m-spinner-label">Loading</div>
-          </div>
-          : <pre className="m-config-pre">{config}</pre>
-        }
-        <div className="m-modal-btns">
-          <button className="m-btn" onClick={copy} style={{flex:1}}>
-            <Icon n={copied ? 'check' : 'copy'} size={14}/>
-            {copied ? 'Copied!' : 'Copy'}
-          </button>
-          <button className="m-btn primary" onClick={download} style={{flex:1}}>
-            <Icon n="dl" size={14}/> Download
-          </button>
+    <Sheet
+      title={`${peerName}.conf`}
+      sub="Scan with the WireGuard app or share the file"
+      onClose={onClose}
+      footer={<>
+        <button className="m-btn" onClick={copy}>
+          <Icon n={copied ? 'check' : 'copy'} size={14}/> {copied ? 'Copied!' : 'Copy'}
+        </button>
+        <button className="m-btn" onClick={download}><Icon n="dl" size={14}/> Save</button>
+        <button className="m-btn primary" onClick={share}><Icon n="share" size={14}/> Share</button>
+      </>}
+    >
+      {loading ? (
+        <div className="m-spinner" style={{height:'auto', padding:'40px 0'}}>
+          <div className="m-spinner-ring"/>
+          <div className="m-spinner-label">Loading</div>
         </div>
-      </div>
-    </div>
+      ) : (
+        <>
+          <div style={{display:'flex', justifyContent:'center', marginBottom:4}}>
+            <Seg
+              options={[{value:'qr', label:'QR code'}, {value:'text', label:'Text'}]}
+              value={view} onChange={setView}
+            />
+          </div>
+          {view === 'qr' ? (
+            <div className="m-qr-wrap">
+              <div className="m-qr-box"><QRCanvas text={config}/></div>
+            </div>
+          ) : (
+            <pre className="m-config-pre" style={{marginTop:12}}>{config}</pre>
+          )}
+        </>
+      )}
+    </Sheet>
   );
 }
 
-/* ─── Peer drawer ─── */
-function PeerDrawer({ peer, history, onClose, onAction, toast }) {
+/* ─── Peer sheet ─── */
+function PeerSheet({ peer, history, onClose, onAction, onEdit, onShowConfig, onRemove, toast }) {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(null);
-  const [dragY, setDragY] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
-  const startYRef = useRef(0);
+  const [diag, setDiag] = useState(null);
+  const [diagBusy, setDiagBusy] = useState(false);
 
   const chartSamples = history.length >= 2
     ? history.slice(1).map((s, i) => {
@@ -819,157 +1227,1183 @@ function PeerDrawer({ peer, history, onClose, onAction, toast }) {
     } catch { toast('Copy failed', 'err'); }
   };
 
-  const onTouchStart = e => {
-    startYRef.current = e.touches[0].clientY;
-    setIsDragging(true);
-  };
-  const onTouchMove = e => {
-    const dy = Math.max(0, e.touches[0].clientY - startYRef.current);
-    setDragY(dy);
-  };
-  const onTouchEnd = () => {
-    setIsDragging(false);
-    if (dragY > 80) {
-      setDragY(700);
-      setTimeout(onClose, 260);
-    } else {
-      setDragY(0);
-    }
+  const runDiag = async () => {
+    setDiagBusy(true);
+    try {
+      const d = await api(`/api/users/${encodeURIComponent(peer.name)}/diag`);
+      setDiag(d);
+    } catch(e) { toast(e.message, 'err'); }
+    finally { setDiagBusy(false); }
   };
 
   const statusColor = peer.status === 'online' ? 'var(--success)' : peer.status === 'paused' ? 'var(--warn)' : 'var(--muted-2)';
   const statusText  = peer.status === 'online' ? 'connected'     : peer.status === 'paused' ? 'paused'    : 'offline';
 
-  const InfoCell = ({ label, value, mono }) => (
-    <div style={{padding:'12px 16px'}}>
-      <div style={{fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--muted)', marginBottom:5}}>{label}</div>
-      <div style={{fontFamily: mono ? 'var(--mono)' : 'var(--serif)', fontSize: mono ? 13 : 20, color:'var(--ink)', lineHeight:1.2, wordBreak:'break-all'}}>{value}</div>
-    </div>
-  );
-
   return (
-    <div className="m-modal-scrim" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div
-        className="m-modal"
-        style={{
-          padding: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          transform: `translateY(${dragY}px)`,
-          transition: isDragging ? 'none' : 'transform 0.28s cubic-bezier(0.2,0.9,0.3,1)',
-          touchAction: 'none',
-        }}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
-      >
-        {/* Drag handle */}
-        <div style={{padding:'10px 0 4px', display:'flex', justifyContent:'center', flexShrink:0, cursor:'grab'}}>
-          <div className="m-modal-handle" style={{margin:0}}/>
+    <Sheet
+      title={peer.name}
+      sub={`${peer.addr}${peer.device ? ' · ' + peer.device : ''}${peer.created ? ' · added ' + peer.created : ''}`}
+      onClose={onClose}
+      headerExtra={
+        <button className="m-sheet-x" onClick={onEdit} aria-label="Edit peer">
+          <Icon n="edit" size={15}/>
+        </button>
+      }
+      footer={<>
+        <button
+          className={`m-btn ${peer.paused ? 'success' : ''}`}
+          disabled={busy}
+          onClick={() => doAction(peer.paused ? 'resume' : 'pause')}
+        >
+          <Icon n={peer.paused ? 'play' : 'pause'} size={15}/>
+          {peer.paused ? 'Resume' : 'Pause'}
+        </button>
+        <button className="m-btn danger" disabled={busy} onClick={onRemove}>
+          <Icon n="trash" size={15}/> Remove
+        </button>
+      </>}
+    >
+      {/* Status row */}
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14, marginTop:2}}>
+        <div style={{display:'flex', alignItems:'center', gap:7}}>
+          <span style={{width:8, height:8, borderRadius:'50%', background:statusColor, display:'inline-block', flexShrink:0}}/>
+          <span style={{fontFamily:'var(--mono)', fontSize:13, color:statusColor}}>{statusText}</span>
+          {peer.throttled && <span className="m-badge warn">throttled</span>}
         </div>
+        {peer.lastHs && (
+          <span style={{fontFamily:'var(--mono)', fontSize:12, color:'var(--muted)'}}>handshake {fmtRel(peer.lastHs)}</span>
+        )}
+      </div>
 
-        {/* Body */}
-        <div style={{padding:'4px 20px 16px', overflowY:'auto', flex:1}}>
-
-          {/* Header */}
-          <div style={{display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:16, marginTop:4}}>
-            <div style={{flex:1, minWidth:0}}>
-              <div style={{fontFamily:'var(--serif)', fontSize:26, color:'var(--ink)', lineHeight:1.15}}>{peer.name}</div>
-              <div style={{fontFamily:'var(--mono)', fontSize:12, color:'var(--muted)', marginTop:3}}>{peer.addr}</div>
-            </div>
-            <button onClick={onClose} style={{width:38, height:38, borderRadius:10, border:'1px solid var(--border)', background:'var(--bg-2)', display:'grid', placeItems:'center', cursor:'pointer', flexShrink:0, color:'var(--ink-2)', marginLeft:12}}>
-              <Icon n="x" size={16}/>
-            </button>
+      {/* Rate cards */}
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14}}>
+        {[['↓ Down', rxBps], ['↑ Up', txBps]].map(([lbl, bps]) => (
+          <div key={lbl} style={{background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:10, padding:'12px 14px'}}>
+            <div style={{fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--muted)', marginBottom:6}}>{lbl}</div>
+            <div style={{fontFamily:'var(--serif)', fontSize:22, color:'var(--ink)', lineHeight:1}}>{fmtRate(bps)}</div>
           </div>
+        ))}
+      </div>
 
-          <div style={{height:1, background:'var(--border)', margin:'0 -20px 16px'}}/>
+      {/* Per-peer throughput chart */}
+      {chartSamples.length >= 4 && (
+        <div style={{background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:10, overflow:'hidden', marginBottom:14}}>
+          <ThroughputChart samples={chartSamples} height={130} range="3m" spline={true} smoothScroll={false} smoothScale={false}/>
+        </div>
+      )}
 
-          {/* Status row */}
-          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16}}>
-            <div style={{display:'flex', alignItems:'center', gap:7}}>
-              <span style={{width:8, height:8, borderRadius:'50%', background:statusColor, display:'inline-block', flexShrink:0}}/>
-              <span style={{fontFamily:'var(--mono)', fontSize:13, color:statusColor}}>{statusText}</span>
+      {/* Info grid */}
+      <div style={{border:'1px solid var(--border)', borderRadius:10, overflow:'hidden', marginBottom:14}}>
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr'}}>
+          <div style={{borderRight:'1px solid var(--border)', ...(peer.endpoint !== '—' ? {borderBottom:'1px solid var(--border)'} : {})}}>
+            <KV k="Bytes In"  v={fmtBytes(peer.bytesIn)} mono={false}/>
+          </div>
+          <div style={{...(peer.endpoint !== '—' ? {borderBottom:'1px solid var(--border)'} : {})}}>
+            <KV k="Bytes Out" v={fmtBytes(peer.bytesOut)} mono={false}/>
+          </div>
+          {peer.endpoint !== '—' && (
+            <div style={{gridColumn:'1 / -1'}}>
+              <KV k="Endpoint" v={peer.endpoint}/>
             </div>
-            {peer.lastHs && (
-              <span style={{fontFamily:'var(--mono)', fontSize:12, color:'var(--muted)'}}>handshake {fmtRel(peer.lastHs)}</span>
+          )}
+        </div>
+      </div>
+
+      {/* Owner / note */}
+      {(peer.owner || peer.note) && (
+        <div style={{border:'1px solid var(--border)', borderRadius:10, overflow:'hidden', marginBottom:14}}>
+          {peer.owner && <KV k="Owner" v={peer.owner} mono={false}/>}
+          {peer.note && (
+            <div style={peer.owner ? {borderTop:'1px solid var(--border)'} : null}>
+              <KV k="Note" v={peer.note} mono={false}/>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Diagnostics */}
+      <div style={{background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:10, padding:'12px 14px', marginBottom:14}}>
+        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:10}}>
+          <div>
+            <div style={{fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--muted)'}}>Diagnostics</div>
+            {diag ? (
+              <div style={{fontFamily:'var(--mono)', fontSize:12, color:'var(--ink)', marginTop:5, lineHeight:1.7}}>
+                <div>
+                  ping: <span style={{color: diag.ping_status === 'ok' ? 'var(--success)' : 'var(--danger)'}}>
+                    {diag.ping_status === 'ok' ? `${diag.ping_ms} ms` : diag.ping_status}
+                  </span>
+                  {diag.ping_ip ? ` · ${diag.ping_ip}` : ''}
+                </div>
+                {diag.location?.label && diag.location.label !== '—' && <div>location: {diag.location.label}</div>}
+              </div>
+            ) : (
+              <div style={{fontSize:12, color:'var(--muted)', marginTop:3}}>Ping the peer inside the tunnel</div>
             )}
           </div>
-
-          {/* Rate cards */}
-          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14}}>
-            {[['↓ Down', rxBps], ['↑ Up', txBps]].map(([lbl, bps]) => (
-              <div key={lbl} style={{background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:10, padding:'12px 14px'}}>
-                <div style={{fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--muted)', marginBottom:6}}>{lbl}</div>
-                <div style={{fontFamily:'var(--serif)', fontSize:22, color:'var(--ink)', lineHeight:1}}>{fmtRate(bps)}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Per-peer throughput chart */}
-          {chartSamples.length >= 4 && (
-            <div style={{background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:10, overflow:'hidden', marginBottom:14}}>
-              <ThroughputChart samples={chartSamples} height={130} range="3m" spline={true} smoothScroll={false} smoothScale={false}/>
-            </div>
-          )}
-
-          {/* Info grid */}
-          <div style={{border:'1px solid var(--border)', borderRadius:10, overflow:'hidden', marginBottom:16}}>
-            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr'}}>
-              <div style={{borderRight:'1px solid var(--border)', ...(peer.endpoint !== '—' ? {borderBottom:'1px solid var(--border)'} : {})}}>
-                <InfoCell label="Bytes In"  value={fmtBytes(peer.bytesIn)}/>
-              </div>
-              <div style={{...(peer.endpoint !== '—' ? {borderBottom:'1px solid var(--border)'} : {})}}>
-                <InfoCell label="Bytes Out" value={fmtBytes(peer.bytesOut)}/>
-              </div>
-              {peer.endpoint !== '—' && (
-                <div style={{gridColumn:'1 / -1'}}>
-                  <InfoCell label="Endpoint" value={peer.endpoint} mono/>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {peer.pubKey && (
-            <>
-              <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:10, padding:'12px 14px', gap:12}}>
-                <div style={{flex:1, minWidth:0}}>
-                  <div style={{fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--muted)', marginBottom:4}}>Public Key</div>
-                  <div style={{fontFamily:'var(--mono)', fontSize:12, color:'var(--ink)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{peer.pubKey}</div>
-                </div>
-                <button onClick={() => copyText(peer.pubKey, 'pubkey')} style={{background:'none', border:'none', color: copied === 'pubkey' ? 'var(--success)' : 'var(--muted)', cursor:'pointer', flexShrink:0, padding:4, display:'grid', placeItems:'center'}}>
-                  <Icon n={copied === 'pubkey' ? 'check' : 'copy'} size={16}/>
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Footer buttons */}
-        <div style={{flexShrink:0, padding:'12px 20px', paddingBottom:'calc(12px + var(--safe-bot))', borderTop:'1px solid var(--border)', display:'flex', gap:10}}>
-          <button
-            className={`m-btn ${peer.paused ? 'success' : ''}`}
-            style={{flex:1, height:52, borderRadius:14, fontSize:15}}
-            disabled={busy}
-            onClick={() => doAction(peer.paused ? 'resume' : 'pause')}
-          >
-            <Icon n={peer.paused ? 'play' : 'pause'} size={16}/>
-            {peer.paused ? 'Resume' : 'Pause'}
-          </button>
-          <button
-            className="m-btn danger"
-            style={{flex:1, height:52, borderRadius:14, fontSize:15}}
-            disabled={busy}
-            onClick={() => toast('Remove is not available on mobile', 'warn')}
-          >
-            <Icon n="trash" size={16}/> Remove
+          <button className="m-btn" style={{flex:'0 0 auto', minWidth:82}} onClick={runDiag} disabled={diagBusy}>
+            {diagBusy ? <div className="m-spinner-ring sm"/> : <><Icon n="activity" size={14}/> Test</>}
           </button>
         </div>
       </div>
-    </div>
+
+      {/* Public key */}
+      {peer.pubKey && (
+        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:10, padding:'12px 14px', gap:12, marginBottom:14}}>
+          <div style={{flex:1, minWidth:0}}>
+            <div style={{fontFamily:'var(--mono)', fontSize:9.5, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--muted)', marginBottom:4}}>Public Key</div>
+            <div style={{fontFamily:'var(--mono)', fontSize:12, color:'var(--ink)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{peer.pubKey}</div>
+          </div>
+          <button onClick={() => copyText(peer.pubKey, 'pubkey')} style={{background:'none', border:'none', color: copied === 'pubkey' ? 'var(--success)' : 'var(--muted)', cursor:'pointer', flexShrink:0, padding:4, display:'grid', placeItems:'center'}}>
+            <Icon n={copied === 'pubkey' ? 'check' : 'copy'} size={16}/>
+          </button>
+        </div>
+      )}
+
+      {/* Config button */}
+      <button className="m-btn" style={{width:'100%', height:46, borderRadius:12}} onClick={onShowConfig}>
+        <Icon n="qr" size={15}/> Show config &amp; QR code
+      </button>
+    </Sheet>
   );
 }
 
-/* ─── Peer card ─── */
+/* ─── Peer edit sheet ─── */
+const DEVICE_KINDS = ['phone', 'laptop', 'tablet', 'desktop', 'server', 'tv', 'other'];
+
+function routingPreset(clientAllowedIps, subnet) {
+  const v = String(clientAllowedIps || '').replace(/\s+/g, '');
+  if (!v || v === '0.0.0.0/0,::/0' || v === '0.0.0.0/0') return 'all';
+  if (v === subnet.replace(/\s+/g, '')) return 'subnet';
+  return 'custom';
+}
+
+function PeerEditSheet({ peer, peers, onClose, onSaved, toast }) {
+  const subnet = subnetFromPeers(peers);
+  const [name, setName] = useState(peer.name);
+  const [owner, setOwner] = useState(peer.owner);
+  const [note, setNote] = useState(peer.note);
+  const [device, setDevice] = useState(peer.device);
+  const [dns, setDns] = useState(peer.dns);
+  const [routing, setRouting] = useState(() => routingPreset(peer.clientAllowedIps, subnet));
+  const [customIps, setCustomIps] = useState(peer.clientAllowedIps || '0.0.0.0/0, ::/0');
+  const [keepalive, setKeepalive] = useState(peer.keepalive || '25');
+  const [mtu, setMtu] = useState(peer.mtu);
+  const [endpoint, setEndpoint] = useState(peer.endpointOverride);
+  const [monitorDns, setMonitorDns] = useState(peer.monitorDns);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const nameValid = NAME_RE.test(name.trim());
+
+  const save = async () => {
+    setErr('');
+    if (!nameValid) { setErr('Name: only A-Z a-z 0-9 . _ - (max 64)'); return; }
+    setBusy(true);
+    try {
+      let finalName = peer.name;
+      if (name.trim() !== peer.name) {
+        const r = await api(`/api/users/${encodeURIComponent(peer.name)}/rename`, {
+          method: 'POST', body: JSON.stringify({ name: name.trim() }),
+        });
+        finalName = r.name;
+      }
+      const patch = {};
+      if (owner !== peer.owner) patch.owner = owner;
+      if (note !== peer.note) patch.note = note;
+      if (device !== peer.device) patch.device = device;
+      if (dns !== peer.dns) patch.dns = dns;
+      const wantIps = routing === 'all' ? '0.0.0.0/0, ::/0' : routing === 'subnet' ? subnet : customIps;
+      if (wantIps.replace(/\s+/g,'') !== String(peer.clientAllowedIps || '').replace(/\s+/g,'')) patch.client_allowed_ips = wantIps;
+      if (String(keepalive) !== String(peer.keepalive)) patch.keepalive = keepalive;
+      if (String(mtu) !== String(peer.mtu)) patch.mtu = mtu;
+      if (endpoint !== peer.endpointOverride) patch.endpoint = endpoint;
+      if (monitorDns !== peer.monitorDns) patch.monitor_dns = monitorDns;
+      if (Object.keys(patch).length) {
+        await api(`/api/users/${encodeURIComponent(finalName)}/settings`, {
+          method: 'PATCH', body: JSON.stringify(patch),
+        });
+      }
+      toast('Peer settings saved', 'ok');
+      onSaved(finalName);
+    } catch(e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Sheet
+      title={`Edit ${peer.name}`}
+      sub="Changes apply to newly exported configs"
+      onClose={onClose}
+      footer={<>
+        <button className="m-btn" onClick={onClose} disabled={busy}>Cancel</button>
+        <button className="m-btn primary" onClick={save} disabled={busy || !nameValid}>
+          {busy ? 'Saving…' : 'Save changes'}
+        </button>
+      </>}
+    >
+      <Field label="Name" error={!nameValid ? 'Only A-Z a-z 0-9 . _ - (max 64)' : ''}>
+        <input className="m-input mono" value={name} onChange={e => setName(e.target.value)} autoCapitalize="none" autoCorrect="off"/>
+      </Field>
+
+      <Field label="Device">
+        <div className="m-chips">
+          {DEVICE_KINDS.map(k => (
+            <button key={k} className={`m-chip ${device === k ? 'on' : ''}`} onClick={() => setDevice(device === k ? '' : k)}>{k}</button>
+          ))}
+        </div>
+      </Field>
+
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
+        <Field label="Owner">
+          <input className="m-input" value={owner} onChange={e => setOwner(e.target.value)} placeholder="Who uses it"/>
+        </Field>
+        <Field label="Note">
+          <input className="m-input" value={note} onChange={e => setNote(e.target.value)} placeholder="Short note"/>
+        </Field>
+      </div>
+
+      <div className="m-sheet-divider"/>
+      <div className="m-section-label" style={{marginTop:0}}>Tunnel config</div>
+
+      <Field label="Routing">
+        <div className="m-chips" style={{marginBottom: routing === 'custom' ? 8 : 0}}>
+          <button className={`m-chip ${routing === 'all' ? 'on' : ''}`} onClick={() => setRouting('all')}>All traffic</button>
+          <button className={`m-chip ${routing === 'subnet' ? 'on' : ''}`} onClick={() => setRouting('subnet')}>VPN subnet only</button>
+          <button className={`m-chip ${routing === 'custom' ? 'on' : ''}`} onClick={() => setRouting('custom')}>Custom</button>
+        </div>
+        {routing === 'custom' && (
+          <input className="m-input mono" value={customIps} onChange={e => setCustomIps(e.target.value)} placeholder="0.0.0.0/0, ::/0" autoCapitalize="none" autoCorrect="off"/>
+        )}
+        {routing === 'subnet' && <div className="m-hint">Routes only {subnet} through the tunnel</div>}
+      </Field>
+
+      <Field label="DNS" hint="Comma-separated IPs, or 'none' to omit the DNS line">
+        <input className="m-input mono" value={dns} onChange={e => setDns(e.target.value)} placeholder="Server default" autoCapitalize="none" autoCorrect="off"/>
+      </Field>
+
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
+        <Field label="Keepalive (s)">
+          <input className="m-input mono" type="number" inputMode="numeric" value={keepalive} onChange={e => setKeepalive(e.target.value)} placeholder="25"/>
+        </Field>
+        <Field label="MTU">
+          <input className="m-input mono" type="number" inputMode="numeric" value={mtu} onChange={e => setMtu(e.target.value)} placeholder="auto"/>
+        </Field>
+      </div>
+
+      <Field label="Endpoint override" hint="host:port — leave empty to use the server default">
+        <input className="m-input mono" value={endpoint} onChange={e => setEndpoint(e.target.value)} placeholder="vpn.example.com:51820" autoCapitalize="none" autoCorrect="off"/>
+      </Field>
+
+      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', padding:'4px 2px 2px'}}>
+        <div>
+          <div className="m-settings-lbl">Monitor DNS activity</div>
+          <div className="m-settings-sub">Capture top queried domains</div>
+        </div>
+        <Toggle value={monitorDns} onChange={setMonitorDns}/>
+      </div>
+
+      {err && <div className="m-err-text" style={{marginTop:12}}>{err}</div>}
+    </Sheet>
+  );
+}
+
+/* ─── Add peer sheet ─── */
+function AddPeerSheet({ peers, onClose, onCreated, toast }) {
+  const subnet = subnetFromPeers(peers);
+  const [name, setName] = useState('');
+  const [ip, setIp] = useState('');
+  const [device, setDevice] = useState('phone');
+  const [dns, setDns] = useState('');
+  const [routing, setRouting] = useState('all');
+  const [customIps, setCustomIps] = useState('0.0.0.0/0, ::/0');
+  const [keepalive, setKeepalive] = useState('25');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [created, setCreated] = useState(null); // { name, profile, address }
+
+  const nameValid = NAME_RE.test(name.trim());
+  const nameTaken = peers.some(p => p.name === name.trim());
+
+  const submit = async () => {
+    setErr('');
+    if (!nameValid) { setErr('Name: only A-Z a-z 0-9 . _ - (max 64)'); return; }
+    if (nameTaken) { setErr('A peer with that name already exists'); return; }
+    setBusy(true);
+    try {
+      const body = { name: name.trim(), device };
+      if (ip.trim()) body.ip = ip.trim();
+      if (dns.trim()) body.dns = dns.trim();
+      if (routing === 'subnet') body.client_allowed_ips = subnet;
+      else if (routing === 'custom') body.client_allowed_ips = customIps;
+      if (keepalive && keepalive !== '25') body.keepalive = keepalive;
+      const r = await api('/api/users', { method: 'POST', body: JSON.stringify(body) });
+      const profile = r.profile || '';
+      const address = (profile.match(/Address\s*=\s*([^\n]+)/) || [])[1] || ip.trim() || '';
+      setCreated({ name: r.name, profile, address: address.trim() });
+      onCreated();
+      toast(`Peer '${r.name}' created`, 'ok');
+    } catch(e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copy = () => {
+    navigator.clipboard?.writeText(created.profile)
+      .then(() => toast('Config copied to clipboard', 'ok'))
+      .catch(() => toast('Copy failed', 'err'));
+  };
+  const share = async () => {
+    const ok = await shareText(`${created.name}.conf`, created.profile, `WireGuard config · ${created.name}`);
+    if (!ok) copy();
+  };
+
+  if (created) {
+    return (
+      <Sheet
+        title={`${created.name} is ready`}
+        sub={created.address ? `Address ${created.address}` : 'Peer created'}
+        onClose={onClose}
+        footer={<>
+          <button className="m-btn" onClick={copy}><Icon n="copy" size={14}/> Copy</button>
+          <button className="m-btn" onClick={() => { downloadText(`${created.name}.conf`, created.profile); toast('Download started', 'ok'); }}>
+            <Icon n="dl" size={14}/> Save
+          </button>
+          <button className="m-btn primary" onClick={share}><Icon n="share" size={14}/> Share</button>
+        </>}
+      >
+        {created.profile ? (
+          <>
+            <div className="m-qr-wrap">
+              <div className="m-qr-box"><QRCanvas text={created.profile}/></div>
+            </div>
+            <div className="m-hint" style={{textAlign:'center', marginBottom:14}}>
+              Scan with the WireGuard app on the new device — the private key is only shown once.
+            </div>
+            <button
+              className="m-btn" style={{width:'100%'}}
+              onClick={() => { setCreated(null); setName(''); setIp(''); setErr(''); }}
+            >
+              <Icon n="plus" size={14}/> Add another peer
+            </button>
+          </>
+        ) : (
+          <div className="m-hint" style={{padding:'20px 0'}}>
+            The peer was created, but the config could not be generated. Open the peer and use “Show config”.
+          </div>
+        )}
+      </Sheet>
+    );
+  }
+
+  return (
+    <Sheet
+      title="Add peer"
+      sub="Generates keys and a ready-to-scan config"
+      onClose={onClose}
+      footer={
+        <button className="m-btn primary" style={{flex:1}} onClick={submit} disabled={busy || !name.trim()}>
+          {busy ? 'Creating…' : 'Create peer'}
+        </button>
+      }
+    >
+      <Field label="Name" error={name.trim() && !nameValid ? 'Only A-Z a-z 0-9 . _ - (max 64)' : (nameTaken ? 'Name already exists' : '')}>
+        <input
+          className="m-input mono" value={name} onChange={e => setName(e.target.value)}
+          placeholder="e.g. bastis-iphone" autoCapitalize="none" autoCorrect="off" autoFocus
+        />
+      </Field>
+
+      <Field label="Device">
+        <div className="m-chips">
+          {DEVICE_KINDS.map(k => (
+            <button key={k} className={`m-chip ${device === k ? 'on' : ''}`} onClick={() => setDevice(k)}>{k}</button>
+          ))}
+        </div>
+      </Field>
+
+      <Field label="Routing">
+        <div className="m-chips" style={{marginBottom: routing === 'custom' ? 8 : 0}}>
+          <button className={`m-chip ${routing === 'all' ? 'on' : ''}`} onClick={() => setRouting('all')}>All traffic</button>
+          <button className={`m-chip ${routing === 'subnet' ? 'on' : ''}`} onClick={() => setRouting('subnet')}>VPN subnet only</button>
+          <button className={`m-chip ${routing === 'custom' ? 'on' : ''}`} onClick={() => setRouting('custom')}>Custom</button>
+        </div>
+        {routing === 'custom' && (
+          <input className="m-input mono" value={customIps} onChange={e => setCustomIps(e.target.value)} placeholder="0.0.0.0/0, ::/0" autoCapitalize="none" autoCorrect="off"/>
+        )}
+        {routing === 'subnet' && <div className="m-hint">Routes only {subnet} through the tunnel</div>}
+      </Field>
+
+      <button
+        onClick={() => setShowAdvanced(v => !v)}
+        style={{background:'none', border:'none', color:'var(--accent)', fontSize:13, cursor:'pointer', padding:'2px 0 12px', display:'flex', alignItems:'center', gap:5, WebkitTapHighlightColor:'transparent'}}
+      >
+        <span style={{display:'inline-flex', transform: showAdvanced ? 'rotate(180deg)' : 'none', transition:'transform 0.2s'}}><Icon n="chev" size={14}/></span>
+        Advanced options
+      </button>
+
+      {showAdvanced && (
+        <>
+          <Field label="Static IP" hint="Leave empty for the next free address">
+            <input className="m-input mono" value={ip} onChange={e => setIp(e.target.value)} placeholder="e.g. 10.8.0.23" autoCapitalize="none" autoCorrect="off" inputMode="decimal"/>
+          </Field>
+          <Field label="DNS" hint="Comma-separated IPs, or 'none'">
+            <input className="m-input mono" value={dns} onChange={e => setDns(e.target.value)} placeholder="Server default" autoCapitalize="none" autoCorrect="off"/>
+          </Field>
+          <Field label="Keepalive (s)">
+            <input className="m-input mono" type="number" inputMode="numeric" value={keepalive} onChange={e => setKeepalive(e.target.value)} placeholder="25"/>
+          </Field>
+        </>
+      )}
+
+      {err && <div className="m-err-text" style={{marginBottom:8}}>{err}</div>}
+    </Sheet>
+  );
+}
+
+/* ─── Data budget sheet ─── */
+function BudgetSheet({ onClose, toast, refreshStatus }) {
+  const [state, setState] = useState(null);
+  const [settings, setSettings] = useState(null);
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [editPeer, setEditPeer] = useState(null);
+
+  const load = () => {
+    api('/api/data-budget').then(d => {
+      setState(d);
+      setSettings({
+        budget_gb: d.settings?.budget_gb ?? 50,
+        alerts: d.settings?.alerts !== false,
+        reset_time: d.settings?.reset_time || '00:00',
+        peer_budgets: { ...(d.settings?.peer_budgets || {}) },
+        enforcement: {
+          action: d.settings?.enforcement?.action || 'none',
+          throttle_mbps: d.settings?.enforcement?.throttle_mbps || 5,
+        },
+      });
+    }).catch(e => { toast(e.message, 'err'); onClose(); });
+  };
+  useEffect(load, []);
+
+  const set = (k, v) => { setSettings(s => ({ ...s, [k]: v })); setDirty(true); };
+  const setEnf = (k, v) => { setSettings(s => ({ ...s, enforcement: { ...s.enforcement, [k]: v } })); setDirty(true); };
+  const setPeerBudget = (name, v) => {
+    setSettings(s => {
+      const pb = { ...s.peer_budgets };
+      if (v === 'inf' || v === '' || v == null) delete pb[name];
+      else pb[name] = Math.max(1, Math.min(100000, parseInt(v, 10) || 1));
+      return { ...s, peer_budgets: pb };
+    });
+    setDirty(true);
+  };
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const body = {
+        budget_gb: Math.max(1, Math.min(100000, parseInt(settings.budget_gb, 10) || 1)),
+        alerts: settings.alerts,
+        reset_time: settings.reset_time,
+        peer_budgets: settings.peer_budgets,
+        enforcement: {
+          action: settings.enforcement.action,
+          throttle_mbps: Math.max(1, Math.min(1000, parseInt(settings.enforcement.throttle_mbps, 10) || 5)),
+        },
+      };
+      const d = await api('/api/data-budget', { method: 'POST', body: JSON.stringify(body) });
+      setState(d);
+      setDirty(false);
+      toast('Budget settings saved', 'ok');
+      refreshStatus();
+    } catch(e) { toast(e.message, 'err'); }
+    finally { setBusy(false); }
+  };
+
+  const exportCsv = async () => {
+    try {
+      const d = await api('/api/data-budget/export', { method: 'POST' });
+      const shared = await shareText(d.filename || 'data-budget.csv', d.csv || '', 'Data budget export');
+      if (!shared) downloadText(d.filename || 'data-budget.csv', d.csv || '', 'text/csv');
+      toast('Export ready', 'ok');
+    } catch(e) { toast(e.message, 'err'); }
+  };
+
+  if (!state || !settings) {
+    return (
+      <Sheet title="Data budget" onClose={onClose}>
+        <div className="m-spinner" style={{height:'auto', padding:'40px 0'}}>
+          <div className="m-spinner-ring"/><div className="m-spinner-label">Loading</div>
+        </div>
+      </Sheet>
+    );
+  }
+
+  const pct = Math.min(100, Math.max(0, state.pct || 0));
+  const barColor = pct >= 90 ? 'var(--danger)' : pct >= 70 ? 'var(--warn)' : 'var(--accent)';
+  const enfState = state.enforce_state || {};
+  const globalCapBytes = (parseInt(settings.budget_gb, 10) || 1) * 1024 ** 3;
+
+  return (
+    <Sheet
+      title="Data budget"
+      sub={`Period since ${state.period_start_iso ? state.period_start_iso.slice(11,16) : settings.reset_time}`}
+      onClose={onClose}
+      footer={dirty ? <>
+        <button className="m-btn" onClick={load} disabled={busy}>Discard</button>
+        <button className="m-btn primary" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button>
+      </> : (
+        <button className="m-btn" style={{flex:1}} onClick={exportCsv}><Icon n="share" size={14}/> Export usage CSV</button>
+      )}
+    >
+      {/* Usage summary */}
+      <div style={{marginBottom:16}}>
+        <div style={{display:'flex', alignItems:'baseline', gap:6, marginBottom:8}}>
+          <span style={{fontFamily:'var(--serif)', fontSize:34, color:'var(--ink)', lineHeight:1}}>{fmtBytes(state.total || 0)}</span>
+          <span style={{fontFamily:'var(--mono)', fontSize:12, color:'var(--muted)'}}>of {settings.budget_gb} GB · {Math.round(pct)}%</span>
+        </div>
+        <div className="m-budget-bar-bg">
+          <div className="m-budget-bar-fill" style={{width:`${pct}%`, background:barColor}}/>
+        </div>
+      </div>
+
+      {/* Settings */}
+      <div className="m-settings-card" style={{marginBottom:16}}>
+        <div className="m-settings-row">
+          <span className="m-settings-lbl">Daily budget (GB)</span>
+          <Stepper value={settings.budget_gb} onChange={v => set('budget_gb', v)} min={1} max={100000} step={5}/>
+        </div>
+        <div className="m-settings-row">
+          <span className="m-settings-lbl">Usage alerts</span>
+          <Toggle value={settings.alerts} onChange={v => set('alerts', v)}/>
+        </div>
+        <div className="m-settings-row">
+          <span className="m-settings-lbl">Reset time</span>
+          <input
+            type="time" className="m-input" value={settings.reset_time}
+            onChange={e => set('reset_time', e.target.value)}
+            style={{width:110, padding:'8px 10px', fontFamily:'var(--mono)', fontSize:14}}
+          />
+        </div>
+      </div>
+
+      {/* Enforcement */}
+      <div className="m-section-label" style={{marginTop:0}}>When a budget is exceeded</div>
+      <div className="m-settings-card" style={{marginBottom:16}}>
+        <div className="m-settings-row">
+          <Seg
+            options={[
+              {value:'none', label:'Off'},
+              {value:'throttle', label:'Throttle'},
+              {value:'pause', label:'Pause'},
+              {value:'combined', label:'Both'},
+            ]}
+            value={settings.enforcement.action}
+            onChange={v => setEnf('action', v)}
+          />
+        </div>
+        {(settings.enforcement.action === 'throttle' || settings.enforcement.action === 'combined') && (
+          <div className="m-settings-row">
+            <span className="m-settings-lbl">Throttle speed (Mbps)</span>
+            <Stepper value={settings.enforcement.throttle_mbps} onChange={v => setEnf('throttle_mbps', v)} min={1} max={1000} step={1}/>
+          </div>
+        )}
+      </div>
+
+      {/* Per-peer */}
+      <div className="m-section-label" style={{marginTop:0}}>Per-peer usage &amp; limits</div>
+      <div style={{display:'flex', flexDirection:'column', gap:8, marginBottom:6}}>
+        {(state.peers || []).length === 0 && (
+          <div className="m-hint" style={{padding:'8px 0'}}>No usage recorded this period yet.</div>
+        )}
+        {(state.peers || []).map(row => {
+          const cap = settings.peer_budgets[row.name];
+          const capBytes = cap ? cap * 1024 ** 3 : globalCapBytes;
+          const ppct = Math.min(100, capBytes ? (row.bytes / capBytes) * 100 : 0);
+          const pColor = ppct >= 90 ? 'var(--danger)' : ppct >= 70 ? 'var(--warn)' : 'var(--accent)';
+          const enf = enfState[row.name];
+          const editing = editPeer === row.name;
+          return (
+            <div key={row.name} style={{background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:10, padding:'11px 13px'}}>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, marginBottom:7}}>
+                <span style={{fontSize:13, fontWeight:600, color:'var(--ink)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{row.name}</span>
+                <span style={{display:'flex', alignItems:'center', gap:6, flexShrink:0}}>
+                  {enf && enf !== 'none' && <span className={`m-badge ${enf === 'paused' ? 'err' : 'warn'}`}>{enf}</span>}
+                  <button
+                    className="m-chip" style={{padding:'3px 10px', fontSize:11.5}}
+                    onClick={() => setEditPeer(editing ? null : row.name)}
+                  >
+                    {cap ? `${cap} GB` : '∞'} <Icon n="edit" size={10}/>
+                  </button>
+                </span>
+              </div>
+              <div className="m-budget-bar-bg" style={{height:6}}>
+                <div className="m-budget-bar-fill" style={{width:`${ppct}%`, background:pColor}}/>
+              </div>
+              <div style={{display:'flex', justifyContent:'space-between', marginTop:5, fontFamily:'var(--mono)', fontSize:10.5, color:'var(--muted)'}}>
+                <span>{fmtBytes(row.bytes)} used</span>
+                <span>{cap ? `limit ${cap} GB` : 'no individual limit'}</span>
+              </div>
+              {editing && (
+                <div style={{display:'flex', gap:8, marginTop:10, alignItems:'center'}}>
+                  <input
+                    className="m-input mono" type="number" inputMode="numeric" placeholder="GB"
+                    defaultValue={cap || ''}
+                    style={{flex:1, padding:'8px 10px'}}
+                    onBlur={e => { if (e.target.value) setPeerBudget(row.name, e.target.value); }}
+                    onKeyDown={e => { if (e.key === 'Enter') { setPeerBudget(row.name, e.target.value); setEditPeer(null); } }}
+                  />
+                  <button className="m-chip" onClick={() => { setPeerBudget(row.name, 'inf'); setEditPeer(null); }}>∞ unlimited</button>
+                  <button className="m-chip on" onClick={() => setEditPeer(null)}>Done</button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Sheet>
+  );
+}
+
+/* ─── DynDNS sheet ─── */
+const DYNDNS_PROVIDERS = [
+  { id: 'duckdns', label: 'Duck DNS', domainLabel: 'Subdomain', domainHelp: 'Subdomain only — e.g. "myhome" for myhome.duckdns.org', tokenLabel: 'Token', tokenHelp: 'Token from your Duck DNS account page' },
+  { id: 'noip',    label: 'No-IP (soon)', disabled: true },
+  { id: 'dynu',    label: 'Dynu (soon)', disabled: true },
+  { id: 'custom',  label: 'Custom URL' },
+];
+
+function DynDNSSheet({ onClose, toast }) {
+  const [cfg, setCfg] = useState(null);
+  const [form, setForm] = useState(null);
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [pushing, setPushing] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [resolved, setResolved] = useState(null);
+
+  const load = () => {
+    api('/api/dyndns').then(d => {
+      setCfg(d);
+      setForm({
+        mode: d.mode === 'dyndns' ? 'dyndns' : 'static',
+        hostname: d.hostname || '',
+        provider: d.provider || '',
+        domain: d.domain || '',
+        custom_url: d.custom_url || '',
+        token: '',
+      });
+      setDirty(false);
+    }).catch(e => { toast(e.message, 'err'); onClose(); });
+  };
+  useEffect(load, []);
+
+  const set = (k, v) => { setForm(f => ({ ...f, [k]: v })); setDirty(true); };
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const body = {
+        mode: form.mode,
+        hostname: form.hostname,
+        provider: form.provider || null,
+        domain: form.domain,
+        custom_url: form.custom_url,
+      };
+      if (form.token) body.token = form.token;
+      await api('/api/dyndns', { method: 'POST', body: JSON.stringify(body) });
+      toast('DynDNS settings saved', 'ok');
+      load();
+    } catch(e) { toast(e.message, 'err'); }
+    finally { setBusy(false); }
+  };
+
+  const pushNow = async () => {
+    setPushing(true);
+    try {
+      await api('/api/dyndns/update', { method: 'POST' });
+      toast('IP pushed to provider', 'ok');
+      load();
+    } catch(e) { toast(e.message, 'err', 4500); }
+    finally { setPushing(false); }
+  };
+
+  const check = async () => {
+    if (!form.hostname) { toast('Enter a hostname first', 'warn'); return; }
+    setChecking(true); setResolved(null);
+    try {
+      const r = await api('/api/dyndns/resolve', { method: 'POST', body: JSON.stringify({ hostname: form.hostname }) });
+      setResolved(r);
+    } catch(e) { toast(e.message, 'err'); }
+    finally { setChecking(false); }
+  };
+
+  if (!cfg || !form) {
+    return (
+      <Sheet title="Dynamic DNS" onClose={onClose}>
+        <div className="m-spinner" style={{height:'auto', padding:'40px 0'}}>
+          <div className="m-spinner-ring"/><div className="m-spinner-label">Loading</div>
+        </div>
+      </Sheet>
+    );
+  }
+
+  const provInfo = DYNDNS_PROVIDERS.find(p => p.id === form.provider);
+  const last = cfg.last_update;
+  const match = resolved && resolved.ip && resolved.public_ip && resolved.ip === resolved.public_ip;
+
+  return (
+    <Sheet
+      title="Dynamic DNS"
+      sub="Keep peers connected when your public IP changes"
+      onClose={onClose}
+      footer={<>
+        {form.provider && (
+          <button className="m-btn" onClick={pushNow} disabled={pushing || busy}>
+            {pushing ? 'Pushing…' : <><Icon n="upload" size={14}/> Update now</>}
+          </button>
+        )}
+        <button className="m-btn primary" onClick={save} disabled={busy || !dirty}>
+          {busy ? 'Saving…' : 'Save'}
+        </button>
+      </>}
+    >
+      {/* Status */}
+      <div style={{border:'1px solid var(--border)', borderRadius:10, overflow:'hidden', marginBottom:16}}>
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr'}}>
+          <div style={{borderRight:'1px solid var(--border)', borderBottom:'1px solid var(--border)'}}>
+            <KV k="Public IP" v={cfg.public_ip || '—'}/>
+          </div>
+          <div style={{borderBottom:'1px solid var(--border)'}}>
+            <KV k="Endpoint host" v={cfg.endpoint_host || '—'}/>
+          </div>
+          <div style={{gridColumn:'1 / -1'}}>
+            <KV k="Last push" v={
+              last ? `${last.ok ? '✓' : '✕'} ${last.provider || ''} · ${fmtRelSec(last.ts)}${last.ip ? ' · ' + last.ip : ''}` : 'never'
+            }/>
+          </div>
+        </div>
+      </div>
+
+      {/* Mode */}
+      <Field label="Server endpoint">
+        <Seg
+          options={[{value:'static', label:'Static IP'}, {value:'dyndns', label:'DynDNS hostname'}]}
+          value={form.mode} onChange={v => set('mode', v)}
+        />
+      </Field>
+
+      {form.mode === 'dyndns' && (
+        <Field label="Hostname" hint="Used as the Endpoint in generated peer configs">
+          <div style={{display:'flex', gap:8}}>
+            <input className="m-input mono" value={form.hostname} onChange={e => set('hostname', e.target.value)} placeholder="myhome.duckdns.org" autoCapitalize="none" autoCorrect="off" style={{flex:1}}/>
+            <button className="m-btn" style={{flex:'0 0 auto', width:76, height:'auto'}} onClick={check} disabled={checking}>
+              {checking ? '…' : 'Check'}
+            </button>
+          </div>
+          {resolved && (
+            <div className="m-hint" style={{color: match ? 'var(--success)' : 'var(--warn)'}}>
+              resolves to {resolved.ip} {match ? '· matches your public IP ✓' : `· public IP is ${resolved.public_ip || 'unknown'}`}
+            </div>
+          )}
+        </Field>
+      )}
+
+      <div className="m-sheet-divider"/>
+      <div className="m-section-label" style={{marginTop:0}}>Auto-update provider</div>
+
+      <Field label="Provider" hint="Pushes your current IP to the DNS provider">
+        <div className="m-chips">
+          <button className={`m-chip ${!form.provider ? 'on' : ''}`} onClick={() => set('provider', '')}>None</button>
+          {DYNDNS_PROVIDERS.map(p => (
+            <button key={p.id} className={`m-chip ${form.provider === p.id ? 'on' : ''}`} disabled={p.disabled} onClick={() => set('provider', p.id)}>{p.label}</button>
+          ))}
+        </div>
+      </Field>
+
+      {form.provider && form.provider !== 'custom' && (
+        <>
+          <Field label={provInfo?.domainLabel || 'Domain'} hint={provInfo?.domainHelp}>
+            <input className="m-input mono" value={form.domain} onChange={e => set('domain', e.target.value)} autoCapitalize="none" autoCorrect="off"/>
+          </Field>
+          <Field label={provInfo?.tokenLabel || 'Token'} hint={cfg.has_token && !form.token ? 'A token is saved — leave empty to keep it' : provInfo?.tokenHelp}>
+            <input className="m-input mono" type="password" value={form.token} onChange={e => set('token', e.target.value)} placeholder={cfg.has_token ? '••••  (saved)' : ''} autoCapitalize="none"/>
+          </Field>
+        </>
+      )}
+
+      {form.provider === 'custom' && (
+        <Field label="Update URL" hint="Called via GET on every IP change">
+          <input className="m-input mono" value={form.custom_url} onChange={e => set('custom_url', e.target.value)} placeholder="https://example.com/update?ip=…" autoCapitalize="none" autoCorrect="off"/>
+        </Field>
+      )}
+    </Sheet>
+  );
+}
+
+/* ─── Network & firewall sheet ─── */
+function NetworkSheet({ onClose, toast, askConfirm }) {
+  const [diag, setDiag] = useState(null);
+  const [conf, setConf] = useState(null);
+  const [confDirty, setConfDirty] = useState(false);
+  const [fixRes, setFixRes] = useState(null);
+  const [fixBusy, setFixBusy] = useState(false);
+  const [fwBusy, setFwBusy] = useState(false);
+  const [confBusy, setConfBusy] = useState(false);
+  const [showRaw, setShowRaw] = useState(false);
+
+  const load = () => {
+    api('/api/diag/vpn').then(setDiag).catch(e => toast(e.message, 'err'));
+    api('/api/config').then(d => {
+      const i = d.data?.Interface || {};
+      setConf({ ListenPort: i.ListenPort || '', DNS: i.DNS || '', Address: i.Address || '' });
+      setConfDirty(false);
+    }).catch(() => {});
+  };
+  useEffect(load, []);
+
+  const setC = (k, v) => { setConf(c => ({ ...c, [k]: v })); setConfDirty(true); };
+
+  const runFix = () => askConfirm({
+    title: 'Run auto-fix?',
+    body: 'Enables IP forwarding, adds NAT rules and firewall openings if missing, and (re)starts the service.',
+    label: 'Run fix',
+    action: async () => {
+      setFixBusy(true);
+      try {
+        const r = await api('/api/fix', { method: 'POST' });
+        setFixRes(r);
+        toast(r.ok ? 'Auto-fix finished' : 'Auto-fix finished with errors', r.ok ? 'ok' : 'warn');
+        load();
+      } finally { setFixBusy(false); }
+    },
+  });
+
+  const toggleFw = () => {
+    const allow = !diag.ufw_allowed;
+    const doIt = async () => {
+      setFwBusy(true);
+      try {
+        await api('/api/ports', { method: 'POST', body: JSON.stringify({ port: diag.port, proto: 'udp', allow }) });
+        toast(allow ? `UDP ${diag.port} opened in UFW` : `UDP ${diag.port} rule removed`, 'ok');
+        load();
+      } catch(e) { toast(e.message, 'err'); }
+      finally { setFwBusy(false); }
+    };
+    if (!allow) {
+      askConfirm({
+        title: `Close UDP ${diag.port}?`,
+        body: 'Removing the firewall rule will block incoming WireGuard connections until it is re-added.',
+        label: 'Remove rule', danger: true,
+        action: doIt,
+      });
+    } else doIt();
+  };
+
+  const saveConf = () => askConfirm({
+    title: 'Apply interface config?',
+    body: 'Saving changes to the WireGuard interface restarts the service — active peers reconnect automatically.',
+    label: 'Apply & restart',
+    action: async () => {
+      setConfBusy(true);
+      try {
+        const body = {};
+        if (conf.ListenPort) body.ListenPort = conf.ListenPort;
+        if (conf.DNS) body.DNS = conf.DNS;
+        if (conf.Address) body.Address = conf.Address;
+        await api('/api/config', { method: 'POST', body: JSON.stringify(body) });
+        toast('Interface config applied', 'ok');
+        load();
+      } finally { setConfBusy(false); }
+    },
+  });
+
+  if (!diag) {
+    return (
+      <Sheet title="Network & firewall" onClose={onClose}>
+        <div className="m-spinner" style={{height:'auto', padding:'40px 0'}}>
+          <div className="m-spinner-ring"/><div className="m-spinner-label">Checking</div>
+        </div>
+      </Sheet>
+    );
+  }
+
+  return (
+    <Sheet
+      title="Network & firewall"
+      sub={`wg0 · UDP ${diag.port}`}
+      onClose={onClose}
+      footer={
+        <button className="m-btn primary" style={{flex:1}} onClick={runFix} disabled={fixBusy}>
+          {fixBusy ? 'Fixing…' : <><Icon n="wrench" size={14}/> Fix common issues</>}
+        </button>
+      }
+    >
+      {/* Health checklist */}
+      <div style={{background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:10, padding:'4px 14px', marginBottom:14}}>
+        <CheckRow ok={diag.service_active} label="Service active"/>
+        <CheckRow ok={diag.listening} label={`Listening on UDP ${diag.port}`}/>
+        <CheckRow ok={diag.ufw_allowed} label="Firewall allows the port"/>
+        <CheckRow ok={diag.ip_forward} label="IP forwarding enabled"/>
+        <CheckRow ok={diag.has_postup} label="NAT rules (PostUp)"/>
+        <CheckRow ok={!!diag.public_ip} label="Public IP" val={diag.public_ip || 'unknown'}/>
+        <CheckRow ok={!!diag.host_ip} label="Host IP" val={diag.host_ip || '—'}/>
+      </div>
+
+      {fixRes && (
+        <div style={{border:'1px solid var(--border)', borderRadius:10, padding:'12px 14px', marginBottom:14, background:'var(--card-raised)'}}>
+          <div className="m-section-label" style={{marginTop:0}}>Auto-fix result</div>
+          {(fixRes.actions || []).map((a, i) => (
+            <div key={i} style={{fontSize:12.5, color:'var(--success)', display:'flex', gap:6, alignItems:'center', padding:'2px 0'}}>
+              <Icon n="check" size={12}/> {a}
+            </div>
+          ))}
+          {(fixRes.errors || []).map((a, i) => (
+            <div key={i} style={{fontSize:12.5, color:'var(--danger)', display:'flex', gap:6, alignItems:'center', padding:'2px 0'}}>
+              <Icon n="x" size={12}/> {a}
+            </div>
+          ))}
+          {!(fixRes.actions || []).length && !(fixRes.errors || []).length && (
+            <div className="m-hint">Nothing to fix — everything looked fine.</div>
+          )}
+        </div>
+      )}
+
+      {/* Firewall toggle */}
+      <div className="m-settings-card" style={{marginBottom:16}}>
+        <div className="m-settings-row">
+          <div>
+            <div className="m-settings-lbl">UFW rule for UDP {diag.port}</div>
+            <div className="m-settings-sub">{diag.ufw_allowed ? 'allowed' : 'not allowed'}</div>
+          </div>
+          <Toggle value={diag.ufw_allowed} onChange={toggleFw} disabled={fwBusy}/>
+        </div>
+      </div>
+
+      {/* Interface config */}
+      <div className="m-section-label" style={{marginTop:0}}>Interface config</div>
+      {conf && (
+        <>
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
+            <Field label="Listen port">
+              <input className="m-input mono" type="number" inputMode="numeric" value={conf.ListenPort} onChange={e => setC('ListenPort', e.target.value)}/>
+            </Field>
+            <Field label="DNS">
+              <input className="m-input mono" value={conf.DNS} onChange={e => setC('DNS', e.target.value)} placeholder="none" autoCapitalize="none"/>
+            </Field>
+          </div>
+          <Field label="Address" hint="Server address inside the VPN subnet">
+            <input className="m-input mono" value={conf.Address} onChange={e => setC('Address', e.target.value)} autoCapitalize="none"/>
+          </Field>
+          {confDirty && (
+            <button className="m-btn" style={{width:'100%', marginBottom:14}} onClick={saveConf} disabled={confBusy}>
+              {confBusy ? 'Applying…' : 'Apply interface config (restarts service)'}
+            </button>
+          )}
+        </>
+      )}
+
+      {/* Raw output */}
+      <button
+        onClick={() => setShowRaw(v => !v)}
+        style={{background:'none', border:'none', color:'var(--accent)', fontSize:13, cursor:'pointer', padding:'2px 0 10px', display:'flex', alignItems:'center', gap:5, WebkitTapHighlightColor:'transparent'}}
+      >
+        <span style={{display:'inline-flex', transform: showRaw ? 'rotate(180deg)' : 'none', transition:'transform 0.2s'}}><Icon n="chev" size={14}/></span>
+        Raw diagnostics
+      </button>
+      {showRaw && (
+        <>
+          <div className="m-section-label" style={{marginTop:0}}>wg show</div>
+          <pre className="m-raw-pre" style={{marginBottom:12}}>{diag.wg_show || '(empty)'}</pre>
+          <div className="m-section-label">journal (last lines)</div>
+          <pre className="m-raw-pre">{(diag.journal || []).join('\n') || '(empty)'}</pre>
+        </>
+      )}
+    </Sheet>
+  );
+}
+
+/* ─── Update sheet ─── */
+function UpdateSheet({ onClose, toast, updateInfo, setUpdateInfo }) {
+  const [devUpdates, setDevUpdates] = useState(() => localStorage.getItem('WG_DEV_UPDATES') === '1');
+  const [checking, setChecking] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [prog, setProg] = useState(0);
+  const [stage, setStage] = useState('');
+  const [done, setDone] = useState(null);
+  const [err, setErr] = useState('');
+
+  const check = async (dev = devUpdates) => {
+    setChecking(true); setErr('');
+    try {
+      const d = await api(`/api/update/check${dev ? '?dev=1' : ''}`);
+      setUpdateInfo(d);
+    } catch(e) { setErr(e.message); }
+    finally { setChecking(false); }
+  };
+  useEffect(() => { check(); }, []);
+
+  const toggleDev = v => {
+    setDevUpdates(v);
+    localStorage.setItem('WG_DEV_UPDATES', v ? '1' : '0');
+    check(v);
+  };
+
+  const apply = async () => {
+    setApplying(true); setErr(''); setProg(2); setStage('Starting…');
+    try {
+      const res = await fetch(BASE + `/api/update/apply${devUpdates ? '?dev=1' : ''}`, { method: 'POST' });
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      while (true) {
+        const { done: rdone, value } = await reader.read();
+        if (rdone) break;
+        buf += dec.decode(value, { stream: true });
+        let idx;
+        while ((idx = buf.indexOf('\n\n')) >= 0) {
+          const chunk = buf.slice(0, idx); buf = buf.slice(idx + 2);
+          const line = chunk.split('\n').find(l => l.startsWith('data: '));
+          if (!line) continue;
+          let ev = null;
+          try { ev = JSON.parse(line.slice(6)); } catch { continue; }
+          if (ev.event === 'stage') {
+            setProg(ev.progress || 0);
+            setStage(ev.detail ? `${ev.label} — ${ev.detail}` : ev.label);
+          } else if (ev.event === 'done') {
+            setProg(100);
+            setStage(ev.detail || 'Done');
+            setDone(ev.version || 'latest');
+          } else if (ev.event === 'error') {
+            throw new Error(ev.detail || 'Update failed');
+          }
+        }
+      }
+      if (!done) setProg(100);
+    } catch(e) {
+      setErr(e.message);
+      setApplying(false);
+      return;
+    }
+    // service restarts itself — reload the page shortly after
+    toast('Updated — reloading…', 'ok', 6000);
+    setTimeout(() => window.location.reload(), 7000);
+  };
+
+  const info = updateInfo;
+  return (
+    <Sheet
+      title="Software update"
+      sub={info ? `Installed ${info.local}` : 'Checking…'}
+      onClose={onClose}
+      footer={<>
+        <button className="m-btn" onClick={() => check()} disabled={checking || applying}>
+          {checking ? 'Checking…' : <><Icon n="refresh" size={14}/> Check again</>}
+        </button>
+        <button className="m-btn primary" onClick={apply} disabled={applying || !info?.available}>
+          {applying ? 'Updating…' : 'Install update'}
+        </button>
+      </>}
+    >
+      <div style={{border:'1px solid var(--border)', borderRadius:10, overflow:'hidden', marginBottom:16}}>
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr'}}>
+          <div style={{borderRight:'1px solid var(--border)'}}>
+            <KV k="Installed" v={info?.local || '…'}/>
+          </div>
+          <KV k="Latest" v={info?.remote || (checking ? '…' : 'unknown')}/>
+        </div>
+      </div>
+
+      {info && (
+        info.available ? (
+          <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:16}}>
+            <span className="m-badge">update available</span>
+            {info.remote_is_dev && <span className="m-badge warn">dev build</span>}
+          </div>
+        ) : (
+          <div className="m-hint" style={{marginBottom:16}}>
+            {info.remote ? 'You are up to date.' : 'Could not reach the update server.'}
+          </div>
+        )
+      )}
+
+      {(applying || done) && (
+        <div style={{marginBottom:16}}>
+          <div className="m-prog"><div className="m-prog-fill" style={{width:`${prog}%`}}/></div>
+          <div className="m-hint" style={{marginTop:6}}>{done ? `Updated to ${done} — restarting…` : stage}</div>
+        </div>
+      )}
+
+      {err && <div className="m-err-text" style={{marginBottom:14}}>{err}</div>}
+
+      <div className="m-settings-card">
+        <div className="m-settings-row">
+          <div>
+            <div className="m-settings-lbl">Include dev builds</div>
+            <div className="m-settings-sub">Pre-release versions from the repo</div>
+          </div>
+          <Toggle value={devUpdates} onChange={toggleDev}/>
+        </div>
+      </div>
+    </Sheet>
+  );
+}
+
+/* ─── Change password sheet ─── */
+function PasswordSheet({ onClose, toast }) {
+  const [cur, setCur] = useState('');
+  const [nw, setNw] = useState('');
+  const [nw2, setNw2] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const valid = cur && nw.length >= 8 && nw === nw2;
+
+  const submit = async () => {
+    setErr('');
+    setBusy(true);
+    try {
+      await api('/api/auth/password', {
+        method: 'POST',
+        body: JSON.stringify({ current_password: cur, new_password: nw }),
+      });
+      toast('Password changed', 'ok');
+      onClose();
+    } catch(e) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Sheet
+      title="Change password"
+      sub="Used to sign in to this dashboard"
+      onClose={onClose}
+      footer={
+        <button className="m-btn primary" style={{flex:1}} onClick={submit} disabled={busy || !valid}>
+          {busy ? 'Saving…' : 'Change password'}
+        </button>
+      }
+    >
+      <Field label="Current password">
+        <input className="m-input" type="password" value={cur} onChange={e => setCur(e.target.value)} autoComplete="current-password"/>
+      </Field>
+      <Field label="New password" error={nw && nw.length < 8 ? 'At least 8 characters' : ''}>
+        <input className="m-input" type="password" value={nw} onChange={e => setNw(e.target.value)} autoComplete="new-password"/>
+      </Field>
+      <Field label="Repeat new password" error={nw2 && nw !== nw2 ? 'Passwords do not match' : ''}>
+        <input className="m-input" type="password" value={nw2} onChange={e => setNw2(e.target.value)} autoComplete="new-password"/>
+      </Field>
+      {err && <div className="m-err-text">{err}</div>}
+    </Sheet>
+  );
+}
+
 /* ─── Session Duration Bars ─── */
 function SessionDurationBars({ peers, sessionStarts }) {
   const [now, setNow] = useState(Date.now());
@@ -1038,7 +2472,10 @@ function HomePeerRow({ peer, spark, onPeerClick }) {
     <div className="m-card" style={{padding:'12px 14px', display:'flex', alignItems:'center', gap:12, cursor:'pointer', WebkitTapHighlightColor:'transparent'}} onClick={() => onPeerClick(peer.name)}>
       <div className={`m-peer-avatar ${avatarClass}`} style={{flexShrink:0}}>{initials}</div>
       <div style={{flex:1, minWidth:0}}>
-        <div style={{fontSize:14, fontWeight:600, color:'var(--ink)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{peer.name}</div>
+        <div style={{fontSize:14, fontWeight:600, color:'var(--ink)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', display:'flex', alignItems:'center', gap:6}}>
+          {peer.name}
+          {peer.throttled && <span className="m-badge warn" style={{fontSize:9}}>throttled</span>}
+        </div>
         <div style={{fontFamily:'var(--mono)', fontSize:11, color:'var(--muted)', marginTop:1}}>{peer.addr}</div>
         <div style={{fontFamily:'var(--mono)', fontSize:11, color:'var(--muted)', marginTop:2}}>↓ {fmtBytes(peer.bytesIn)} &nbsp;↑ {fmtBytes(peer.bytesOut)}</div>
       </div>
@@ -1059,7 +2496,7 @@ function HomePeerRow({ peer, spark, onPeerClick }) {
 }
 
 /* ─── Peers tab ─── */
-function PeersTab({ peers, sparks, onAction, toast, onPeerClick }) {
+function PeersTab({ peers, sparks, onPeerClick, onAddPeer }) {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
   const ref = useRef(null);
@@ -1067,7 +2504,8 @@ function PeersTab({ peers, sparks, onAction, toast, onPeerClick }) {
   const filtered = useMemo(() => {
     return peers.filter(p => {
       if (filter === 'online' && p.status !== 'online') return false;
-      if (filter === 'offline' && p.status === 'online') return false;
+      if (filter === 'offline' && p.status !== 'offline') return false;
+      if (filter === 'paused' && p.status !== 'paused') return false;
       if (q && !p.name.toLowerCase().includes(q.toLowerCase()) && !p.addr.includes(q)) return false;
       return true;
     });
@@ -1076,7 +2514,8 @@ function PeersTab({ peers, sparks, onAction, toast, onPeerClick }) {
   const counts = useMemo(() => ({
     all: peers.length,
     online: peers.filter(p => p.status === 'online').length,
-    offline: peers.filter(p => p.status !== 'online').length,
+    offline: peers.filter(p => p.status === 'offline').length,
+    paused: peers.filter(p => p.status === 'paused').length,
   }), [peers]);
 
   return (
@@ -1097,7 +2536,7 @@ function PeersTab({ peers, sparks, onAction, toast, onPeerClick }) {
       </div>
 
       <div className="m-filter-row">
-        {[['all','All',counts.all],['online','Online',counts.online],['offline','Offline / Paused',counts.offline]].map(([k,l,c]) => (
+        {[['all','All',counts.all],['online','Online',counts.online],['offline','Offline',counts.offline],['paused','Paused',counts.paused]].map(([k,l,c]) => (
           <button key={k} className={`m-filter-pill ${filter===k?'on':''}`} onClick={() => setFilter(k)}>
             {l} {c}
           </button>
@@ -1107,7 +2546,10 @@ function PeersTab({ peers, sparks, onAction, toast, onPeerClick }) {
       {peers.length === 0 ? (
         <div className="m-empty">
           <div className="m-empty-title">No peers yet</div>
-          <div className="m-empty-sub">Add peers from the desktop dashboard</div>
+          <div className="m-empty-sub">Create your first peer to connect a device</div>
+          <button className="m-btn primary" style={{flex:'0 0 auto', marginTop:8, padding:'0 20px'}} onClick={onAddPeer}>
+            <Icon n="plus" size={14}/> Add peer
+          </button>
         </div>
       ) : filtered.length === 0 ? (
         <div className="m-empty">
@@ -1126,10 +2568,32 @@ function PeersTab({ peers, sparks, onAction, toast, onPeerClick }) {
 }
 
 /* ─── Logs tab ─── */
-function LogsTab({ logs }) {
+function LogsTab({ toast }) {
+  const [logs, setLogs] = useState([]);
+  const [nLines, setNLines] = useState(100);
+  const [verbose, setVerbose] = useState(false);
+  const [retention, setRetention] = useState(null);
+  const [retBusy, setRetBusy] = useState(false);
+  const [showControls, setShowControls] = useState(false);
   const endRef = useRef(null);
   const streamRef = useRef(null);
   const [pinned, setPinned] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchLogs = () => {
+      api(`/api/logs?n=${nLines}&verbose=${verbose ? 1 : 0}`)
+        .then(d => { if (!cancelled) setLogs(parseLogs(d.lines)); })
+        .catch(() => {});
+    };
+    fetchLogs();
+    const id = setInterval(fetchLogs, 8000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [nLines, verbose]);
+
+  useEffect(() => {
+    api('/api/logs/retention').then(d => setRetention(d.retention)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (pinned && endRef.current) endRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -1142,13 +2606,69 @@ function LogsTab({ logs }) {
     setPinned(atBottom);
   };
 
+  const setRet = async (v) => {
+    setRetBusy(true);
+    const prev = retention;
+    setRetention(v);
+    try {
+      const r = await api('/api/logs/retention', { method: 'POST', body: JSON.stringify({ retention: v }) });
+      toast(v === 'forever' ? 'Logs kept forever' : `Journal trimmed to ${v}`, 'ok');
+      if (!r.ok) throw new Error(r.out || 'Failed');
+    } catch(e) {
+      setRetention(prev);
+      toast(e.message, 'err');
+    } finally {
+      setRetBusy(false);
+    }
+  };
+
+  const share = async () => {
+    const text = logs.map(l => `${timeStr(l.t)} [${l.lvl}] ${l.msg}`).join('\n');
+    const ok = await shareText('wireguard-logs.txt', text, 'WireGuard logs');
+    if (!ok) {
+      navigator.clipboard?.writeText(text)
+        .then(() => toast('Logs copied to clipboard', 'ok'))
+        .catch(() => toast('Share failed', 'err'));
+    }
+  };
+
   return (
     <div style={{height:'100%', display:'flex', flexDirection:'column', overflow:'hidden'}}>
       <div className="m-logs-wrap">
         <div className="m-logs-head">
           <div className="m-logs-title">System Logs</div>
-          <div className="m-logs-count">{logs.length} lines</div>
+          <div style={{display:'flex', alignItems:'center', gap:8}}>
+            <div className="m-logs-count">{logs.length} lines</div>
+            <button className="m-icon-btn" style={{width:30, height:30}} onClick={share} aria-label="Share logs">
+              <Icon n="share" size={14}/>
+            </button>
+            <button className={`m-icon-btn ${showControls ? 'on' : ''}`} style={{width:30, height:30, color: showControls ? 'var(--accent)' : undefined}} onClick={() => setShowControls(v => !v)} aria-label="Log options">
+              <Icon n="sliders" size={14}/>
+            </button>
+          </div>
         </div>
+
+        {showControls && (
+          <>
+            <div className="m-logs-controls">
+              <Seg
+                options={[{value:100,label:'100'},{value:250,label:'250'},{value:500,label:'500'}]}
+                value={nLines} onChange={setNLines}
+              />
+              <button className={`m-filter-pill ${verbose ? 'on' : ''}`} onClick={() => setVerbose(v => !v)}>
+                verbose
+              </button>
+            </div>
+            <div className="m-logs-controls" style={{alignItems:'center'}}>
+              <span style={{fontFamily:'var(--mono)', fontSize:10, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--muted)'}}>Retention</span>
+              <Seg
+                options={[{value:'1d',label:'1d'},{value:'7d',label:'7d'},{value:'30d',label:'30d'},{value:'forever',label:'∞'}]}
+                value={retention} onChange={retBusy ? () => {} : setRet}
+              />
+            </div>
+          </>
+        )}
+
         <div className="m-log-stream" ref={streamRef} onScroll={handleScroll}>
           {logs.length === 0 && <div style={{color:'var(--muted)',fontStyle:'italic'}}>No logs yet…</div>}
           {logs.map((l, i) => (
@@ -1173,18 +2693,8 @@ function LogsTab({ logs }) {
   );
 }
 
-/* ─── Root app ─── */
-function Toggle({ value, onChange }) {
-  return (
-    <label className="m-toggle">
-      <input type="checkbox" checked={!!value} onChange={e => onChange(e.target.checked)} />
-      <span className="m-toggle-slot" />
-      <span className="m-toggle-knob" />
-    </label>
-  );
-}
-
-function SettingsTab({ theme, setTheme, accent, setAccent, chartTweaks, setChartTweaks, onLogout }) {
+/* ─── Settings tab ─── */
+function SettingsTab({ theme, setTheme, accent, setAccent, chartTweaks, setChartTweaks, onLogout, status, updateInfo, openSheet, onService, askConfirm, svcBusy }) {
   const accents = [
     { id: 'terracotta', color: 'oklch(59% 0.15 33)' },
     { id: 'forest',     color: 'oklch(55% 0.11 150)' },
@@ -1194,8 +2704,23 @@ function SettingsTab({ theme, setTheme, accent, setAccent, chartTweaks, setChart
     { id: 'amber',      color: 'oklch(70% 0.15 75)'  },
   ];
   const tweak = (k, v) => setChartTweaks(p => ({ ...p, [k]: v }));
+  const [sysInfo, setSysInfo] = useState(null);
+  useEffect(() => {
+    api('/api/system/info').then(setSysInfo).catch(() => {});
+  }, []);
+
+  const svc = status?.service || {};
+  const budget = status?.data_budget;
+
+  const toggleBoot = () => {
+    const enable = !svc.enabled;
+    onService(enable ? 'enable' : 'disable');
+  };
+
   return (
     <div className="m-scroll-pad m-settings">
+
+      {/* Appearance */}
       <div>
         <div className="m-settings-title">Appearance</div>
         <div className="m-settings-card">
@@ -1219,6 +2744,8 @@ function SettingsTab({ theme, setTheme, accent, setAccent, chartTweaks, setChart
           </div>
         </div>
       </div>
+
+      {/* Chart */}
       <div>
         <div className="m-settings-title">Chart</div>
         <div className="m-settings-card">
@@ -1236,19 +2763,95 @@ function SettingsTab({ theme, setTheme, accent, setAccent, chartTweaks, setChart
           </div>
         </div>
       </div>
+
+      {/* Manage */}
+      <div>
+        <div className="m-settings-title">Manage</div>
+        <div className="m-settings-card">
+          <RowBtn
+            icon="db" title="Data budget"
+            sub={budget ? `${fmtBytes(budget.total || 0)} of ${budget.settings?.budget_gb ?? '—'} GB today` : 'Daily limits & enforcement'}
+            onClick={() => openSheet('budget')}
+          />
+          <RowBtn
+            icon="globe" title="Dynamic DNS"
+            sub="Hostname & auto IP updates"
+            onClick={() => openSheet('dyndns')}
+          />
+          <RowBtn
+            icon="wifi" title="Network & firewall"
+            sub={`Health checks · UDP ${status?.network?.port ?? '—'}`}
+            onClick={() => openSheet('network')}
+          />
+        </div>
+      </div>
+
+      {/* Service */}
+      <div>
+        <div className="m-settings-title">Service</div>
+        <div className="m-settings-card">
+          <div className="m-settings-row">
+            <div>
+              <div className="m-settings-lbl">Start on boot</div>
+              <div className="m-settings-sub">{svc.unit || 'wg-quick@wg0'}</div>
+            </div>
+            <Toggle value={svc.enabled} onChange={toggleBoot} disabled={!!svcBusy}/>
+          </div>
+          <div className="m-settings-row" style={{gap:8}}>
+            <button
+              className="m-btn" disabled={!!svcBusy}
+              onClick={() => askConfirm({
+                title: 'Restart WireGuard?',
+                body: 'Connected peers will briefly disconnect and reconnect automatically.',
+                label: 'Restart',
+                action: async () => { await onService('restart'); },
+              })}
+            >
+              <Icon n="rotate" size={14}/> Restart
+            </button>
+            <button className="m-btn" disabled={!!svcBusy} onClick={() => onService('reload')}>
+              <Icon n="refresh" size={14}/> Reload config
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* System */}
+      <div>
+        <div className="m-settings-title">System</div>
+        <div className="m-settings-card">
+          <RowBtn
+            icon="upload" title="Software update"
+            sub={updateInfo ? (updateInfo.available ? `${updateInfo.local} → ${updateInfo.remote}` : `${updateInfo.local} · up to date`) : 'Check for new versions'}
+            badge={updateInfo?.available ? <span className="m-badge">new</span> : null}
+            onClick={() => openSheet('update')}
+          />
+          <RowBtn
+            icon="lock" title="Change password"
+            sub="Dashboard sign-in"
+            onClick={() => openSheet('password')}
+          />
+        </div>
+        {sysInfo && (
+          <div className="m-settings-card" style={{marginTop:10}}>
+            <div style={{padding:'12px 16px', display:'flex', flexDirection:'column', gap:6}}>
+              {[['Version', sysInfo.version], ['Platform', sysInfo.platform], ['Kernel', sysInfo.kernel], ['Host uptime', sysInfo.uptime], ['Interface', sysInfo.interface]].map(([k, v]) => (
+                <div key={k} style={{display:'flex', justifyContent:'space-between', gap:12}}>
+                  <span style={{fontFamily:'var(--mono)', fontSize:10.5, letterSpacing:'0.06em', textTransform:'uppercase', color:'var(--muted)', paddingTop:1}}>{k}</span>
+                  <span style={{fontFamily:'var(--mono)', fontSize:12, color:'var(--ink)', textAlign:'right', wordBreak:'break-word'}}>{v || '—'}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Account */}
       {onLogout && (
         <div>
           <div className="m-settings-title">Account</div>
           <div className="m-settings-card">
-            <div className="m-settings-row">
-              <span className="m-settings-lbl">Sign out</span>
-              <button
-                onClick={onLogout}
-                style={{background:'none', border:'none', fontFamily:'var(--mono)', fontSize:13, color:'var(--err, #c0392b)', cursor:'pointer', padding:0}}
-              >
-                Logout
-              </button>
-            </div>
+            <RowBtn icon="logout" title="Sign out" danger onClick={onLogout}/>
           </div>
         </div>
       )}
@@ -1256,6 +2859,7 @@ function SettingsTab({ theme, setTheme, accent, setAccent, chartTweaks, setChart
   );
 }
 
+/* ─── Root app ─── */
 function MobileApp() {
   const [authState, setAuthState] = useState('checking'); // checking | login | ok
   const [authRequired, setAuthRequired] = useState(false);
@@ -1267,13 +2871,22 @@ function MobileApp() {
   const [rxBps, setRxBps] = useState(0);
   const [txBps, setTxBps] = useState(0);
   const [trafficSamples, setTrafficSamples] = useState([]);
-  const [logs, setLogs] = useState([]);
   const [peers, setPeers] = useState([]);
   const [sessionStarts, setSessionStarts] = useState({});
   const [sparks, setSparks] = useState({});
   const [peerByteHistory, setPeerByteHistory] = useState({});
+  const [svcBusy, setSvcBusy] = useState(null);
+  const [updateInfo, setUpdateInfo] = useState(null);
+
+  /* Sheets */
   const [drawerPeerName, setDrawerPeerName] = useState(null);
-  const [svcBusy, setSvcBusy] = useState(false);
+  const [cfgPeerName, setCfgPeerName] = useState(null);
+  const [editPeerName, setEditPeerName] = useState(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [sheet, setSheet] = useState(null); // budget | dyndns | network | update | password
+  const [confirm, setConfirm] = useState(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
+
   const prevNetRef = useRef(null);
   const prevPeerBytesRef = useRef({});
   const { toasts, add: toast } = useToast();
@@ -1282,6 +2895,8 @@ function MobileApp() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('WG_THEME', theme);
+    const mt = document.querySelector('meta[name="theme-color"]');
+    if (mt) mt.setAttribute('content', theme === 'dark' ? '#14100C' : '#F5EEE2');
   }, [theme]);
   useEffect(() => {
     const el = document.documentElement;
@@ -1301,72 +2916,76 @@ function MobileApp() {
     }).catch(() => setAuthState('ok')); // if no auth required, proceed
   }, []);
 
+  /* Apply a /api/status payload to all derived state */
+  const applyStatus = useCallback((s) => {
+    setStatus(s);
+    const net = s.network || {};
+    const prev = prevNetRef.current;
+    if (prev) {
+      const dt = 3;
+      setRxBps(Math.max(0, ((net.rx||0) - (prev.rx||0)) / dt));
+      setTxBps(Math.max(0, ((net.tx||0) - (prev.tx||0)) / dt));
+    }
+    prevNetRef.current = net;
+    const { issued, live } = s.clients || {};
+    const _mapped = mapPeers(issued, live);
+    const _now = Date.now();
+    setSessionStarts(prev => {
+      const next = {};
+      _mapped.forEach(p => {
+        if (p.status === 'online') next[p.name] = prev[p.name] || _now;
+      });
+      return next;
+    });
+    setPeers(_mapped);
+    const serverSparks = (s.clients || {}).spark_history || {};
+    const prevBytes = prevPeerBytesRef.current;
+    const nextBytes = {};
+    const deltas = {};
+    _mapped.forEach(p => {
+      nextBytes[p.name] = { rx: p.bytesIn, tx: p.bytesOut };
+      const pr = prevBytes[p.name];
+      if (p.status === 'online' && pr !== undefined) {
+        deltas[p.name] = Math.max(0, p.bytesIn - pr.rx) + Math.max(0, p.bytesOut - pr.tx);
+      }
+    });
+    prevPeerBytesRef.current = nextBytes;
+    setSparks(prev => {
+      const out = { ...prev };
+      _mapped.forEach(p => {
+        const seeded = (serverSparks[p.name] || []).slice(-20);
+        const seed = seeded.length ? [...new Array(Math.max(0, 20 - seeded.length)).fill(0), ...seeded] : new Array(20).fill(0);
+        const buf = out[p.name] || seed;
+        out[p.name] = p.name in deltas ? [...buf.slice(1), deltas[p.name]] : buf;
+      });
+      return out;
+    });
+    setPeerByteHistory(prev => {
+      const next = {};
+      (issued||[]).forEach(iss => {
+        const lv = (live||[]).find(l => l.name === iss.name);
+        const bytesIn  = lv ? (lv.bytes_recv || 0) : 0;
+        const bytesOut = lv ? (lv.bytes_sent || 0) : 0;
+        const cutoff = _now - 5 * 60 * 1000;
+        next[iss.name] = [...(prev[iss.name] || []).filter(s => s.ts >= cutoff), { ts: _now, bytesIn, bytesOut }];
+      });
+      return next;
+    });
+  }, []);
+
+  const refreshStatus = useCallback(() => {
+    return api('/api/status').then(applyStatus).catch(e => {
+      if (e.status === 401) setAuthState('login');
+    });
+  }, [applyStatus]);
+
   /* Poll /api/status */
   useEffect(() => {
     if (authState !== 'ok') return;
-    const fetch = () => {
-      api('/api/status').then(s => {
-        setStatus(s);
-        const net = s.network || {};
-        const prev = prevNetRef.current;
-        if (prev) {
-          const dt = 3;
-          setRxBps(Math.max(0, ((net.rx||0) - (prev.rx||0)) / dt));
-          setTxBps(Math.max(0, ((net.tx||0) - (prev.tx||0)) / dt));
-        }
-        prevNetRef.current = net;
-        const { issued, live } = s.clients || {};
-        const _mapped = mapPeers(issued, live);
-        const _now = Date.now();
-        setSessionStarts(prev => {
-          const next = {};
-          _mapped.forEach(p => {
-            if (p.status === 'online') next[p.name] = prev[p.name] || _now;
-          });
-          return next;
-        });
-        setPeers(_mapped);
-        const serverSparks = (s.clients || {}).spark_history || {};
-        const prevBytes = prevPeerBytesRef.current;
-        const nextBytes = {};
-        const deltas = {};
-        _mapped.forEach(p => {
-          nextBytes[p.name] = { rx: p.bytesIn, tx: p.bytesOut };
-          const pr = prevBytes[p.name];
-          if (p.status === 'online' && pr !== undefined) {
-            deltas[p.name] = Math.max(0, p.bytesIn - pr.rx) + Math.max(0, p.bytesOut - pr.tx);
-          }
-        });
-        prevPeerBytesRef.current = nextBytes;
-        setSparks(prev => {
-          const out = { ...prev };
-          _mapped.forEach(p => {
-            const seeded = (serverSparks[p.name] || []).slice(-20);
-            const seed = seeded.length ? [...new Array(Math.max(0, 20 - seeded.length)).fill(0), ...seeded] : new Array(20).fill(0);
-            const buf = out[p.name] || seed;
-            out[p.name] = p.name in deltas ? [...buf.slice(1), deltas[p.name]] : buf;
-          });
-          return out;
-        });
-        setPeerByteHistory(prev => {
-          const next = {};
-          (issued||[]).forEach(iss => {
-            const lv = (live||[]).find(l => l.name === iss.name);
-            const bytesIn  = lv ? (lv.bytes_recv || 0) : 0;
-            const bytesOut = lv ? (lv.bytes_sent || 0) : 0;
-            const cutoff = _now - 5 * 60 * 1000;
-            next[iss.name] = [...(prev[iss.name] || []).filter(s => s.ts >= cutoff), { ts: _now, bytesIn, bytesOut }];
-          });
-          return next;
-        });
-      }).catch(e => {
-        if (e.status === 401) setAuthState('login');
-      });
-    };
-    fetch();
-    const id = setInterval(fetch, 3000);
+    refreshStatus();
+    const id = setInterval(refreshStatus, 3000);
     return () => clearInterval(id);
-  }, [authState]);
+  }, [authState, refreshStatus]);
 
   /* Poll /api/traffic + load history */
   useEffect(() => {
@@ -1402,24 +3021,22 @@ function MobileApp() {
     return () => { cancelled = true; clearInterval(id); };
   }, [authState]);
 
-  /* Poll /api/logs */
+  /* Update check (once per session) */
   useEffect(() => {
     if (authState !== 'ok') return;
-    const fetch = () => {
-      api('/api/logs?n=100').then(d => setLogs(parseLogs(d.lines))).catch(() => {});
-    };
-    fetch();
-    const id = setInterval(fetch, 8000);
-    return () => clearInterval(id);
+    const dev = localStorage.getItem('WG_DEV_UPDATES') === '1';
+    api(`/api/update/check${dev ? '?dev=1' : ''}`).then(setUpdateInfo).catch(() => {});
   }, [authState]);
 
   /* Service control */
+  const svcMsg = { start: 'started', stop: 'stopped', restart: 'restarted', reload: 'config reloaded', enable: 'enabled on boot', disable: 'disabled on boot' };
   const handleService = async (action) => {
     setSvcBusy(action);
     try {
       const r = await api('/api/service', { method:'POST', body: JSON.stringify({ action }) });
       if (!r.ok) throw new Error(r.out || 'Failed');
-      toast(`Service ${action}ed`, 'ok');
+      toast(`Service ${svcMsg[action] || action}`, 'ok');
+      await refreshStatus();
     } catch(e) {
       toast(e.message, 'err');
     } finally {
@@ -1430,18 +3047,39 @@ function MobileApp() {
   /* Peer pause/resume */
   const handlePeerAction = async (name, action) => {
     await api(`/api/users/${encodeURIComponent(name)}/${action}`, { method: 'POST' });
-    // Refresh status immediately
-    const s = await api('/api/status');
-    setStatus(s);
-    const { issued, live } = s.clients || {};
-    const _mapped = mapPeers(issued, live);
-    const _now = Date.now();
-    setSessionStarts(prev => {
-      const next = {};
-      _mapped.forEach(p => { if (p.status === 'online') next[p.name] = prev[p.name] || _now; });
-      return next;
+    await refreshStatus();
+  };
+
+  /* Peer revoke (with confirm) */
+  const askRemovePeer = (name) => {
+    setConfirm({
+      title: `Remove ${name}?`,
+      body: 'This permanently deletes the peer and its keys. Devices using this config will lose access immediately.',
+      label: 'Remove peer',
+      danger: true,
+      action: async () => {
+        await api(`/api/users/${encodeURIComponent(name)}/revoke`, { method: 'POST' });
+        toast(`Peer '${name}' removed`, 'ok');
+        setDrawerPeerName(null);
+        setEditPeerName(null);
+        setCfgPeerName(null);
+        await refreshStatus();
+      },
     });
-    setPeers(_mapped);
+  };
+
+  const askConfirm = (opts) => setConfirm(opts);
+  const runConfirm = async () => {
+    if (!confirm) return;
+    setConfirmBusy(true);
+    try {
+      await confirm.action();
+      setConfirm(null);
+    } catch(e) {
+      toast(e.message, 'err');
+    } finally {
+      setConfirmBusy(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -1475,6 +3113,9 @@ function MobileApp() {
     { id:'settings', label:'Settings', icon:'settings' },
   ];
 
+  const drawerPeer = drawerPeerName ? peers.find(p => p.name === drawerPeerName) : null;
+  const editPeer   = editPeerName   ? peers.find(p => p.name === editPeerName)   : null;
+
   return (
     <div className="m-app">
       {/* Header */}
@@ -1498,20 +3139,53 @@ function MobileApp() {
       {/* Content */}
       <div className="m-content">
         {tab === 'settings' ? (
-          <SettingsTab theme={theme} setTheme={setTheme} accent={accent} setAccent={setAccent} chartTweaks={chartTweaks} setChartTweaks={setChartTweaks} onLogout={authRequired ? handleLogout : null} />
-        ) : !status && tab !== 'logs' ? (
+          <SettingsTab
+            theme={theme} setTheme={setTheme}
+            accent={accent} setAccent={setAccent}
+            chartTweaks={chartTweaks} setChartTweaks={setChartTweaks}
+            onLogout={authRequired ? handleLogout : null}
+            status={status} updateInfo={updateInfo}
+            openSheet={setSheet} onService={handleService}
+            askConfirm={askConfirm} svcBusy={svcBusy}
+          />
+        ) : tab === 'logs' ? (
+          <LogsTab toast={toast}/>
+        ) : !status ? (
           <div className="m-spinner">
             <div className="m-spinner-ring"/>
             <div className="m-spinner-label">Loading</div>
           </div>
         ) : tab === 'home' ? (
-          <HomeTab status={status} rxBps={rxBps} txBps={txBps} trafficSamples={trafficSamples} chartTweaks={chartTweaks} onService={handleService} svcBusy={svcBusy} peers={peers} sessionStarts={sessionStarts} sparks={sparks} onSeeAllPeers={() => setTab('peers')} onPeerClick={n => setDrawerPeerName(n)}/>
-        ) : tab === 'peers' ? (
-          <PeersTab peers={peers} sparks={sparks} onAction={handlePeerAction} toast={toast} onPeerClick={n => setDrawerPeerName(n)}/>
+          <HomeTab
+            status={status} rxBps={rxBps} txBps={txBps}
+            trafficSamples={trafficSamples} chartTweaks={chartTweaks}
+            onService={handleService} svcBusy={svcBusy}
+            peers={peers} sessionStarts={sessionStarts} sparks={sparks}
+            onSeeAllPeers={() => setTab('peers')}
+            onPeerClick={n => setDrawerPeerName(n)}
+            onOpenBudget={() => setSheet('budget')}
+            onRestart={() => askConfirm({
+              title: 'Restart WireGuard?',
+              body: 'Connected peers will briefly disconnect and reconnect automatically.',
+              label: 'Restart',
+              action: async () => { await handleService('restart'); },
+            })}
+          />
         ) : (
-          <LogsTab logs={logs}/>
+          <PeersTab
+            peers={peers} sparks={sparks}
+            onPeerClick={n => setDrawerPeerName(n)}
+            onAddPeer={() => setAddOpen(true)}
+          />
         )}
       </div>
+
+      {/* FAB — add peer */}
+      {tab === 'peers' && !addOpen && (
+        <button className="m-fab" onClick={() => setAddOpen(true)} aria-label="Add peer">
+          <Icon n="plus" size={24}/>
+        </button>
+      )}
 
       {/* Bottom nav */}
       <nav className="m-nav">
@@ -1519,22 +3193,66 @@ function MobileApp() {
           <button key={t.id} className={`m-nav-btn ${tab===t.id?'on':''}`} onClick={() => setTab(t.id)}>
             <Icon n={t.icon} size={22}/>
             {t.label}
+            {t.id === 'settings' && updateInfo?.available && <span className="m-nav-dot"/>}
           </button>
         ))}
       </nav>
 
-      {drawerPeerName && (() => {
-        const dp = peers.find(p => p.name === drawerPeerName);
-        return dp ? (
-          <PeerDrawer
-            peer={dp}
-            history={peerByteHistory[dp.name] || []}
-            onClose={() => setDrawerPeerName(null)}
-            onAction={handlePeerAction}
-            toast={toast}
-          />
-        ) : null;
-      })()}
+      {/* ── Sheets ── */}
+      {drawerPeer && (
+        <PeerSheet
+          peer={drawerPeer}
+          history={peerByteHistory[drawerPeer.name] || []}
+          onClose={() => setDrawerPeerName(null)}
+          onAction={handlePeerAction}
+          onEdit={() => setEditPeerName(drawerPeer.name)}
+          onShowConfig={() => setCfgPeerName(drawerPeer.name)}
+          onRemove={() => askRemovePeer(drawerPeer.name)}
+          toast={toast}
+        />
+      )}
+
+      {editPeer && (
+        <PeerEditSheet
+          peer={editPeer} peers={peers}
+          onClose={() => setEditPeerName(null)}
+          onSaved={(newName) => {
+            setEditPeerName(null);
+            if (drawerPeerName && newName !== drawerPeerName) setDrawerPeerName(newName);
+            refreshStatus();
+          }}
+          toast={toast}
+        />
+      )}
+
+      {cfgPeerName && (
+        <ConfigSheet peerName={cfgPeerName} onClose={() => setCfgPeerName(null)} toast={toast}/>
+      )}
+
+      {addOpen && (
+        <AddPeerSheet
+          peers={peers}
+          onClose={() => setAddOpen(false)}
+          onCreated={refreshStatus}
+          toast={toast}
+        />
+      )}
+
+      {sheet === 'budget'   && <BudgetSheet onClose={() => setSheet(null)} toast={toast} refreshStatus={refreshStatus}/>}
+      {sheet === 'dyndns'   && <DynDNSSheet onClose={() => setSheet(null)} toast={toast}/>}
+      {sheet === 'network'  && <NetworkSheet onClose={() => setSheet(null)} toast={toast} askConfirm={askConfirm}/>}
+      {sheet === 'update'   && <UpdateSheet onClose={() => setSheet(null)} toast={toast} updateInfo={updateInfo} setUpdateInfo={setUpdateInfo}/>}
+      {sheet === 'password' && <PasswordSheet onClose={() => setSheet(null)} toast={toast}/>}
+
+      {confirm && (
+        <Confirm
+          title={confirm.title} body={confirm.body}
+          label={confirm.label} danger={confirm.danger}
+          busy={confirmBusy}
+          onConfirm={runConfirm}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
 
       <Toasts toasts={toasts}/>
     </div>

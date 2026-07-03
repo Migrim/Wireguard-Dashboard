@@ -2116,19 +2116,22 @@ def welcome():
 
 @app.route("/mobile")
 def mobile():
-    return render_template("mobile.html")
+    return render_template("mobile.html", app_version=_build_stamp())
 
 @app.route("/manifest.json")
 def manifest():
     m = {
+        "id": "/mobile",
         "name": "WireGuard Dashboard",
         "short_name": "WG Dashboard",
         "description": "WireGuard VPN peer management dashboard",
         "start_url": "/mobile",
+        "scope": "/",
         "display": "standalone",
+        "display_override": ["standalone", "fullscreen"],
         "orientation": "portrait",
         "background_color": "#F5EEE2",
-        "theme_color": "#924f6f",
+        "theme_color": "#F5EEE2",
         "icons": [
             {
                 "src": "/static/icons/apple-touch-icon.png",
