@@ -67,41 +67,25 @@ body {
   min-height: 100vh;
   display: grid;
   place-items: center;
-  padding: 28px 16px;
+  padding: 48px 24px 88px;
   background-image:
     radial-gradient(900px 500px at 20% -10%, color-mix(in oklab, var(--accent) 9%, transparent), transparent 60%),
     radial-gradient(700px 400px at 90% 15%, color-mix(in oklab, var(--accent) 6%, transparent), transparent 60%);
 }
 
-.card {
+.wrap {
   width: 100%;
-  max-width: 420px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  padding: 36px 36px 32px;
-  animation: cardIn 0.45s cubic-bezier(0.2, 0.9, 0.3, 1);
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: fadeUp 0.4s cubic-bezier(0.25, 1, 0.5, 1) both;
 }
-@keyframes cardIn { from { transform: translateY(12px) scale(0.99); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
-.brand { display: flex; align-items: center; gap: 11px; margin-bottom: 28px; }
-.brand-mark {
-  width: 38px; height: 38px;
-  background: var(--card-raised);
-  border: 1px solid var(--border);
-  border-radius: 11px;
-  display: grid; place-items: center;
-  color: var(--accent);
-  box-shadow: var(--shadow-sm);
-  flex-shrink: 0;
-}
-.brand-name { font-family: var(--serif); font-size: 22px; line-height: 1; letter-spacing: -0.01em; }
-.brand-sub { font-family: var(--mono); font-size: 9.5px; color: var(--muted); margin-top: 3px; letter-spacing: 0.06em; text-transform: uppercase; }
-
-.title { font-family: var(--serif); font-size: 30px; line-height: 1.05; letter-spacing: -0.02em; margin: 0 0 8px; font-weight: 400; }
+.title { font-family: var(--serif); font-size: 30px; line-height: 1.05; letter-spacing: -0.02em; margin: 0 0 8px; font-weight: 400; text-align: center; }
 .title em { font-style: italic; }
-.desc { font-size: 13px; color: var(--ink-2); line-height: 1.6; margin: 0 0 28px; }
+.desc { font-size: 13px; color: var(--ink-2); line-height: 1.6; margin: 0 0 28px; text-align: center; }
 
 .field { margin-bottom: 14px; }
 .field label { display: block; font-size: 12px; font-weight: 500; color: var(--ink-2); margin-bottom: 6px; }
@@ -127,6 +111,11 @@ body {
   display: grid; place-items: center;
 }
 .toggle-vis:hover { color: var(--ink); }
+.gen-btn { right: 40px; }
+.gen-btn:hover { color: var(--accent); }
+.field-wrap.with-gen input { padding-right: 74px; }
+@keyframes diceRoll { from { transform: rotate(-120deg); } to { transform: rotate(0); } }
+.gen-btn.rolling svg { animation: diceRoll 0.4s cubic-bezier(0.25, 1, 0.5, 1); }
 
 .strength { display: flex; gap: 4px; align-items: center; max-height: 0; opacity: 0; overflow: hidden; margin-top: 0; transition: max-height 0.28s ease, opacity 0.28s ease, margin-top 0.28s ease; }
 .strength.visible { max-height: 24px; opacity: 1; margin-top: 8px; }
@@ -160,36 +149,57 @@ body {
 .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
 
 
-.form-area { }
+.form-area { width: 100%; }
 .form-area.hidden { display: none; }
 
 .theme-btn {
-  width: 28px; height: 28px; display: grid; place-items: center;
-  background: var(--card); border: 1px solid var(--border); border-radius: 7px;
+  position: fixed; top: 20px; right: 20px;
+  width: 32px; height: 32px; display: grid; place-items: center;
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
   cursor: pointer; color: var(--muted); transition: all 0.12s;
 }
 .theme-btn:hover { color: var(--ink); border-color: var(--border-strong); }
+
+.page-footer {
+  position: fixed;
+  bottom: 28px; left: 24px; right: 24px;
+  display: flex; align-items: center; justify-content: center; flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.meta-item { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+.meta-sep { opacity: 0.5; user-select: none; }
+.status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.status-dot.ok {
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--success) 20%, transparent);
+}
+.status-dot.down {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--danger) 20%, transparent);
+}
+.help-link {
+  color: var(--muted);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in oklab, var(--muted) 40%, transparent);
+  transition: color 0.15s, border-color 0.15s;
+}
+.help-link:hover { color: var(--accent); border-bottom-color: var(--accent); }
+
+@media (max-width: 480px) {
+  body { background-image: none; padding: 32px 24px 88px; }
+  .page-footer { bottom: max(20px, env(safe-area-inset-bottom)); }
+}
 </style>
 </head>
 <body>
 
-<div class="card">
-  <div class="brand">
-    <div class="brand-mark">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 2L3 7v6c0 5 4 9 9 10 5-1 9-5 9-10V7l-9-5z"/>
-        <path d="M9 12l2 2 4-4"/>
-      </svg>
-    </div>
-    <div>
-      <div class="brand-name">WG-Quick</div>
-      <div class="brand-sub">{% if mode == 'change' %}Security{% else %}Dashboard Setup{% endif %}</div>
-    </div>
-    <button class="theme-btn" id="themeBtn" title="Toggle theme" aria-label="Toggle theme" style="margin-left: auto;">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
-    </button>
-  </div>
+<button class="theme-btn" id="themeBtn" title="Toggle theme" aria-label="Toggle theme">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+</button>
 
+<div class="wrap">
   <div class="form-area" id="formArea">
     <h1 class="title">{% if mode == 'change' %}<em>Change</em> your password{% else %}Set a <em>dashboard</em> password{% endif %}</h1>
     <p class="desc">{% if mode == 'change' %}Enter your current password, then choose a new one.{% else %}Choose a password to protect access to your WireGuard dashboard. You only need to do this once.{% endif %}</p>
@@ -209,8 +219,18 @@ body {
       {% endif %}
       <div class="field">
         <label for="pw1">{% if mode == 'change' %}New password{% else %}Password{% endif %}</label>
-        <div class="field-wrap">
+        <div class="field-wrap with-gen">
           <input type="password" id="pw1" placeholder="Choose a password" autocomplete="new-password" />
+          <button type="button" class="toggle-vis gen-btn" id="genPw" title="Generate a strong password" aria-label="Generate a strong password">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="4.5"/>
+              <circle cx="8.3" cy="8.3" r="1.15" fill="currentColor" stroke="none"/>
+              <circle cx="15.7" cy="8.3" r="1.15" fill="currentColor" stroke="none"/>
+              <circle cx="12" cy="12" r="1.15" fill="currentColor" stroke="none"/>
+              <circle cx="8.3" cy="15.7" r="1.15" fill="currentColor" stroke="none"/>
+              <circle cx="15.7" cy="15.7" r="1.15" fill="currentColor" stroke="none"/>
+            </svg>
+          </button>
           <button type="button" class="toggle-vis" onclick="toggleVis('pw1', this)" tabindex="-1" aria-label="Show password">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
@@ -227,6 +247,7 @@ body {
       </div>
 
       <div class="field">
+        
         <label for="pw2">Confirm password</label>
         <div class="field-wrap">
           <input type="password" id="pw2" placeholder="Repeat your password" autocomplete="new-password" />
@@ -241,22 +262,38 @@ body {
 
       <button type="submit" class="btn-primary" id="submitBtn" disabled>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L3 7v6c0 5 4 9 9 10 5-1 9-5 9-10V7l-9-5z"/><path d="M9 12l2 2 4-4"/></svg>
-        {% if mode == 'change' %}Update password{% else %}Set password &amp; open dashboard{% endif %}
+        {% if mode == 'change' %}Update password{% else %}Set password &amp; continue{% endif %}
       </button>
     </form>
   </div>
+</div>
 
-
+<div class="page-footer">
+  {% if display_version %}
+  <span class="meta-item">{{ display_version }}</span>
+  <span class="meta-sep" aria-hidden="true">·</span>
+  {% endif %}
+  <span class="meta-item">
+    <span class="status-dot {{ 'ok' if service_active else 'down' }}"></span>
+    {{ 'VPN service running' if service_active else 'VPN service stopped' }}
+  </span>
+  <span class="meta-sep" aria-hidden="true">·</span>
+  <a class="help-link" href="https://github.com/Migrim/OpenVPN-Dashboard/issues" target="_blank" rel="noopener noreferrer">Need help?</a>
 </div>
 
 <script>
 const MODE = '{{ mode }}';
+
+const EYE_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/><path d="M4 4l16 16"/></svg>';
 
 function toggleVis(id, btn) {
   const inp = document.getElementById(id);
   const showing = inp.type === 'text';
   inp.type = showing ? 'password' : 'text';
   btn.style.color = showing ? '' : 'var(--accent)';
+  btn.innerHTML = showing ? EYE_SVG : EYE_OFF_SVG;
+  btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
 }
 
 function scorePassword(pw) {
@@ -310,6 +347,43 @@ function validate() {
 if (pw0) pw0.addEventListener('input', validate);
 pw1.addEventListener('input', validate);
 pw2.addEventListener('input', validate);
+
+const GEN_WORDS = ('amber apple arrow aspen autumn badge basil beach berry birch blaze bloom breeze brook cabin candle canyon cedar cherry cider ' +
+  'cliff cloud clover cobalt comet coral cove crane creek crest dawn delta drift dune eagle ember fable falcon fern field ' +
+  'fjord flame flint forest frost galaxy garden garnet ginger glade glen grove harbor hazel heron honey indigo iris island ivory ' +
+  'jade jasper juniper kelp lagoon lake lantern larch laurel lava lemon lilac lily linen lotus lunar maple marble meadow mesa ' +
+  'mist moon moss nectar north nova oak ocean olive onyx opal orchard otter owl palm peak pearl pebble pine plume ' +
+  'pond poppy prairie quail quartz quill rain raven reef ridge river robin rose rowan ruby rune sage salt sand scarlet ' +
+  'shade shell shore silver sky slate snow solar sparrow spring spruce star stone storm summer summit sunset swan thistle thorn ' +
+  'tide tiger timber topaz torch trail tulip tundra valley vapor velvet violet vista walnut wave willow winter wolf wren zephyr').split(' ');
+
+function randInt(n) {
+  // rejection sampling to avoid modulo bias
+  const limit = Math.floor(4294967296 / n) * n;
+  const a = new Uint32Array(1);
+  do { crypto.getRandomValues(a); } while (a[0] >= limit);
+  return a[0] % n;
+}
+
+function generatePassword() {
+  const pick = () => GEN_WORDS[randInt(GEN_WORDS.length)];
+  const first = pick();
+  const sym = '!@#$%&*+?'[randInt(9)];
+  return first[0].toUpperCase() + first.slice(1) + '-' + pick() + '-' + pick() + (randInt(90) + 10) + sym;
+}
+
+const genBtn = document.getElementById('genPw');
+genBtn.addEventListener('click', () => {
+  const pw = generatePassword();
+  pw1.value = pw;
+  pw2.value = pw;
+  // reveal so the user can read and save it
+  if (pw1.type === 'password') toggleVis('pw1', pw1.parentElement.querySelector('.toggle-vis:not(.gen-btn)'));
+  validate();
+  genBtn.classList.remove('rolling');
+  void genBtn.offsetWidth;
+  genBtn.classList.add('rolling');
+});
 
 const SUBMIT_LABEL = MODE === 'change'
   ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L3 7v6c0 5 4 9 9 10 5-1 9-5 9-10V7l-9-5z"/><path d="M9 12l2 2 4-4"/></svg> Update password'

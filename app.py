@@ -1990,7 +1990,12 @@ def _ensure_peer_removed_from_conf(pubkey: str) -> None:
 
 @app.route("/api/auth/check")
 def auth_check():
-    return jsonify({"authenticated": bool(session.get("authenticated")), "setup_required": not bool(DASHBOARD_PASSWORD_HASH)})
+    return jsonify({
+        "authenticated": bool(session.get("authenticated")),
+        "setup_required": not bool(DASHBOARD_PASSWORD_HASH),
+        "version": _local_version(),
+        "service_active": service_active(),
+    })
 
 @app.route("/api/auth/login", methods=["POST"])
 def auth_login():
@@ -2040,11 +2045,11 @@ def api_change_password():
 def setup_page():
     if DASHBOARD_PASSWORD_HASH:
         return redirect(url_for("home"))
-    return render_template("setup.html", mode="setup")
+    return render_template("setup.html", mode="setup", display_version=_display_version(), service_active=service_active())
 
 @app.route("/change-password")
 def change_password_page():
-    return render_template("setup.html", mode="change")
+    return render_template("setup.html", mode="change", display_version=_display_version(), service_active=service_active())
 
 @app.route("/api/setup", methods=["POST"])
 def api_setup():
@@ -3224,6 +3229,15 @@ def _local_version() -> str:
             return f.read().strip()
     except Exception:
         return "unknown"
+
+def _display_version() -> str:
+    """Human-facing version label, e.g. 'v2.1.2' or 'v2.1.2-dev'."""
+    v = _local_version()
+    if v == "unknown":
+        return ""
+    if v.startswith("dev "):
+        return f"v{v[4:].strip()}-dev"
+    return f"v{v}"
 
 def _build_stamp() -> str:
     """For dev versions, append a mtime-based stamp so browsers reload changed files."""

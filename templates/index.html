@@ -2698,8 +2698,10 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
   position: fixed;
   inset: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  padding: 48px 24px;
   background: var(--bg);
   background-image:
     radial-gradient(1200px 600px at 15% -10%, color-mix(in oklab, var(--accent) 8%, transparent), transparent 60%),
@@ -2712,42 +2714,43 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
   pointer-events: none;
 }
 
-.login-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  padding: 40px 40px 36px;
+.login-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   width: 100%;
-  max-width: 380px;
-  animation: loginSlideIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  max-width: 340px;
+  animation: loginSlideIn 0.4s cubic-bezier(0.25, 1, 0.5, 1) both;
 }
-.login-card.exit {
+.login-inner.exit {
   animation: loginSlideOut 0.45s cubic-bezier(0.4, 0, 1, 1) forwards;
 }
 
 .login-brand {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 32px;
+  gap: 16px;
+  margin-bottom: 36px;
+  text-align: center;
 }
 .login-brand-mark {
-  width: 44px;
-  height: 44px;
+  width: 56px;
+  height: 56px;
   background: var(--accent-soft);
   border: 1px solid var(--border);
-  border-radius: 11px;
+  border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--accent);
   flex-shrink: 0;
+  box-shadow: 0 1px 2px color-mix(in oklab, var(--ink) 6%, transparent);
 }
-.login-brand-text { display: flex; flex-direction: column; gap: 2px; }
+.login-brand-text { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .login-title {
   font-family: var(--serif);
-  font-size: 24px;
+  font-size: 30px;
   line-height: 1.1;
   color: var(--ink);
   letter-spacing: -0.02em;
@@ -2755,7 +2758,7 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
 .login-subtitle {
   font-size: 11px;
   color: var(--muted);
-  letter-spacing: 0.07em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   font-weight: 500;
 }
@@ -2764,6 +2767,7 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
   display: flex;
   flex-direction: column;
   gap: 16px;
+  width: 100%;
 }
 .login-label {
   display: block;
@@ -2849,6 +2853,52 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
   letter-spacing: 0.01em;
 }
 
+.login-footer {
+  position: absolute;
+  bottom: 28px;
+  left: 24px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  animation: loginFadeIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.login-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.login-meta-sep { opacity: 0.5; user-select: none; }
+.login-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.login-status-dot.ok {
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--success) 20%, transparent);
+}
+.login-status-dot.down {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--danger) 20%, transparent);
+}
+.login-help {
+  color: var(--muted);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in oklab, var(--muted) 40%, transparent);
+  transition: color 0.15s, border-color 0.15s;
+}
+.login-help:hover {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
 @keyframes loginFadeIn {
   from { opacity: 0; }
   to   { opacity: 1; }
@@ -2858,12 +2908,12 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
   to   { opacity: 0; }
 }
 @keyframes loginSlideIn {
-  from { opacity: 0; transform: translateY(22px) scale(0.97); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
 }
 @keyframes loginSlideOut {
-  from { opacity: 1; transform: translateY(0) scale(1); }
-  to   { opacity: 0; transform: translateY(-14px) scale(1.02); }
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: translateY(-8px); }
 }
 @keyframes loginSpin {
   to { transform: rotate(360deg); }
@@ -2871,25 +2921,19 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
 
 @media (max-width: 480px) {
   .login-screen {
-    align-items: flex-start;
     background-image: none;
+    padding: 32px 24px;
   }
-  .login-card {
-    background: transparent;
-    border: none;
-    border-radius: 0;
-    box-shadow: none;
-    padding: 56px 28px 32px;
-    max-width: 100%;
-    min-height: 100dvh;
+  .login-inner {
     animation: loginFadeIn 0.4s ease both;
   }
-  .login-card.exit {
+  .login-inner.exit {
     animation: loginFadeOut 0.35s ease forwards;
   }
-  .login-brand { margin-bottom: 40px; }
+  .login-brand { margin-bottom: 32px; }
   .login-input { padding: 13px 16px; }
   .login-btn   { padding: 13px 18px; font-size: 15px; }
+  .login-footer { bottom: max(20px, env(safe-area-inset-bottom)); }
 }
 
 /* ====================================================

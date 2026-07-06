@@ -1087,7 +1087,7 @@ function PeerTableHeader() {
 // ============================================================
 // Login screen
 // ============================================================
-function LoginScreen({ onLogin, loading, exiting }) {
+function LoginScreen({ onLogin, loading, exiting, meta }) {
   const [password, setPassword] = uS('');
   const [showPw, setShowPw] = uS(false);
   const inputRef = uR(null);
@@ -1099,12 +1099,17 @@ function LoginScreen({ onLogin, loading, exiting }) {
     if (!loading && password) onLogin(password);
   };
 
+  const version = meta?.version && meta.version !== 'unknown'
+    ? (/^dev\s+/.test(meta.version) ? `v${meta.version.replace(/^dev\s+/, '')}-dev` : `v${meta.version}`)
+    : null;
+  const serviceActive = meta?.service_active;
+
   return (
     <div className={`login-screen${exiting ? ' exit' : ''}`}>
-      <div className={`login-card${exiting ? ' exit' : ''}`}>
+      <div className={`login-inner${exiting ? ' exit' : ''}`}>
         <div className="login-brand">
           <div className="login-brand-mark">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
               <path d="M12 2L3 7v6c0 5 4 9 9 10 5-1 9-5 9-10V7l-9-5z"/>
               <path d="M9 12l2 2 4-4"/>
             </svg>
@@ -1137,7 +1142,7 @@ function LoginScreen({ onLogin, loading, exiting }) {
                 style={{ color: showPw ? 'var(--accent)' : undefined }}
               >
                 {showPw
-                  ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17.9 17.9A10.5 10.5 0 0 1 12 20C7 20 3 12 3 12a18.5 18.5 0 0 1 5.1-6.9M9.9 4.2A10 10 0 0 1 12 4c5 0 9 8 9 8a18.5 18.5 0 0 1-2.2 3.2M3 3l18 18"/><circle cx="12" cy="12" r="3"/></svg>
+                  ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/><path d="M4 4l16 16"/></svg>
                   : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 }
               </button>
@@ -1148,6 +1153,23 @@ function LoginScreen({ onLogin, loading, exiting }) {
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
+      </div>
+      <div className="login-footer">
+        {version && <span className="login-meta-item">{version}</span>}
+        {version && serviceActive !== undefined && <span className="login-meta-sep" aria-hidden="true">·</span>}
+        {serviceActive !== undefined && (
+          <span className="login-meta-item">
+            <span className={`login-status-dot ${serviceActive ? 'ok' : 'down'}`} />
+            {serviceActive ? 'VPN service running' : 'VPN service stopped'}
+          </span>
+        )}
+        {(version || serviceActive !== undefined) && <span className="login-meta-sep" aria-hidden="true">·</span>}
+        <a
+          className="login-help"
+          href="https://github.com/Migrim/OpenVPN-Dashboard/issues"
+          target="_blank"
+          rel="noopener noreferrer"
+        >Need help?</a>
       </div>
     </div>
   );
@@ -1163,6 +1185,7 @@ function AuthWrapper({ tweaks, setTweaks }) {
   const setAuthState = (s) => { authStateRef.current = s; setAuthStateRaw(s); };
   const [loginLoading, setLoginLoading] = uS(false);
   const [exiting, setExiting] = uS(false);
+  const [loginMeta, setLoginMeta] = uS(null);
 
   uE(() => {
     window.WG.onUnauthorized = () => {
@@ -1170,10 +1193,11 @@ function AuthWrapper({ tweaks, setTweaks }) {
         window.WG.toast.warning('Session expired', 'Please sign in again');
       }
       setExiting(false);
+      setLoginLoading(false);
       setAuthState('login');
     };
     window.WG.apiCall('/api/auth/check', { silent: true })
-      .then(j => setAuthState(j.authenticated ? 'dashboard' : 'login'))
+      .then(j => { setLoginMeta(j); setAuthState(j.authenticated ? 'dashboard' : 'login'); })
       .catch(() => setAuthState('login'));
     return () => { window.WG.onUnauthorized = null; };
   }, []);
@@ -1183,7 +1207,7 @@ function AuthWrapper({ tweaks, setTweaks }) {
     try {
       await window.WG.apiCall('/api/auth/login', { silent: true, method: 'POST', body: JSON.stringify({ password }) });
       setExiting(true);
-      setTimeout(() => { setExiting(false); setAuthState('dashboard'); }, 480);
+      setTimeout(() => { setExiting(false); setLoginLoading(false); setAuthState('dashboard'); }, 480);
     } catch (_) {
       window.WG.toast.error('Incorrect password', 'Please try again');
       setLoginLoading(false);
@@ -1192,6 +1216,7 @@ function AuthWrapper({ tweaks, setTweaks }) {
 
   const handleLogout = async () => {
     try { await window.WG.apiCall('/api/auth/logout', { silent: true, method: 'POST' }); } catch (_) {}
+    setLoginLoading(false);
     setAuthState('login');
   };
 
@@ -1204,7 +1229,7 @@ function AuthWrapper({ tweaks, setTweaks }) {
   }
   if (authState === 'login') {
     return <>
-      <LoginScreen onLogin={handleLogin} loading={loginLoading} exiting={exiting} />
+      <LoginScreen onLogin={handleLogin} loading={loginLoading} exiting={exiting} meta={loginMeta} />
       {WGToaster && <WGToaster />}
     </>;
   }
