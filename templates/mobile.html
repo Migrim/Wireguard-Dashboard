@@ -153,7 +153,20 @@ body {
   flex: 1; overflow-y: auto; overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
+  position: relative;
 }
+.m-ptr {
+  position: absolute; top: -44px; left: 50%;
+  transform: translate(-50%, 0);
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--card-raised); border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  display: grid; place-items: center;
+  color: var(--accent); opacity: 0;
+  z-index: 5; pointer-events: none;
+  will-change: transform, opacity;
+}
+.m-ptr.spin svg { animation: spin 0.8s linear infinite; }
 .m-scroll-pad { padding-bottom: calc(var(--nav-h) + var(--safe-bot) + 16px); }
 
 /* ── Bottom nav ── */
@@ -272,19 +285,47 @@ body {
 .m-peer-status-dot.offline { background: var(--muted-2); }
 .m-peer-status-dot.paused { background: var(--warn); animation: mpulse 1.4s steps(1) infinite; }
 
+/* ── Swipeable peer rows ── */
+.m-swipe-wrap { position: relative; border-radius: var(--radius); overflow: hidden; }
+.m-swipe-actions {
+  position: absolute; top: 0; bottom: 0; right: 0;
+  display: flex; align-items: stretch;
+  opacity: 0; /* shown imperatively while swiping/open, else it peeks through the card's rounded corners */
+}
+.m-swipe-btn {
+  width: 76px; border: none; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  font-family: var(--sans); font-size: 10.5px; font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
+}
+.m-swipe-btn.qr     { background: var(--accent-soft);  color: var(--accent); }
+.m-swipe-btn.pause  { background: var(--warn-soft);    color: var(--warn); }
+.m-swipe-btn.resume { background: var(--success-soft); color: var(--success); }
+.m-swipe-row {
+  position: relative; z-index: 1;
+  touch-action: pan-y;
+  -webkit-user-select: none; user-select: none;
+}
+
 /* ── Sheets (bottom drawers) ── */
-.m-sheet-scrim {
+.m-sheet-wrap {
   position: fixed; inset: 0; z-index: 100;
-  background: rgba(20,15,10,0.5); backdrop-filter: blur(3px);
   display: flex; align-items: flex-end;
+}
+.m-sheet-scrim {
+  position: absolute; inset: 0;
+  background: rgba(20,15,10,0.5);
+  backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
   animation: scrimIn 0.22s ease;
 }
 @keyframes scrimIn { from { opacity: 0; } to { opacity: 1; } }
 .m-sheet {
+  position: relative;
   width: 100%; background: var(--card); border-radius: 20px 20px 0 0;
   border: 1px solid var(--border); border-bottom: none;
   max-height: 92dvh; display: flex; flex-direction: column;
   animation: slideUp 0.3s cubic-bezier(0.2,0.9,0.3,1);
+  will-change: transform;
 }
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 .m-modal-handle { width: 36px; height: 4px; background: var(--border-strong); border-radius: 2px; }
@@ -371,6 +412,34 @@ select.m-input { background-image: none; }
 .m-check-ic.bad  { background: var(--danger-soft); color: var(--danger); }
 .m-check-ic.warn { background: var(--warn-soft); color: var(--warn); }
 .m-check-val { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: right; word-break: break-all; }
+
+/* ── Port check (Network & firewall) ── */
+.m-pc-head { display: flex; justify-content: space-between; align-items: center; padding: 12px 0 10px; }
+.m-pc-count { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+.m-pc-rerun {
+  background: none; border: none; padding: 0; cursor: pointer;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--accent); -webkit-tap-highlight-color: transparent;
+}
+.m-pc-bar { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.m-pc-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.35s ease; }
+.m-check-row.pending { color: var(--muted); }
+.m-check-ic.idle { background: var(--bg-2); border: 1px solid var(--border); }
+.m-pc-idle-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--muted-2); opacity: 0.6; }
+.m-pc-spin {
+  width: 11px; height: 11px; border-radius: 50%;
+  border: 2px solid var(--accent-soft); border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+.m-pc-tip {
+  border: 1px solid var(--border); border-radius: 10px; background: var(--card-raised);
+  padding: 12px 14px; margin-bottom: 14px; display: flex; gap: 10px; align-items: flex-start;
+}
+.m-pc-tip-ic {
+  width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+  display: grid; place-items: center; background: var(--warn-soft); color: var(--warn);
+}
+.m-pc-tip-ic.bad { background: var(--danger-soft); color: var(--danger); }
 
 /* ── FAB ── */
 .m-fab {
@@ -670,12 +739,13 @@ function mapPeers(issued, live) {
 }
 const MONTHS = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
 function parseLogs(lines) {
-  const now = Date.now(), yr = new Date().getFullYear();
-  return (lines||[]).map((line, i) => {
+  const yr = new Date().getFullYear();
+  return (lines||[]).map(line => {
     const lo = line.toLowerCase();
     const lvl = (lo.includes('error')||lo.includes('failed')) ? 'error'
                : (lo.includes('warn')||lo.includes('delayed')) ? 'warn' : 'info';
-    let t = now - (lines.length - i) * 1000;
+    // No timestamp fallback: lines without a parseable syslog time show none
+    let t = null;
     const m = line.match(/^([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{2}):(\d{2}):(\d{2})/);
     if (m) {
       const d = new Date(yr, MONTHS[m[1]]??0, +m[2], +m[3], +m[4], +m[5]);
@@ -835,28 +905,81 @@ function Login({ onAuth }) {
 
 /* ─── Generic bottom sheet ─── */
 function Sheet({ title, sub, onClose, children, footer, headerExtra }) {
-  const [dragY, setDragY] = useState(0);
-  const [dragging, setDragging] = useState(false);
-  const startY = useRef(0);
+  const sheetRef = useRef(null);
+  const scrimRef = useRef(null);
+  const drag = useRef({ active: false, closing: false, startY: 0, y: 0, lastY: 0, lastT: 0, vel: 0, raf: 0 });
 
-  const onTouchStart = e => { startY.current = e.touches[0].clientY; setDragging(true); };
-  const onTouchMove  = e => { if (dragging) setDragY(Math.max(0, e.touches[0].clientY - startY.current)); };
-  const onTouchEnd   = () => {
-    setDragging(false);
-    if (dragY > 90) { setDragY(900); setTimeout(onClose, 240); }
-    else setDragY(0);
+  // Drag visuals are written straight to the DOM (rAF-batched) so touchmove
+  // never re-renders the sheet contents.
+  const paint = () => {
+    const d = drag.current, sheet = sheetRef.current, scrim = scrimRef.current;
+    d.raf = 0;
+    if (!sheet) return;
+    sheet.style.transform = `translate3d(0, ${d.y}px, 0)`;
+    if (scrim) scrim.style.opacity = String(Math.min(1, Math.max(0, 1 - d.y / (sheet.offsetHeight || 1))));
+  };
+
+  const animateClose = () => {
+    const d = drag.current;
+    if (d.closing) return;
+    d.closing = true;
+    const sheet = sheetRef.current, scrim = scrimRef.current;
+    const h = sheet ? sheet.offsetHeight : 700;
+    if (sheet) {
+      sheet.style.transition = 'transform 0.3s cubic-bezier(0.32,0.72,0,1)';
+      sheet.style.transform = `translate3d(0, ${h + 24}px, 0)`;
+    }
+    if (scrim) {
+      scrim.style.transition = 'opacity 0.3s ease';
+      scrim.style.opacity = '0';
+    }
+    setTimeout(onClose, 300);
+  };
+
+  const onTouchStart = e => {
+    const d = drag.current;
+    if (d.closing) return;
+    d.active = true;
+    d.startY = d.lastY = e.touches[0].clientY;
+    d.lastT = e.timeStamp; d.y = 0; d.vel = 0;
+    if (sheetRef.current) sheetRef.current.style.transition = 'none';
+    if (scrimRef.current) scrimRef.current.style.transition = 'none';
+  };
+
+  const onTouchMove = e => {
+    const d = drag.current;
+    if (!d.active || d.closing) return;
+    const cy = e.touches[0].clientY;
+    const dt = e.timeStamp - d.lastT;
+    if (dt > 0) d.vel = (cy - d.lastY) / dt;
+    d.lastY = cy; d.lastT = e.timeStamp;
+    d.y = Math.max(0, cy - d.startY);
+    if (!d.raf) d.raf = requestAnimationFrame(paint);
+  };
+
+  const onTouchEnd = () => {
+    const d = drag.current;
+    if (!d.active || d.closing) return;
+    d.active = false;
+    if (d.raf) { cancelAnimationFrame(d.raf); paint(); }
+    const h = sheetRef.current ? sheetRef.current.offsetHeight : 700;
+    if (d.y > h * 0.35 || (d.vel > 0.55 && d.y > 30)) { animateClose(); return; }
+    d.y = 0;
+    if (sheetRef.current) {
+      sheetRef.current.style.transition = 'transform 0.32s cubic-bezier(0.2,0.9,0.3,1)';
+      sheetRef.current.style.transform = 'translate3d(0, 0, 0)';
+    }
+    if (scrimRef.current) {
+      scrimRef.current.style.transition = 'opacity 0.25s ease';
+      scrimRef.current.style.opacity = '1';
+    }
   };
 
   return (
-    <div className="m-sheet-scrim" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div
-        className="m-sheet"
-        style={{
-          transform: `translateY(${dragY}px)`,
-          transition: dragging ? 'none' : 'transform 0.28s cubic-bezier(0.2,0.9,0.3,1)',
-        }}
-      >
-        <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{touchAction:'none', flexShrink:0, cursor:'grab'}}>
+    <div className="m-sheet-wrap">
+      <div className="m-sheet-scrim" ref={scrimRef} onClick={animateClose}/>
+      <div className="m-sheet" ref={sheetRef}>
+        <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd} style={{touchAction:'none', flexShrink:0, cursor:'grab'}}>
           <div className="m-sheet-grab"><div className="m-modal-handle"/></div>
           <div className="m-sheet-head">
             <div style={{flex:1, minWidth:0}}>
@@ -864,7 +987,7 @@ function Sheet({ title, sub, onClose, children, footer, headerExtra }) {
               {sub && <div className="m-sheet-sub">{sub}</div>}
             </div>
             {headerExtra}
-            <button className="m-sheet-x" onClick={onClose}><Icon n="x" size={16}/></button>
+            <button className="m-sheet-x" onClick={animateClose}><Icon n="x" size={16}/></button>
           </div>
         </div>
         <div className="m-sheet-body">{children}</div>
@@ -994,7 +1117,7 @@ function RowBtn({ icon, title, sub, badge, onClick, danger }) {
 }
 
 /* ─── Home tab ─── */
-function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService, svcBusy, peers, sessionStarts, sparks, onSeeAllPeers, onPeerClick, onOpenBudget, onRestart }) {
+function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService, svcBusy, peers, sparks, onSeeAllPeers, onPeerClick, onPeerAction, onPeerConfig, onOpenBudget, onRestart }) {
   const svc    = status?.service || {};
   const active  = svc.active;
   const uptime  = fmtUptime(svc.started_at);
@@ -1095,7 +1218,7 @@ function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService,
               <span style={{color:'var(--muted)'}}> / {totalPeers}</span>
             </span>
           </div>
-          <SessionDurationBars peers={peers} sessionStarts={sessionStarts} />
+          <SessionDurationBars peers={peers} />
         </div>
       </div>
 
@@ -1112,7 +1235,7 @@ function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService,
         ) : (
           <div style={{display:'flex', flexDirection:'column', gap:8}}>
             {topPeers.map(p => (
-              <HomePeerRow key={p.name} peer={p} spark={sparks[p.name] || []} onPeerClick={onPeerClick}/>
+              <HomePeerRow key={p.name} peer={p} spark={sparks[p.name] || []} onPeerClick={onPeerClick} onPeerAction={onPeerAction} onPeerConfig={onPeerConfig}/>
             ))}
           </div>
         )}
@@ -2047,81 +2170,45 @@ function DynDNSSheet({ onClose, toast }) {
 }
 
 /* ─── Network & firewall sheet ─── */
-function NetworkSheet({ onClose, toast, askConfirm }) {
+function NetworkSheet({ peers, onClose, toast }) {
   const [diag, setDiag] = useState(null);
-  const [conf, setConf] = useState(null);
-  const [confDirty, setConfDirty] = useState(false);
-  const [fixRes, setFixRes] = useState(null);
-  const [fixBusy, setFixBusy] = useState(false);
-  const [fwBusy, setFwBusy] = useState(false);
-  const [confBusy, setConfBusy] = useState(false);
+  const [health, setHealth] = useState(null);
+  const [pc, setPc] = useState({ running: false, revealed: 0, done: false });
   const [showRaw, setShowRaw] = useState(false);
+  const alive = useRef(true);
+  useEffect(() => () => { alive.current = false; }, []);
 
-  const load = () => {
-    api('/api/diag/vpn').then(setDiag).catch(e => toast(e.message, 'err'));
-    api('/api/config').then(d => {
-      const i = d.data?.Interface || {};
-      setConf({ ListenPort: i.ListenPort || '', DNS: i.DNS || '', Address: i.Address || '' });
-      setConfDirty(false);
-    }).catch(() => {});
-  };
-  useEffect(load, []);
+  // Step results are derived from diag/health at render time
+  const steps = [
+    { id: 'iface',     label: 'Service active',                          res: () => diag.service_active ? 'ok' : 'fail' },
+    { id: 'listen',    label: `Listening on UDP ${diag ? diag.port : ''}`, res: () => diag.listening ? 'ok' : 'fail' },
+    { id: 'fw-in',     label: 'Firewall allows the port',                res: () => diag.ufw_allowed ? 'ok' : 'warn' },
+    { id: 'fw-fwd',    label: 'IP forwarding enabled',                   res: () => diag.ip_forward ? 'ok' : 'fail' },
+    { id: 'nat',       label: 'NAT rules (PostUp)',                      res: () => diag.has_postup ? 'ok' : 'warn' },
+    { id: 'dns',       label: 'External connectivity',                   res: () => health && health.ping_ok ? 'ok' : 'warn' },
+    { id: 'handshake', label: 'Peer handshakes',                         res: () => (health && health.live_clients > 0) ? 'ok' : ((peers || []).length ? 'warn' : 'ok') },
+  ];
 
-  const setC = (k, v) => { setConf(c => ({ ...c, [k]: v })); setConfDirty(true); };
-
-  const runFix = () => askConfirm({
-    title: 'Run auto-fix?',
-    body: 'Enables IP forwarding, adds NAT rules and firewall openings if missing, and (re)starts the service.',
-    label: 'Run fix',
-    action: async () => {
-      setFixBusy(true);
-      try {
-        const r = await api('/api/fix', { method: 'POST' });
-        setFixRes(r);
-        toast(r.ok ? 'Auto-fix finished' : 'Auto-fix finished with errors', r.ok ? 'ok' : 'warn');
-        load();
-      } finally { setFixBusy(false); }
-    },
-  });
-
-  const toggleFw = () => {
-    const allow = !diag.ufw_allowed;
-    const doIt = async () => {
-      setFwBusy(true);
-      try {
-        await api('/api/ports', { method: 'POST', body: JSON.stringify({ port: diag.port, proto: 'udp', allow }) });
-        toast(allow ? `UDP ${diag.port} opened in UFW` : `UDP ${diag.port} rule removed`, 'ok');
-        load();
-      } catch(e) { toast(e.message, 'err'); }
-      finally { setFwBusy(false); }
-    };
-    if (!allow) {
-      askConfirm({
-        title: `Close UDP ${diag.port}?`,
-        body: 'Removing the firewall rule will block incoming WireGuard connections until it is re-added.',
-        label: 'Remove rule', danger: true,
-        action: doIt,
-      });
-    } else doIt();
+  const runCheck = async () => {
+    setPc({ running: true, revealed: 0, done: false });
+    const [d, h] = await Promise.all([
+      api('/api/diag/vpn').catch(e => { toast(e.message, 'err'); return null; }),
+      api('/api/health').catch(() => null),
+    ]);
+    if (!alive.current) return;
+    if (d) setDiag(d);
+    setHealth(h);
+    if (!d) { setPc({ running: false, revealed: 0, done: false }); return; }
+    for (let i = 0; i < steps.length; i++) {
+      await new Promise(r => setTimeout(r, 320 + Math.random() * 260));
+      if (!alive.current) return;
+      setPc({ running: true, revealed: i + 1, done: false });
+    }
+    setPc({ running: false, revealed: steps.length, done: true });
+    api('/api/diag/refresh', { method: 'POST' }).catch(() => {});
   };
 
-  const saveConf = () => askConfirm({
-    title: 'Apply interface config?',
-    body: 'Saving changes to the WireGuard interface restarts the service — active peers reconnect automatically.',
-    label: 'Apply & restart',
-    action: async () => {
-      setConfBusy(true);
-      try {
-        const body = {};
-        if (conf.ListenPort) body.ListenPort = conf.ListenPort;
-        if (conf.DNS) body.DNS = conf.DNS;
-        if (conf.Address) body.Address = conf.Address;
-        await api('/api/config', { method: 'POST', body: JSON.stringify(body) });
-        toast('Interface config applied', 'ok');
-        load();
-      } finally { setConfBusy(false); }
-    },
-  });
+  useEffect(() => { runCheck(); }, []);
 
   if (!diag) {
     return (
@@ -2138,75 +2225,62 @@ function NetworkSheet({ onClose, toast, askConfirm }) {
       title="Network & firewall"
       sub={`wg0 · UDP ${diag.port}`}
       onClose={onClose}
-      footer={
-        <button className="m-btn primary" style={{flex:1}} onClick={runFix} disabled={fixBusy}>
-          {fixBusy ? 'Fixing…' : <><Icon n="wrench" size={14}/> Fix common issues</>}
-        </button>
-      }
     >
-      {/* Health checklist */}
-      <div style={{background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:10, padding:'4px 14px', marginBottom:14}}>
-        <CheckRow ok={diag.service_active} label="Service active"/>
-        <CheckRow ok={diag.listening} label={`Listening on UDP ${diag.port}`}/>
-        <CheckRow ok={diag.ufw_allowed} label="Firewall allows the port"/>
-        <CheckRow ok={diag.ip_forward} label="IP forwarding enabled"/>
-        <CheckRow ok={diag.has_postup} label="NAT rules (PostUp)"/>
+      {/* Port check */}
+      <div style={{background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:10, padding:'0 14px 4px', marginBottom:14}}>
+        <div className="m-pc-head">
+          <span className="m-section-label" style={{margin:0}}>Port check</span>
+          {pc.done
+            ? <button className="m-pc-rerun" onClick={runCheck}>Re-run</button>
+            : <span className="m-pc-count">{pc.revealed}/{steps.length}</span>}
+        </div>
+        <div className="m-pc-bar"><div className="m-pc-fill" style={{width:`${(pc.revealed / steps.length) * 100}%`}}/></div>
+        {steps.map((s, i) => {
+          const revealed = pc.done || i < pc.revealed;
+          const active = pc.running && i === pc.revealed;
+          const r = revealed ? s.res() : null;
+          return (
+            <div key={s.id} className={`m-check-row ${revealed ? '' : 'pending'}`}>
+              {revealed ? (
+                <span className={`m-check-ic ${r === 'ok' ? 'ok' : r === 'warn' ? 'warn' : 'bad'}`}>
+                  <Icon n={r === 'ok' ? 'check' : r === 'warn' ? 'alert' : 'x'} size={12}/>
+                </span>
+              ) : (
+                <span className="m-check-ic idle">{active ? <span className="m-pc-spin"/> : <span className="m-pc-idle-dot"/>}</span>
+              )}
+              <span>{s.label}</span>
+            </div>
+          );
+        })}
         <CheckRow ok={!!diag.public_ip} label="Public IP" val={diag.public_ip || 'unknown'}/>
         <CheckRow ok={!!diag.host_ip} label="Host IP" val={diag.host_ip || '—'}/>
       </div>
 
-      {fixRes && (
-        <div style={{border:'1px solid var(--border)', borderRadius:10, padding:'12px 14px', marginBottom:14, background:'var(--card-raised)'}}>
-          <div className="m-section-label" style={{marginTop:0}}>Auto-fix result</div>
-          {(fixRes.actions || []).map((a, i) => (
-            <div key={i} style={{fontSize:12.5, color:'var(--success)', display:'flex', gap:6, alignItems:'center', padding:'2px 0'}}>
-              <Icon n="check" size={12}/> {a}
+      {/* First issue found by the check, with how to resolve it */}
+      {pc.done && (() => {
+        const bad = steps.find(s => s.res() !== 'ok');
+        if (!bad) return null;
+        const tips = {
+          'iface':     { title: 'Service is down', desc: 'The WireGuard service is not active — peers cannot connect. Start it on the server.', cmd: 'sudo systemctl start wg-quick@wg0' },
+          'listen':    { title: `UDP ${diag.port} is not bound`, desc: 'Nothing is listening on the WireGuard port. Check ListenPort in the config, then restart the service.', cmd: `sudo ss -ulnp | grep ${diag.port}\nsudo systemctl restart wg-quick@wg0` },
+          'fw-in':     { title: 'Firewall may block the port', desc: `No UFW rule found for UDP ${diag.port}. Add an accept rule on the server.`, cmd: `sudo ufw allow ${diag.port}/udp` },
+          'fw-fwd':    { title: 'IP forwarding disabled', desc: 'Peers can connect but cannot route traffic. Enable forwarding in the kernel.', cmd: 'sudo sysctl -w net.ipv4.ip_forward=1' },
+          'nat':       { title: 'NAT / PostUp rule missing', desc: 'Peer traffic is not masqueraded. Add a MASQUERADE rule for your WAN interface.', cmd: 'sudo iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE' },
+          'dns':       { title: 'No internet from server', desc: 'The server cannot reach 1.1.1.1 — peer traffic may not route correctly. Check the default gateway.', cmd: 'ping -c3 1.1.1.1\nip route show' },
+          'handshake': { title: 'No recent peer handshakes', desc: 'Verify peer configs point at this server and PersistentKeepalive is set.', cmd: 'sudo wg show wg0 latest-handshakes' },
+        };
+        const tip = tips[bad.id];
+        return (
+          <div className="m-pc-tip">
+            <div className={`m-pc-tip-ic ${bad.res() === 'fail' ? 'bad' : ''}`}><Icon n="alert" size={13}/></div>
+            <div style={{flex:1, minWidth:0}}>
+              <div style={{fontSize:13, fontWeight:600, color:'var(--ink)'}}>{tip.title}</div>
+              <div className="m-hint" style={{marginTop:2}}>{tip.desc}</div>
+              <pre className="m-raw-pre" style={{marginTop:8, marginBottom:0}} onClick={() => { navigator.clipboard?.writeText(tip.cmd); toast('Command copied', 'ok'); }}>{tip.cmd}</pre>
             </div>
-          ))}
-          {(fixRes.errors || []).map((a, i) => (
-            <div key={i} style={{fontSize:12.5, color:'var(--danger)', display:'flex', gap:6, alignItems:'center', padding:'2px 0'}}>
-              <Icon n="x" size={12}/> {a}
-            </div>
-          ))}
-          {!(fixRes.actions || []).length && !(fixRes.errors || []).length && (
-            <div className="m-hint">Nothing to fix — everything looked fine.</div>
-          )}
-        </div>
-      )}
-
-      {/* Firewall toggle */}
-      <div className="m-settings-card" style={{marginBottom:16}}>
-        <div className="m-settings-row">
-          <div>
-            <div className="m-settings-lbl">UFW rule for UDP {diag.port}</div>
-            <div className="m-settings-sub">{diag.ufw_allowed ? 'allowed' : 'not allowed'}</div>
           </div>
-          <Toggle value={diag.ufw_allowed} onChange={toggleFw} disabled={fwBusy}/>
-        </div>
-      </div>
-
-      {/* Interface config */}
-      <div className="m-section-label" style={{marginTop:0}}>Interface config</div>
-      {conf && (
-        <>
-          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
-            <Field label="Listen port">
-              <input className="m-input mono" type="number" inputMode="numeric" value={conf.ListenPort} onChange={e => setC('ListenPort', e.target.value)}/>
-            </Field>
-            <Field label="DNS">
-              <input className="m-input mono" value={conf.DNS} onChange={e => setC('DNS', e.target.value)} placeholder="none" autoCapitalize="none"/>
-            </Field>
-          </div>
-          <Field label="Address" hint="Server address inside the VPN subnet">
-            <input className="m-input mono" value={conf.Address} onChange={e => setC('Address', e.target.value)} autoCapitalize="none"/>
-          </Field>
-          {confDirty && (
-            <button className="m-btn" style={{width:'100%', marginBottom:14}} onClick={saveConf} disabled={confBusy}>
-              {confBusy ? 'Applying…' : 'Apply interface config (restarts service)'}
-            </button>
-          )}
-        </>
-      )}
+        );
+      })()}
 
       {/* Raw output */}
       <button
@@ -2405,17 +2479,18 @@ function PasswordSheet({ onClose, toast }) {
 }
 
 /* ─── Session Duration Bars ─── */
-function SessionDurationBars({ peers, sessionStarts }) {
+function SessionDurationBars({ peers }) {
+  // Bar = handshake freshness (WireGuard's own liveness signal): full right
+  // after a handshake, draining as it approaches the HS_TIMEOUT cutoff.
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 30000);
+    const id = setInterval(() => setNow(Date.now()), 10000);
     return () => clearInterval(id);
   }, []);
 
   const online = peers
-    .filter(p => p.status === 'online')
-    .map(p => ({ ...p, since: sessionStarts[p.name] || now }))
-    .sort((a, b) => a.since - b.since);
+    .filter(p => p.status === 'online' && p.lastHs)
+    .sort((a, b) => b.lastHs - a.lastHs);
 
   if (online.length === 0) {
     return (
@@ -2425,21 +2500,20 @@ function SessionDurationBars({ peers, sessionStarts }) {
     );
   }
 
-  const maxDur = now - online[0].since || 1;
   const shown = online.slice(0, 5);
   const extra = online.length - shown.length;
 
   return (
     <div style={{display:'flex', flexDirection:'column', gap:10}}>
       {shown.map(p => {
-        const pct = Math.max(0.05, (now - p.since) / maxDur);
+        const pct = Math.max(0.05, Math.min(1, 1 - (now - p.lastHs) / (HS_TIMEOUT * 1000)));
         return (
           <div key={p.name} style={{display:'flex', alignItems:'center', gap:10}}>
             <span style={{width:7, height:7, borderRadius:'50%', background:'var(--success)', flexShrink:0}}/>
             <div style={{flex:1, minWidth:0}}>
               <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:4}}>
                 <span style={{fontSize:12, fontWeight:600, color:'var(--ink)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', paddingRight:8}}>{p.name}</span>
-                <span style={{fontFamily:'var(--mono)', fontSize:11, color:'var(--muted)', flexShrink:0}}>{fmtUptime(p.since)}</span>
+                <span style={{fontFamily:'var(--mono)', fontSize:11, color:'var(--muted)', flexShrink:0}}>hs {fmtRel(p.lastHs)}</span>
               </div>
               <div style={{height:3, background:'var(--border)', borderRadius:2}}>
                 <div style={{height:'100%', width:`${pct * 100}%`, background:'var(--accent)', borderRadius:2}}/>
@@ -2455,8 +2529,130 @@ function SessionDurationBars({ peers, sessionStarts }) {
   );
 }
 
+/* ─── Swipeable row (swipe left to reveal quick actions) ─── */
+let _closeOpenSwipeRow = null; // at most one row open at a time
+
+function SwipeRow({ actions, onTap, children }) {
+  const rowRef = useRef(null);
+  const actionsRef = useRef(null);
+  const hideTimer = useRef(0);
+  const drag = useRef({ startX: 0, startY: 0, base: 0, x: 0, dir: null, active: false });
+  const [open, setOpen] = useState(false);
+  const width = actions.length * 76;
+
+  const setX = (x, animate) => {
+    const el = rowRef.current;
+    if (!el) return;
+    el.style.transition = animate ? 'transform 0.28s cubic-bezier(0.2,0.9,0.3,1)' : 'none';
+    el.style.transform = `translate3d(${x}px, 0, 0)`;
+  };
+
+  const showActions = () => {
+    clearTimeout(hideTimer.current);
+    if (actionsRef.current) actionsRef.current.style.opacity = '1';
+  };
+  const hideActionsSoon = () => {
+    clearTimeout(hideTimer.current);
+    hideTimer.current = setTimeout(() => {
+      if (actionsRef.current) actionsRef.current.style.opacity = '0';
+    }, 300); // after the row has slid back over them
+  };
+  useEffect(() => () => clearTimeout(hideTimer.current), []);
+
+  const close = useCallback(() => {
+    drag.current.base = 0;
+    setX(0, true);
+    setOpen(false);
+    hideActionsSoon();
+    if (_closeOpenSwipeRow === close) _closeOpenSwipeRow = null;
+  }, []);
+
+  useEffect(() => () => { if (_closeOpenSwipeRow === close) _closeOpenSwipeRow = null; }, [close]);
+
+  const onTouchStart = e => {
+    const d = drag.current;
+    d.startX = e.touches[0].clientX;
+    d.startY = e.touches[0].clientY;
+    d.x = d.base;
+    d.dir = null;
+    d.active = true;
+    if (rowRef.current) rowRef.current.style.transition = 'none';
+  };
+
+  const onTouchMove = e => {
+    const d = drag.current;
+    if (!d.active) return;
+    const dx = e.touches[0].clientX - d.startX;
+    const dy = e.touches[0].clientY - d.startY;
+    if (!d.dir) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      d.dir = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+      if (d.dir === 'h') {
+        showActions();
+        if (_closeOpenSwipeRow && _closeOpenSwipeRow !== close) _closeOpenSwipeRow();
+      }
+    }
+    if (d.dir !== 'h') return;
+    let x = d.base + dx;
+    if (x > 0) x = 0;
+    if (x < -width) x = -width + (x + width) / 3; // resistance past the buttons
+    d.x = x;
+    setX(x, false);
+  };
+
+  const onTouchEnd = () => {
+    const d = drag.current;
+    if (!d.active) return;
+    d.active = false;
+    if (d.dir !== 'h') return;
+    const shouldOpen = d.x < -width * 0.4;
+    d.base = shouldOpen ? -width : 0;
+    setX(d.base, true);
+    setOpen(shouldOpen);
+    if (shouldOpen) {
+      if (_closeOpenSwipeRow && _closeOpenSwipeRow !== close) _closeOpenSwipeRow();
+      _closeOpenSwipeRow = close;
+    } else {
+      hideActionsSoon();
+      if (_closeOpenSwipeRow === close) _closeOpenSwipeRow = null;
+    }
+  };
+
+  const handleClick = () => {
+    const d = drag.current;
+    if (d.dir === 'h') { d.dir = null; return; } // click fired by a swipe, ignore
+    if (d.base !== 0) { close(); return; }       // tap on an open row just closes it
+    onTap && onTap();
+  };
+
+  return (
+    <div className="m-swipe-wrap">
+      <div className="m-swipe-actions" ref={actionsRef} style={{width}}>
+        {actions.map(a => (
+          <button
+            key={a.label} className={`m-swipe-btn ${a.cls || ''}`}
+            tabIndex={open ? 0 : -1} aria-hidden={!open}
+            onClick={() => { close(); a.onTap(); }}
+          >
+            <Icon n={a.icon} size={17}/>
+            {a.label}
+          </button>
+        ))}
+      </div>
+      <div
+        className="m-swipe-row" ref={rowRef}
+        onTouchStart={onTouchStart} onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}
+        onClick={handleClick}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Home peer row ─── */
-function HomePeerRow({ peer, spark, onPeerClick }) {
+function HomePeerRow({ peer, spark, onPeerClick, onPeerAction, onPeerConfig }) {
   const initials = peer.name.slice(0,2).toUpperCase();
   const avatarClass = peer.status === 'paused' ? 'paused' : peer.status === 'offline' ? 'offline' : '';
   const gid = `ps${peer.name.replace(/[^a-zA-Z0-9]/g,'')}`;
@@ -2468,8 +2664,15 @@ function HomePeerRow({ peer, spark, onPeerClick }) {
     ? (spark||[]).map((v,i) => `${i===0?'M':'L'} ${toX(i)} ${toY(v)}`).join(' ')
     : '';
   const sparkFill = sparkLine ? `${sparkLine} L 100 50 L 0 50 Z` : '';
+  const actions = [
+    { icon:'qr', label:'Config', cls:'qr', onTap: () => onPeerConfig(peer.name) },
+    peer.status === 'paused'
+      ? { icon:'play',  label:'Resume', cls:'resume', onTap: () => onPeerAction(peer.name, 'resume') }
+      : { icon:'pause', label:'Pause',  cls:'pause',  onTap: () => onPeerAction(peer.name, 'pause') },
+  ];
   return (
-    <div className="m-card" style={{padding:'12px 14px', display:'flex', alignItems:'center', gap:12, cursor:'pointer', WebkitTapHighlightColor:'transparent'}} onClick={() => onPeerClick(peer.name)}>
+    <SwipeRow actions={actions} onTap={() => onPeerClick(peer.name)}>
+    <div className="m-card" style={{padding:'12px 14px', display:'flex', alignItems:'center', gap:12, cursor:'pointer', WebkitTapHighlightColor:'transparent'}}>
       <div className={`m-peer-avatar ${avatarClass}`} style={{flexShrink:0}}>{initials}</div>
       <div style={{flex:1, minWidth:0}}>
         <div style={{fontSize:14, fontWeight:600, color:'var(--ink)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', display:'flex', alignItems:'center', gap:6}}>
@@ -2492,11 +2695,12 @@ function HomePeerRow({ peer, spark, onPeerClick }) {
         </svg>
       ) : <div style={{width:110, height:44, flexShrink:0}}/>}
     </div>
+    </SwipeRow>
   );
 }
 
 /* ─── Peers tab ─── */
-function PeersTab({ peers, sparks, onPeerClick, onAddPeer }) {
+function PeersTab({ peers, sparks, onPeerClick, onPeerAction, onPeerConfig, onAddPeer }) {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
   const ref = useRef(null);
@@ -2559,7 +2763,7 @@ function PeersTab({ peers, sparks, onPeerClick, onAddPeer }) {
       ) : (
         <div className="m-peer-list">
           {filtered.map(p => (
-            <HomePeerRow key={p.name} peer={p} spark={sparks[p.name] || []} onPeerClick={onPeerClick}/>
+            <HomePeerRow key={p.name} peer={p} spark={sparks[p.name] || []} onPeerClick={onPeerClick} onPeerAction={onPeerAction} onPeerConfig={onPeerConfig}/>
           ))}
         </div>
       )}
@@ -2623,7 +2827,7 @@ function LogsTab({ toast }) {
   };
 
   const share = async () => {
-    const text = logs.map(l => `${timeStr(l.t)} [${l.lvl}] ${l.msg}`).join('\n');
+    const text = logs.map(l => `${l.t != null ? timeStr(l.t) : '--:--:--'} [${l.lvl}] ${l.msg}`).join('\n');
     const ok = await shareText('wireguard-logs.txt', text, 'WireGuard logs');
     if (!ok) {
       navigator.clipboard?.writeText(text)
@@ -2673,7 +2877,7 @@ function LogsTab({ toast }) {
           {logs.length === 0 && <div style={{color:'var(--muted)',fontStyle:'italic'}}>No logs yet…</div>}
           {logs.map((l, i) => (
             <div key={i} className={`m-log-line m-log-${l.lvl}`}>
-              <span className="m-log-time">{timeStr(l.t)}</span>
+              <span className="m-log-time">{l.t != null ? timeStr(l.t) : '--:--:--'}</span>
               <span className="m-log-lvl">{l.lvl}</span>
               <span className="m-log-msg">{l.msg}</span>
             </div>
@@ -2711,11 +2915,6 @@ function SettingsTab({ theme, setTheme, accent, setAccent, chartTweaks, setChart
 
   const svc = status?.service || {};
   const budget = status?.data_budget;
-
-  const toggleBoot = () => {
-    const enable = !svc.enabled;
-    onService(enable ? 'enable' : 'disable');
-  };
 
   return (
     <div className="m-scroll-pad m-settings">
@@ -2790,13 +2989,6 @@ function SettingsTab({ theme, setTheme, accent, setAccent, chartTweaks, setChart
       <div>
         <div className="m-settings-title">Service</div>
         <div className="m-settings-card">
-          <div className="m-settings-row">
-            <div>
-              <div className="m-settings-lbl">Start on boot</div>
-              <div className="m-settings-sub">{svc.unit || 'wg-quick@wg0'}</div>
-            </div>
-            <Toggle value={svc.enabled} onChange={toggleBoot} disabled={!!svcBusy}/>
-          </div>
           <div className="m-settings-row" style={{gap:8}}>
             <button
               className="m-btn" disabled={!!svcBusy}
@@ -2872,7 +3064,6 @@ function MobileApp() {
   const [txBps, setTxBps] = useState(0);
   const [trafficSamples, setTrafficSamples] = useState([]);
   const [peers, setPeers] = useState([]);
-  const [sessionStarts, setSessionStarts] = useState({});
   const [sparks, setSparks] = useState({});
   const [peerByteHistory, setPeerByteHistory] = useState({});
   const [svcBusy, setSvcBusy] = useState(null);
@@ -2889,6 +3080,8 @@ function MobileApp() {
 
   const prevNetRef = useRef(null);
   const prevPeerBytesRef = useRef({});
+  const contentRef = useRef(null);
+  const ptrRef = useRef(null);
   const { toasts, add: toast } = useToast();
 
   /* Theme + accent */
@@ -2930,13 +3123,6 @@ function MobileApp() {
     const { issued, live } = s.clients || {};
     const _mapped = mapPeers(issued, live);
     const _now = Date.now();
-    setSessionStarts(prev => {
-      const next = {};
-      _mapped.forEach(p => {
-        if (p.status === 'online') next[p.name] = prev[p.name] || _now;
-      });
-      return next;
-    });
     setPeers(_mapped);
     const serverSparks = (s.clients || {}).spark_history || {};
     const prevBytes = prevPeerBytesRef.current;
@@ -3028,8 +3214,84 @@ function MobileApp() {
     api(`/api/update/check${dev ? '?dev=1' : ''}`).then(setUpdateInfo).catch(() => {});
   }, [authState]);
 
+  /* Pull-to-refresh (Home & Peers tabs) */
+  const ptrEnabled = tab === 'home' || tab === 'peers';
+  useEffect(() => {
+    const el = contentRef.current;
+    if (authState !== 'ok' || !ptrEnabled || !el) return;
+    const TRIGGER = 58;   // pull distance (after damping) that fires a refresh
+    const REST = 52;      // where the spinner parks while refreshing
+    let startY = 0, startX = 0, pull = 0, dir = null, armed = false, busy = false;
+
+    const paint = (animate) => {
+      const ind = ptrRef.current;
+      if (!ind) return;
+      ind.style.transition = animate ? 'transform 0.3s cubic-bezier(0.2,0.9,0.3,1), opacity 0.3s ease' : 'none';
+      ind.style.opacity = String(Math.min(1, pull / TRIGGER));
+      ind.style.transform = `translate(-50%, ${pull}px) rotate(${pull * 2.2}deg)`;
+    };
+    const reset = (animate) => {
+      pull = 0;
+      paint(animate);
+      ptrRef.current && ptrRef.current.classList.remove('spin');
+    };
+
+    const onStart = (e) => {
+      if (busy) return;
+      armed = el.scrollTop <= 0;
+      dir = null;
+      startY = e.touches[0].clientY;
+      startX = e.touches[0].clientX;
+    };
+    const onMove = (e) => {
+      if (busy || !armed) return;
+      if (el.scrollTop > 0) { armed = false; reset(false); return; }
+      const dy = e.touches[0].clientY - startY;
+      const dx = e.touches[0].clientX - startX;
+      if (!dir) {
+        if (Math.abs(dy) < 8 && Math.abs(dx) < 8) return;
+        dir = Math.abs(dy) > Math.abs(dx) ? 'v' : 'h';
+        if (dir === 'h') { armed = false; return; }
+      }
+      if (dy <= 0) { pull = 0; paint(false); return; }
+      if (e.cancelable) e.preventDefault();
+      pull = Math.min(90, dy * 0.45);
+      paint(false);
+    };
+    const onEnd = () => {
+      if (busy || !armed) return;
+      armed = false;
+      if (dir !== 'v') return;
+      if (pull >= TRIGGER) {
+        busy = true;
+        pull = REST;
+        ptrRef.current && ptrRef.current.classList.add('spin');
+        paint(true);
+        const started = Date.now();
+        Promise.resolve(refreshStatus()).catch(() => {}).then(() => {
+          const wait = Math.max(0, 500 - (Date.now() - started));
+          setTimeout(() => { busy = false; reset(true); }, wait);
+        });
+      } else {
+        reset(true);
+      }
+    };
+
+    el.addEventListener('touchstart', onStart, { passive: true });
+    el.addEventListener('touchmove', onMove, { passive: false });
+    el.addEventListener('touchend', onEnd);
+    el.addEventListener('touchcancel', onEnd);
+    return () => {
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove', onMove);
+      el.removeEventListener('touchend', onEnd);
+      el.removeEventListener('touchcancel', onEnd);
+      reset(false);
+    };
+  }, [authState, ptrEnabled, refreshStatus]);
+
   /* Service control */
-  const svcMsg = { start: 'started', stop: 'stopped', restart: 'restarted', reload: 'config reloaded', enable: 'enabled on boot', disable: 'disabled on boot' };
+  const svcMsg = { start: 'started', stop: 'stopped', restart: 'restarted', reload: 'config reloaded' };
   const handleService = async (action) => {
     setSvcBusy(action);
     try {
@@ -3048,6 +3310,16 @@ function MobileApp() {
   const handlePeerAction = async (name, action) => {
     await api(`/api/users/${encodeURIComponent(name)}/${action}`, { method: 'POST' });
     await refreshStatus();
+  };
+
+  /* Same, but self-contained with toasts (used by swipe actions) */
+  const quickPeerAction = async (name, action) => {
+    try {
+      await handlePeerAction(name, action);
+      toast(action === 'pause' ? `${name} paused` : `${name} resumed`, 'ok');
+    } catch(e) {
+      toast(e.message, 'err');
+    }
   };
 
   /* Peer revoke (with confirm) */
@@ -3137,7 +3409,12 @@ function MobileApp() {
       </div>
 
       {/* Content */}
-      <div className="m-content">
+      <div className="m-content" ref={contentRef}>
+        {ptrEnabled && (
+          <div className="m-ptr" ref={ptrRef} aria-hidden="true">
+            <Icon n="refresh" size={16}/>
+          </div>
+        )}
         {tab === 'settings' ? (
           <SettingsTab
             theme={theme} setTheme={setTheme}
@@ -3160,9 +3437,11 @@ function MobileApp() {
             status={status} rxBps={rxBps} txBps={txBps}
             trafficSamples={trafficSamples} chartTweaks={chartTweaks}
             onService={handleService} svcBusy={svcBusy}
-            peers={peers} sessionStarts={sessionStarts} sparks={sparks}
+            peers={peers} sparks={sparks}
             onSeeAllPeers={() => setTab('peers')}
             onPeerClick={n => setDrawerPeerName(n)}
+            onPeerAction={quickPeerAction}
+            onPeerConfig={n => setCfgPeerName(n)}
             onOpenBudget={() => setSheet('budget')}
             onRestart={() => askConfirm({
               title: 'Restart WireGuard?',
@@ -3175,6 +3454,8 @@ function MobileApp() {
           <PeersTab
             peers={peers} sparks={sparks}
             onPeerClick={n => setDrawerPeerName(n)}
+            onPeerAction={quickPeerAction}
+            onPeerConfig={n => setCfgPeerName(n)}
             onAddPeer={() => setAddOpen(true)}
           />
         )}
@@ -3240,7 +3521,7 @@ function MobileApp() {
 
       {sheet === 'budget'   && <BudgetSheet onClose={() => setSheet(null)} toast={toast} refreshStatus={refreshStatus}/>}
       {sheet === 'dyndns'   && <DynDNSSheet onClose={() => setSheet(null)} toast={toast}/>}
-      {sheet === 'network'  && <NetworkSheet onClose={() => setSheet(null)} toast={toast} askConfirm={askConfirm}/>}
+      {sheet === 'network'  && <NetworkSheet peers={peers} onClose={() => setSheet(null)} toast={toast}/>}
       {sheet === 'update'   && <UpdateSheet onClose={() => setSheet(null)} toast={toast} updateInfo={updateInfo} setUpdateInfo={setUpdateInfo}/>}
       {sheet === 'password' && <PasswordSheet onClose={() => setSheet(null)} toast={toast}/>}
 
