@@ -1388,7 +1388,7 @@ def _update_handshake_cache(name: str, ts: int) -> None:
 
 def _load_data_budget_db() -> Dict[str, Any]:
     default = {
-        "settings": {"budget_gb": 50, "alerts": True, "reset_time": "00:00", "peer_budgets": {}, "enforcement": {"action": "none", "throttle_mbps": 5}},
+        "settings": {"enabled": True, "budget_gb": 50, "alerts": True, "reset_time": "00:00", "peer_budgets": {}, "enforcement": {"action": "none", "throttle_mbps": 5}},
         "period_start": 0,
         "baselines": {},
         "carryover": {},
@@ -1426,6 +1426,7 @@ def _load_data_budget_db() -> Dict[str, Any]:
     except (TypeError, ValueError):
         enf_mbps = 5
     default["settings"].update({
+        "enabled": bool(settings.get("enabled", default["settings"]["enabled"])),
         "budget_gb": max(1, int(settings.get("budget_gb", default["settings"]["budget_gb"]) or 50)),
         "alerts": bool(settings.get("alerts", default["settings"]["alerts"])),
         "reset_time": str(settings.get("reset_time", default["settings"]["reset_time"])),
@@ -1721,9 +1722,10 @@ def _data_budget_state_locked(issued: List[Dict[str, Any]], live: List[Dict[str,
         total_used += used
         rows.append({"name": name, "bytes": used, "current_total": current, "baseline": int(base or 0)})
     rows.sort(key=lambda x: x["bytes"], reverse=True)
+    budget_enabled = bool(settings.get("enabled", True))
     budget_bytes = int(settings["budget_gb"]) * 1024 * 1024 * 1024
     pct = (total_used / budget_bytes * 100) if budget_bytes else 0
-    if settings.get("alerts", True):
+    if budget_enabled and settings.get("alerts", True):
         state = db.setdefault("alert_state", {})
         level = "100" if pct >= 100 else "90" if pct >= 90 else "70" if pct >= 70 else ""
         if level and state.get("last_level") != level:
@@ -1764,7 +1766,10 @@ def _data_budget_state_locked(issued: List[Dict[str, Any]], live: List[Dict[str,
                 changed = True
     if persist:
         try:
-            if _enforce_budgets(db, rows, settings, pct):
+            # When the budget feature is off, run enforcement with action "none"
+            # so any existing throttles/pauses are lifted.
+            enf_settings = settings if budget_enabled else {**settings, "enforcement": {"action": "none", "throttle_mbps": (settings.get("enforcement") or {}).get("throttle_mbps", 5)}}
+            if _enforce_budgets(db, rows, enf_settings, pct):
                 changed = True
         except Exception:
             app.logger.exception("budget_enforce_failed")
@@ -2685,6 +2690,8 @@ def api_data_budget():
             db = _load_data_budget_db()
             settings = db.setdefault("settings", {})
             old = dict(settings)
+            if "enabled" in data:
+                settings["enabled"] = bool(data.get("enabled"))
             if "budget_gb" in data:
                 try:
                     settings["budget_gb"] = max(1, min(100000, int(data.get("budget_gb") or 1)))
@@ -2728,6 +2735,8 @@ def api_data_budget():
             _save_data_budget_db(db)
         app.logger.info("data_budget_settings_update old=%s new=%s", old, settings)
         changes = []
+        if old.get("enabled", True) != settings.get("enabled", True):
+            changes.append(f"daily budget {'enabled' if settings.get('enabled', True) else 'disabled — tracking usage only'}")
         if old.get("budget_gb") != settings.get("budget_gb"):
             changes.append(f"daily budget {old.get('budget_gb')} → {settings.get('budget_gb')} GB")
         if old.get("alerts") != settings.get("alerts"):

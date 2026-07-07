@@ -670,9 +670,50 @@ function LogsPanel({ logs, notifications = [], onExpand, onDismiss = () => {}, s
 }
 
 // ============================================================
+// StepperInput — typeable value between the − / + stepper buttons.
+// Commits on blur/Enter, reverts on Escape.
+// ============================================================
+function StepperInput({ value, unit, min = 1, max = 100000, disabled, onCommit }) {
+  const [draft, setDraft] = _useState(null);
+  const cancelRef = _useRef(false);
+  const shown = draft != null ? draft : String(value);
+  const commit = (raw) => {
+    setDraft(null);
+    if (cancelRef.current) { cancelRef.current = false; return; }
+    const n = parseInt(raw, 10);
+    if (isNaN(n)) return;
+    const clamped = Math.max(min, Math.min(max, n));
+    if (clamped !== value) onCommit(clamped);
+  };
+  return (
+    <span className="stepper-val">
+      <input
+        className="mono"
+        type="number"
+        inputMode="numeric"
+        min={min}
+        max={max}
+        disabled={disabled}
+        value={shown}
+        style={{ width: `${Math.max(2, String(shown).length + 0.5)}ch` }}
+        onFocus={e => e.target.select()}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={e => commit(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') e.currentTarget.blur();
+          else if (e.key === 'Escape') { cancelRef.current = true; e.currentTarget.blur(); }
+        }}
+        aria-label={unit ? `Value in ${unit}` : 'Value'}
+      />
+      {unit && <span className="stepper-unit">{unit}</span>}
+    </span>
+  );
+}
+
+// ============================================================
 // DataBudgetDrawer
 // ============================================================
-function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets = {}, setPeerBudget, enforcement = { action: 'none', throttle_mbps: 5 }, budgetUsage, updateBudgetSettings, onClose }) {
+function DataBudgetDrawer({ total, budget, enabled = true, alerts, resetTime, peers, peerBudgets = {}, setPeerBudget, enforcement = { action: 'none', throttle_mbps: 5 }, budgetUsage, updateBudgetSettings, onClose }) {
   const [saving, setSaving] = _useState(false);
   const [msg, setMsg] = _useState('');
 
@@ -765,28 +806,32 @@ function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets
               <div className="budget-hero-nums">
                 <div className="budget-used">
                   <div className="budget-big">{window.WG.formatBytes(total).split(' ')[0]}<span className="budget-unit">{window.WG.formatBytes(total).split(' ')[1]}</span></div>
-                  <div className="budget-lbl">used</div>
+                  <div className="budget-lbl">{enabled ? 'used' : 'used today'}</div>
                 </div>
-                <div className="budget-divider" />
-                <div className="budget-used">
-                  <div className="budget-big">{window.WG.formatBytes(remaining).split(' ')[0]}<span className="budget-unit">{window.WG.formatBytes(remaining).split(' ')[1]}</span></div>
-                  <div className="budget-lbl">remaining</div>
-                </div>
+                {enabled && <div className="budget-divider" />}
+                {enabled && (
+                  <div className="budget-used">
+                    <div className="budget-big">{window.WG.formatBytes(remaining).split(' ')[0]}<span className="budget-unit">{window.WG.formatBytes(remaining).split(' ')[1]}</span></div>
+                    <div className="budget-lbl">remaining</div>
+                  </div>
+                )}
               </div>
-              <div className="budget-bar-wrap">
-                <div className="budget-bar">
-                  <div className="budget-bar-fill" style={{ width: `${pct}%`, background: pct > 90 ? 'var(--danger)' : pct > 70 ? 'var(--warn)' : 'var(--accent)' }} />
-                  {[70, 90].map(t => (
-                    <div key={t} className="budget-marker" style={{ left: `${t}%` }} title={`${t}% threshold`} />
-                  ))}
+              {enabled && (
+                <div className="budget-bar-wrap">
+                  <div className="budget-bar">
+                    <div className="budget-bar-fill" style={{ width: `${pct}%`, background: pct > 90 ? 'var(--danger)' : pct > 70 ? 'var(--warn)' : 'var(--accent)' }} />
+                    {[70, 90].map(t => (
+                      <div key={t} className="budget-marker" style={{ left: `${t}%` }} title={`${t}% threshold`} />
+                    ))}
+                  </div>
+                  <div className="budget-bar-labels">
+                    <span>0</span>
+                    <span className="mono">{pct.toFixed(1)}%</span>
+                    <span>{budget} GB</span>
+                  </div>
                 </div>
-                <div className="budget-bar-labels">
-                  <span>0</span>
-                  <span className="mono">{pct.toFixed(1)}%</span>
-                  <span>{budget} GB</span>
-                </div>
-              </div>
-              {enfAction !== 'none' && (
+              )}
+              {enabled && enfAction !== 'none' && (
                 <div className="budget-enf">
                   <span>{enfLabel}</span>
                   <span className="budget-enf-counts">
@@ -801,13 +846,13 @@ function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets
 
           <section className="drawer-section">
             <div className="section-head">
-              <span className="section-label">BUDGET BY PEER</span>
-              <span className="section-meta">{peerBreakdown.length} peers · daily</span>
+              <span className="section-label">{enabled ? 'BUDGET BY PEER' : 'USAGE BY PEER'}</span>
+              <span className="section-meta">{peerBreakdown.length} peers · {enabled ? 'daily' : 'today'}</span>
             </div>
             <div className="peer-budget-list">
               {peerBreakdown.map(p => {
                 const b = peerBudgets[p.id] != null ? peerBudgets[p.id] : 'inf';
-                const isInf = b === 'inf';
+                const isInf = !enabled || b === 'inf';
                 const pcap = isInf ? 0 : b * 1024 * 1024 * 1024;
                 const ppct = isInf ? 0 : Math.min(100, (p.total / pcap) * 100);
                 const over = !isInf && p.total > pcap;
@@ -824,20 +869,22 @@ function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets
                         </span>
                         <span className="pb-device">{p.device || ''}</span>
                       </div>
-                      <div className="pb-ctrl">
-                        {!isInf && (
-                          <div className="stepper stepper-sm">
-                            <button onClick={() => setPeerBudget(p.id, Math.max(1, b - 1))}>−</button>
-                            <span className="mono">{b} GB</span>
-                            <button onClick={() => setPeerBudget(p.id, b + 1)}>+</button>
-                          </div>
-                        )}
-                        <button
-                          className={`pb-inf-btn${isInf ? ' on' : ''}`}
-                          onClick={() => setPeerBudget(p.id, isInf ? 5 : 'inf')}
-                          title={isInf ? 'Set a daily limit' : 'Remove limit'}
-                        ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18.178 8c5.096 0 5.096 8 0 8-5.095 0-7.133-8-12.739-8-4.585 0-4.585 8 0 8 5.606 0 7.644-8 12.74-8z"/></svg></button>
-                      </div>
+                      {enabled && (
+                        <div className="pb-ctrl">
+                          {!isInf && (
+                            <div className="stepper stepper-sm">
+                              <button onClick={() => setPeerBudget(p.id, Math.max(1, b - 1))}>−</button>
+                              <StepperInput value={b} unit="GB" onCommit={v => setPeerBudget(p.id, v)} />
+                              <button onClick={() => setPeerBudget(p.id, b + 1)}>+</button>
+                            </div>
+                          )}
+                          <button
+                            className={`pb-inf-btn${isInf ? ' on' : ''}`}
+                            onClick={() => setPeerBudget(p.id, isInf ? 5 : 'inf')}
+                            title={isInf ? 'Set a daily limit' : 'Remove limit'}
+                          ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18.178 8c5.096 0 5.096 8 0 8-5.095 0-7.133-8-12.739-8-4.585 0-4.585 8 0 8 5.606 0 7.644-8 12.74-8z"/></svg></button>
+                        </div>
+                      )}
                     </div>
                     <div className={`pb-bar${isInf ? ' inf' : ''}`}>
                       {isInf
@@ -846,9 +893,11 @@ function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets
                     </div>
                     <div className="pb-foot">
                       <span className="pb-used mono">{window.WG.formatBytes(p.total)} <span className="pb-used-lbl">today</span></span>
-                      {isInf
-                        ? <span className="pb-status mono pb-status-inf">∞ no limit</span>
-                        : <span className={`pb-status mono${over ? ' pb-status-over' : ''}`}>{over ? `over by ${window.WG.formatBytes(p.total - pcap)}` : `${ppct.toFixed(0)}% of ${b} GB`}</span>}
+                      {!enabled
+                        ? null
+                        : isInf
+                          ? <span className="pb-status mono pb-status-inf">∞ no limit</span>
+                          : <span className={`pb-status mono${over ? ' pb-status-over' : ''}`}>{over ? `over by ${window.WG.formatBytes(p.total - pcap)}` : `${ppct.toFixed(0)}% of ${b} GB`}</span>}
                     </div>
                   </div>
                 );
@@ -864,17 +913,30 @@ function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets
               <div className="setting-row">
                 <div>
                   <div className="setting-title">Daily budget</div>
-                  <div className="setting-desc">Daily data limit across all peers</div>
+                  <div className="setting-desc">{enabled ? 'Track usage against a daily data limit' : 'Off — only data used today is shown'}</div>
                 </div>
                 <div className="setting-control">
-                  <div className="stepper">
-                    <button disabled={saving} onClick={() => saveSettings({ budget_gb: Math.max(1, budget - 5) })}>−</button>
-                    <span className="mono">{budget} GB</span>
-                    <button disabled={saving} onClick={() => saveSettings({ budget_gb: budget + 5 })}>+</button>
-                  </div>
+                  <button className={`toggle ${enabled ? 'on' : ''}`} disabled={saving} onClick={() => saveSettings({ enabled: !enabled })} aria-pressed={enabled}>
+                    <span className="toggle-knob" />
+                  </button>
                   {msg && <span style={{ display: 'block', marginTop: 3, color: msg.startsWith('Error') ? 'var(--danger)' : 'var(--accent-2)', fontFamily: 'var(--mono)', fontSize: 10 }}>{msg}</span>}
                 </div>
               </div>
+              {enabled && (
+                <div className="setting-row">
+                  <div>
+                    <div className="setting-title">Daily limit</div>
+                    <div className="setting-desc">Data allowance shared across all peers — click the number to type</div>
+                  </div>
+                  <div className="setting-control">
+                    <div className="stepper">
+                      <button disabled={saving} onClick={() => saveSettings({ budget_gb: Math.max(1, budget - 5) })}>−</button>
+                      <StepperInput value={budget} unit="GB" disabled={saving} onCommit={v => saveSettings({ budget_gb: v })} />
+                      <button disabled={saving} onClick={() => saveSettings({ budget_gb: budget + 5 })}>+</button>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="setting-row">
                 <div>
                   <div className="setting-title">Reset time</div>
@@ -889,37 +951,41 @@ function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets
                   </select>
                 </div>
               </div>
-              <div className="setting-row">
-                <div>
-                  <div className="setting-title">Alerts at 70% / 90% / 100%</div>
-                  <div className="setting-desc">Notification + log entry when approaching or exceeding budget limit</div>
+              {enabled && (
+                <div className="setting-row">
+                  <div>
+                    <div className="setting-title">Alerts at 70% / 90% / 100%</div>
+                    <div className="setting-desc">Notification + log entry when approaching or exceeding budget limit</div>
+                  </div>
+                  <div className="setting-control">
+                    <button className={`toggle ${alerts ? 'on' : ''}`} disabled={saving} onClick={() => saveSettings({ alerts: !alerts })} aria-pressed={alerts}>
+                      <span className="toggle-knob" />
+                    </button>
+                  </div>
                 </div>
-                <div className="setting-control">
-                  <button className={`toggle ${alerts ? 'on' : ''}`} disabled={saving} onClick={() => saveSettings({ alerts: !alerts })} aria-pressed={alerts}>
-                    <span className="toggle-knob" />
-                  </button>
+              )}
+              {enabled && (
+                <div className="setting-row">
+                  <div>
+                    <div className="setting-title">When budget exceeded</div>
+                    <div className="setting-desc">Action applied per peer once their limit is hit</div>
+                  </div>
+                  <div className="setting-control">
+                    <select
+                      className="select-input"
+                      value={enforcement.action}
+                      disabled={saving}
+                      onChange={e => saveSettings({ enforcement: { ...enforcement, action: e.target.value } })}
+                    >
+                      <option value="none">No action</option>
+                      <option value="throttle">Reduce speed</option>
+                      <option value="pause">Pause connection</option>
+                      <option value="combined">Combined — slow at 80%, pause at 100%</option>
+                    </select>
+                  </div>
                 </div>
-              </div>
-              <div className="setting-row">
-                <div>
-                  <div className="setting-title">When budget exceeded</div>
-                  <div className="setting-desc">Action applied per peer once their limit is hit</div>
-                </div>
-                <div className="setting-control">
-                  <select
-                    className="select-input"
-                    value={enforcement.action}
-                    disabled={saving}
-                    onChange={e => saveSettings({ enforcement: { ...enforcement, action: e.target.value } })}
-                  >
-                    <option value="none">No action</option>
-                    <option value="throttle">Reduce speed</option>
-                    <option value="pause">Pause connection</option>
-                    <option value="combined">Combined — slow at 80%, pause at 100%</option>
-                  </select>
-                </div>
-              </div>
-              {(enforcement.action === 'throttle' || enforcement.action === 'combined') && (
+              )}
+              {enabled && (enforcement.action === 'throttle' || enforcement.action === 'combined') && (
                 <div className="setting-row">
                   <div>
                     <div className="setting-title">Reduced speed</div>
@@ -928,7 +994,7 @@ function DataBudgetDrawer({ total, budget, alerts, resetTime, peers, peerBudgets
                   <div className="setting-control">
                     <div className="stepper">
                       <button disabled={saving} onClick={() => saveSettings({ enforcement: { ...enforcement, throttle_mbps: Math.max(1, (enforcement.throttle_mbps || 5) - 1) } })}>−</button>
-                      <span className="mono">{enforcement.throttle_mbps || 5} Mbps</span>
+                      <StepperInput value={enforcement.throttle_mbps || 5} unit="Mbps" max={1000} disabled={saving} onCommit={v => saveSettings({ enforcement: { ...enforcement, throttle_mbps: v } })} />
                       <button disabled={saving} onClick={() => saveSettings({ enforcement: { ...enforcement, throttle_mbps: (enforcement.throttle_mbps || 5) + 1 } })}>+</button>
                     </div>
                   </div>

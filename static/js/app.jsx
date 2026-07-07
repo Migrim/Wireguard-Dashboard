@@ -21,6 +21,7 @@ function App({ tweaks, setTweaks, onLogout }) {
   const [settingsOpen, setSettingsOpen] = uS(false);
   const [updateAvailable, setUpdateAvailable] = uS(false);
   const [dataBudget, setDataBudget] = uS(50);
+  const [budgetEnabled, setBudgetEnabled] = uS(true);
   const [budgetAlerts, setBudgetAlerts] = uS(true);
   const [resetTime, setResetTime] = uS('00:00');
   const [enforcement, setEnforcement] = uS({ action: 'none', throttle_mbps: 5 });
@@ -103,7 +104,7 @@ function App({ tweaks, setTweaks, onLogout }) {
 
   // Toast once per threshold per budget period when 70% / 90% is crossed (total + per-peer)
   uE(() => {
-    if (!budgetAlerts) return;
+    if (!budgetEnabled || !budgetAlerts) return;
     const period = budgetUsage.period_start_iso || '';
     if (!period) return;
     const pending = [];
@@ -141,7 +142,7 @@ function App({ tweaks, setTweaks, onLogout }) {
     if (!fresh.length) return;
     fresh.forEach(p => { shown.add(p.key); window.WG.toast?.warning?.(p.title, p.desc); });
     localStorage.setItem(BUDGET_TOASTED_KEY, JSON.stringify([...shown].slice(-40)));
-  }, [budgetAlerts, budgetUsage, dataBudget, peerBudgets, enforcement]);
+  }, [budgetEnabled, budgetAlerts, budgetUsage, dataBudget, peerBudgets, enforcement]);
 
   uE(() => {
     localStorage.setItem(AVG_PING_HISTORY_KEY, JSON.stringify(avgPingHistory));
@@ -191,6 +192,7 @@ function App({ tweaks, setTweaks, onLogout }) {
         if (j.data_budget) {
           setBudgetUsage(j.data_budget);
           setDataBudget(j.data_budget.settings?.budget_gb || 50);
+          setBudgetEnabled(j.data_budget.settings?.enabled !== false);
           setBudgetAlerts(j.data_budget.settings?.alerts !== false);
           setResetTime(j.data_budget.settings?.reset_time || '00:00');
           if (j.data_budget.settings?.peer_budgets) setPeerBudgets(j.data_budget.settings.peer_budgets);
@@ -432,6 +434,7 @@ function App({ tweaks, setTweaks, onLogout }) {
     const r = await window.WG.apiCall('/api/data-budget', { silent: true, method: 'POST', body: JSON.stringify(patch) });
     setBudgetUsage(r);
     setDataBudget(r.settings?.budget_gb || 50);
+    setBudgetEnabled(r.settings?.enabled !== false);
     setBudgetAlerts(r.settings?.alerts !== false);
     setResetTime(r.settings?.reset_time || '00:00');
     if (r.settings?.peer_budgets) setPeerBudgets(r.settings.peer_budgets);
@@ -482,7 +485,7 @@ function App({ tweaks, setTweaks, onLogout }) {
       alerts.push({ level: 'warn', title: `${offlineLong.length + neverConnected.length} peer(s) need attention`, desc, key: desc });
     }
   }
-  if (budgetAlerts) {
+  if (budgetEnabled && budgetAlerts) {
     const bpct = budgetUsage.pct || 0;
     const period = budgetUsage.period_start_iso || '';
     const levelOf = (p) => p >= 100 ? '100' : p >= 90 ? '90' : p >= 70 ? '70' : '';
@@ -660,7 +663,7 @@ function App({ tweaks, setTweaks, onLogout }) {
           onOpenSettings={() => { setSettingsOpen(true); setUpdateAvailable(false); }}
         />
         <KPIThroughput currentRx={currentRx} currentTx={currentTx} dataIn={chartTraffic.rx} dataOut={chartTraffic.tx} smooth={tweaks.smoothThroughput} />
-        <KPIDataToday total={totalToday} budget={dataBudget} peerBudgets={peerBudgets} onClick={() => setDataDrawerOpen(true)} />
+        <KPIDataToday total={totalToday} budget={dataBudget} enabled={budgetEnabled} peerBudgets={peerBudgets} onClick={() => setDataDrawerOpen(true)} />
         <KPIActiveSessions connectedCount={connectedCount} totalCount={peers.length} avgPingHistory={avgPingHistory} />
       </section>
 
@@ -773,6 +776,7 @@ function App({ tweaks, setTweaks, onLogout }) {
           total={totalToday}
           budget={dataBudget}
           setBudget={setDataBudget}
+          enabled={budgetEnabled}
           alerts={budgetAlerts}
           setAlerts={setBudgetAlerts}
           resetTime={resetTime}
@@ -918,32 +922,33 @@ function KPIThroughput({ currentRx, currentTx, dataIn, dataOut, smooth = false }
   );
 }
 
-function KPIDataToday({ total, budget = 50, peerBudgets = {}, onClick }) {
+function KPIDataToday({ total, budget = 50, enabled = true, peerBudgets = {}, onClick }) {
   const entries = Object.values(peerBudgets);
   const budgetGB = entries.reduce((s, b) => s + (b === 'inf' || b == null ? 0 : b), 0);
   const allInfinite = entries.length > 0 && budgetGB === 0;
+  const unlimited = !enabled || allInfinite;
   const effectiveGB = budgetGB > 0 ? budgetGB : budget;
-  const cap = allInfinite ? Math.max(total, 1) : effectiveGB * 1024 * 1024 * 1024;
-  const pct = allInfinite ? 0 : (total / cap) * 100;
+  const cap = unlimited ? Math.max(total, 1) : effectiveGB * 1024 * 1024 * 1024;
+  const pct = unlimited ? 0 : (total / cap) * 100;
   return (
     <div className="kpi-tile kpi-clickable" onClick={onClick} role="button" tabIndex={0}>
       <div className="kpi-head">
         <span className="section-label">DATA TODAY</span>
-        <span className="kpi-badge">{allInfinite ? '∞ no limit' : `of ${effectiveGB} GB`}</span>
+        {enabled && <span className="kpi-badge">{allInfinite ? '∞ no limit' : `of ${effectiveGB} GB`}</span>}
       </div>
       <div className="kpi-body kpi-body-radial">
         <RadialGauge
           value={total}
           max={cap}
-          unlimited={allInfinite}
+          unlimited={unlimited}
           width={110}
-          color={allInfinite ? 'var(--accent)' : pct > 90 ? 'var(--danger)' : pct > 70 ? 'var(--warn)' : 'var(--accent)'}
+          color={unlimited ? 'var(--accent)' : pct > 90 ? 'var(--danger)' : pct > 70 ? 'var(--warn)' : 'var(--accent)'}
           label={window.WG.formatBytes(total).split(' ')[0]}
           sublabel={window.WG.formatBytes(total).split(' ')[1]}
         />
       </div>
       <div className="kpi-foot">
-        <span className="mono">{allInfinite ? 'used today' : `${pct.toFixed(1)}% of budget`}</span>
+        <span className="mono">{unlimited ? 'used today' : `${pct.toFixed(1)}% of budget`}</span>
         <span className="mono kpi-link">configure →</span>
       </div>
     </div>
@@ -1093,6 +1098,19 @@ function LoginScreen({ onLogin, loading, exiting, meta }) {
   const inputRef = uR(null);
 
   uE(() => { inputRef.current?.focus(); }, []);
+
+  // Redirect stray typing into the password field
+  uE(() => {
+    const onKeyDown = (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key.length !== 1 && e.key !== 'Backspace') return;
+      const el = document.activeElement;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+      inputRef.current?.focus();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   const handleSubmit = (e) => {
     e.preventDefault();

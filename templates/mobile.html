@@ -1125,6 +1125,7 @@ function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService,
   const onlinePeers = peers.filter(p => p.status === 'online').length;
   const topPeers = peers.filter(p => p.status === 'online').sort((a,b) => (b.bytesIn + b.bytesOut) - (a.bytesIn + a.bytesOut));
   const budget = status?.data_budget;
+  const budgetOn = budget?.settings?.enabled !== false;
   const pct = Math.min(100, Math.max(0, budget?.pct || 0));
   const barColor = pct >= 90 ? 'var(--danger)' : pct >= 70 ? 'var(--warn)' : 'var(--accent)';
 
@@ -1195,14 +1196,16 @@ function HomeTab({ status, rxBps, txBps, trafficSamples, chartTweaks, onService,
           <div className="m-card m-budget-card" onClick={onOpenBudget} style={{cursor:'pointer', WebkitTapHighlightColor:'transparent'}}>
             <div className="m-budget-head">
               <span className="m-budget-title">Data today</span>
-              <span className="m-budget-pct">{Math.round(budget.pct || 0)}%</span>
+              {budgetOn && <span className="m-budget-pct">{Math.round(budget.pct || 0)}%</span>}
             </div>
-            <div className="m-budget-bar-bg">
-              <div className="m-budget-bar-fill" style={{width:`${pct}%`, background:barColor}}/>
-            </div>
+            {budgetOn && (
+              <div className="m-budget-bar-bg">
+                <div className="m-budget-bar-fill" style={{width:`${pct}%`, background:barColor}}/>
+              </div>
+            )}
             <div className="m-budget-foot">
               <span>{fmtBytes(budget.total || 0)} used</span>
-              <span>of {budget.settings?.budget_gb ?? '—'} GB · resets {budget.settings?.reset_time || '00:00'}</span>
+              <span>{budgetOn ? `of ${budget.settings?.budget_gb ?? '—'} GB · ` : ''}resets {budget.settings?.reset_time || '00:00'}</span>
             </div>
           </div>
         </div>
@@ -1801,6 +1804,7 @@ function BudgetSheet({ onClose, toast, refreshStatus }) {
     api('/api/data-budget').then(d => {
       setState(d);
       setSettings({
+        enabled: d.settings?.enabled !== false,
         budget_gb: d.settings?.budget_gb ?? 50,
         alerts: d.settings?.alerts !== false,
         reset_time: d.settings?.reset_time || '00:00',
@@ -1830,6 +1834,7 @@ function BudgetSheet({ onClose, toast, refreshStatus }) {
     setBusy(true);
     try {
       const body = {
+        enabled: settings.enabled,
         budget_gb: Math.max(1, Math.min(100000, parseInt(settings.budget_gb, 10) || 1)),
         alerts: settings.alerts,
         reset_time: settings.reset_time,
@@ -1888,23 +1893,33 @@ function BudgetSheet({ onClose, toast, refreshStatus }) {
       <div style={{marginBottom:16}}>
         <div style={{display:'flex', alignItems:'baseline', gap:6, marginBottom:8}}>
           <span style={{fontFamily:'var(--serif)', fontSize:34, color:'var(--ink)', lineHeight:1}}>{fmtBytes(state.total || 0)}</span>
-          <span style={{fontFamily:'var(--mono)', fontSize:12, color:'var(--muted)'}}>of {settings.budget_gb} GB · {Math.round(pct)}%</span>
+          <span style={{fontFamily:'var(--mono)', fontSize:12, color:'var(--muted)'}}>{settings.enabled ? `of ${settings.budget_gb} GB · ${Math.round(pct)}%` : 'used today'}</span>
         </div>
-        <div className="m-budget-bar-bg">
-          <div className="m-budget-bar-fill" style={{width:`${pct}%`, background:barColor}}/>
-        </div>
+        {settings.enabled && (
+          <div className="m-budget-bar-bg">
+            <div className="m-budget-bar-fill" style={{width:`${pct}%`, background:barColor}}/>
+          </div>
+        )}
       </div>
 
       {/* Settings */}
       <div className="m-settings-card" style={{marginBottom:16}}>
         <div className="m-settings-row">
-          <span className="m-settings-lbl">Daily budget (GB)</span>
-          <Stepper value={settings.budget_gb} onChange={v => set('budget_gb', v)} min={1} max={100000} step={5}/>
+          <span className="m-settings-lbl">Daily budget</span>
+          <Toggle value={settings.enabled} onChange={v => set('enabled', v)}/>
         </div>
-        <div className="m-settings-row">
-          <span className="m-settings-lbl">Usage alerts</span>
-          <Toggle value={settings.alerts} onChange={v => set('alerts', v)}/>
-        </div>
+        {settings.enabled && (
+          <div className="m-settings-row">
+            <span className="m-settings-lbl">Daily budget (GB)</span>
+            <Stepper value={settings.budget_gb} onChange={v => set('budget_gb', v)} min={1} max={100000} step={5}/>
+          </div>
+        )}
+        {settings.enabled && (
+          <div className="m-settings-row">
+            <span className="m-settings-lbl">Usage alerts</span>
+            <Toggle value={settings.alerts} onChange={v => set('alerts', v)}/>
+          </div>
+        )}
         <div className="m-settings-row">
           <span className="m-settings-lbl">Reset time</span>
           <input
@@ -1916,6 +1931,7 @@ function BudgetSheet({ onClose, toast, refreshStatus }) {
       </div>
 
       {/* Enforcement */}
+      {settings.enabled && <>
       <div className="m-section-label" style={{marginTop:0}}>When a budget is exceeded</div>
       <div className="m-settings-card" style={{marginBottom:16}}>
         <div className="m-settings-row">
@@ -1937,9 +1953,10 @@ function BudgetSheet({ onClose, toast, refreshStatus }) {
           </div>
         )}
       </div>
+      </>}
 
       {/* Per-peer */}
-      <div className="m-section-label" style={{marginTop:0}}>Per-peer usage &amp; limits</div>
+      <div className="m-section-label" style={{marginTop:0}}>{settings.enabled ? <>Per-peer usage &amp; limits</> : 'Per-peer usage today'}</div>
       <div style={{display:'flex', flexDirection:'column', gap:8, marginBottom:6}}>
         {(state.peers || []).length === 0 && (
           <div className="m-hint" style={{padding:'8px 0'}}>No usage recorded this period yet.</div>
@@ -1957,22 +1974,26 @@ function BudgetSheet({ onClose, toast, refreshStatus }) {
                 <span style={{fontSize:13, fontWeight:600, color:'var(--ink)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{row.name}</span>
                 <span style={{display:'flex', alignItems:'center', gap:6, flexShrink:0}}>
                   {enf && enf !== 'none' && <span className={`m-badge ${enf === 'paused' ? 'err' : 'warn'}`}>{enf}</span>}
-                  <button
-                    className="m-chip" style={{padding:'3px 10px', fontSize:11.5}}
-                    onClick={() => setEditPeer(editing ? null : row.name)}
-                  >
-                    {cap ? `${cap} GB` : '∞'} <Icon n="edit" size={10}/>
-                  </button>
+                  {settings.enabled && (
+                    <button
+                      className="m-chip" style={{padding:'3px 10px', fontSize:11.5}}
+                      onClick={() => setEditPeer(editing ? null : row.name)}
+                    >
+                      {cap ? `${cap} GB` : '∞'} <Icon n="edit" size={10}/>
+                    </button>
+                  )}
                 </span>
               </div>
-              <div className="m-budget-bar-bg" style={{height:6}}>
-                <div className="m-budget-bar-fill" style={{width:`${ppct}%`, background:pColor}}/>
-              </div>
+              {settings.enabled && (
+                <div className="m-budget-bar-bg" style={{height:6}}>
+                  <div className="m-budget-bar-fill" style={{width:`${ppct}%`, background:pColor}}/>
+                </div>
+              )}
               <div style={{display:'flex', justifyContent:'space-between', marginTop:5, fontFamily:'var(--mono)', fontSize:10.5, color:'var(--muted)'}}>
                 <span>{fmtBytes(row.bytes)} used</span>
-                <span>{cap ? `limit ${cap} GB` : 'no individual limit'}</span>
+                <span>{!settings.enabled ? '' : cap ? `limit ${cap} GB` : 'no individual limit'}</span>
               </div>
-              {editing && (
+              {settings.enabled && editing && (
                 <div style={{display:'flex', gap:8, marginTop:10, alignItems:'center'}}>
                   <input
                     className="m-input mono" type="number" inputMode="numeric" placeholder="GB"
