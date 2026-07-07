@@ -2316,4 +2316,365 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
 }
 
 // ============================================================
-Object.assign(window, { PeerDrawer, LogsPanel, DataBudgetDrawer, LogsDrawer, PortCheckDrawer, SettingsDrawer, NotifIcon });
+// UptimeDrawer — service availability history + downtime log
+// ============================================================
+const UPTIME_RANGES = ['24h', '7d', '30d', '90d'];
+
+function _fmtLiveDur(ms) {
+  if (!ms || ms <= 0) return '—';
+  let s = Math.floor(ms / 1000);
+  const d = Math.floor(s / 86400); s -= d * 86400;
+  const h = Math.floor(s / 3600); s -= h * 3600;
+  const m = Math.floor(s / 60); s -= m * 60;
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m ${String(s).padStart(2, '0')}s`;
+  return `${m}m ${String(s).padStart(2, '0')}s`;
+}
+
+function _fmtDurS(sec) {
+  if (sec == null) return '—';
+  sec = Math.max(0, Math.round(sec));
+  if (sec < 60) return `${sec}s`;
+  const m = Math.floor(sec / 60), h = Math.floor(m / 60), d = Math.floor(h / 24);
+  if (d > 0) return `${d}d ${h % 24}h`;
+  if (h > 0) return `${h}h ${m % 60}m`;
+  return `${m}m ${sec % 60}s`;
+}
+
+function _fmtPct(pct) {
+  if (pct == null) return '—';
+  if (pct >= 100) return '100%';
+  return `${pct.toFixed(pct >= 99 ? 2 : 1)}%`;
+}
+
+const UPTIME_TARGET_NAMES = { '1.1.1.1': 'Cloudflare', '1.0.0.1': 'Cloudflare', '8.8.8.8': 'Google', '8.8.4.4': 'Google' };
+const _pingTargetLabel = (ip) => ip ? `${ip}${UPTIME_TARGET_NAMES[ip] ? ` (${UPTIME_TARGET_NAMES[ip]})` : ''}` : '—';
+
+function UpAvailabilitySection({ stats, loaded }) {
+  const cells = [
+    { key: '24h', label: 'LAST 24 HOURS' },
+    { key: '7d',  label: 'LAST 7 DAYS' },
+    { key: '30d', label: 'LAST 30 DAYS' },
+  ].map(({ key, label }) => {
+    const s = (stats || {})[key] || {};
+    const pct = s.uptime_pct;
+    const color = pct == null ? 'var(--muted)'
+      : pct < 95 ? 'var(--danger)'
+      : pct < 99.5 ? 'var(--warn)'
+      : 'var(--ink)';
+    const sub = s.down_s > 0
+      ? `${_fmtDurS(s.down_s)} down · ${s.incidents} incident${s.incidents === 1 ? '' : 's'}`
+      : pct == null ? 'no data yet' : 'no downtime';
+    return { key, label, pct, color, sub };
+  });
+  return (
+    <section className="drawer-section">
+      <div className="section-head">
+        <span className="section-label">AVAILABILITY</span>
+        <span className="section-meta">excluding monitoring gaps</span>
+      </div>
+      <div className="stats-grid">
+        {cells.map(c => (
+          <div className="stat-cell" key={c.key}>
+            <div className="stat-label">{c.label}</div>
+            <div className="stat-val" style={{ color: c.color }}>
+              {loaded ? _fmtPct(c.pct) : <span className="skel" style={{ width: 64 }} />}
+            </div>
+            <div className="up-stat-sub mono">{loaded ? c.sub : <span className="skel skel-sub" style={{ width: 80 }} />}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function UpTimelineSection({ timeline, range, setRange, loaded, ariaLabel }) {
+  const buckets = timeline?.buckets || [];
+  const tickTitle = (b) => {
+    const t = new Date(b.ts_ms).toLocaleString();
+    if (b.state === 'unknown') return `${t} — no data`;
+    if (b.state === 'up') return `${t} — up`;
+    return `${t} — ${b.up_pct != null ? `up ${b.up_pct.toFixed(1)}%` : 'down'} · down ${_fmtDurS(b.down_s)}`;
+  };
+  const rangeStartLabel = timeline?.start_ms
+    ? new Date(timeline.start_ms).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : '';
+  return (
+    <section className="drawer-section">
+      <div className="section-head">
+        <span className="section-label">TIMELINE</span>
+        <div className="seg">
+          {UPTIME_RANGES.map(r => (
+            <button key={r} className={range === r ? 'on' : ''} onClick={() => setRange(r)}>{r}</button>
+          ))}
+        </div>
+      </div>
+      <div className="up-strip-card">
+        {loaded ? (
+          <>
+            <div className="up-strip" role="img" aria-label={`${ariaLabel}, last ${range}`}>
+              {buckets.map((b, i) => (
+                <span key={i} className={`up-tick up-tick-${b.state}`} title={tickTitle(b)} />
+              ))}
+            </div>
+            <div className="up-strip-labels mono">
+              <span>{rangeStartLabel}</span>
+              <span>now</span>
+            </div>
+            <div className="up-legend mono">
+              <span><i className="up-dot up-tick-up" /> up</span>
+              <span><i className="up-dot up-tick-partial" /> partial</span>
+              <span><i className="up-dot up-tick-down" /> down</span>
+              <span><i className="up-dot up-tick-unknown" /> no data</span>
+            </div>
+          </>
+        ) : (
+          <div className="up-strip">
+            {Array.from({ length: 48 }).map((_, i) => <span key={i} className="up-tick up-tick-unknown" style={{ opacity: 0.4 }} />)}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function UpIncidentsSection({ incidents, loaded, now, sectionLabel, downTitle, emptyLabel, monitorSince }) {
+  incidents = incidents || [];
+  return (
+    <section className="drawer-section">
+      <div className="section-head">
+        <span className="section-label">{sectionLabel}</span>
+        {loaded && incidents.length > 0 && (
+          <span className="section-meta">{incidents.length} event{incidents.length === 1 ? '' : 's'} · last 90 days</span>
+        )}
+      </div>
+      {!loaded ? (
+        <div className="up-events">
+          {[0, 1].map(i => (
+            <div className="up-event" key={i}>
+              <span className="up-event-dot" style={{ background: 'var(--border)' }} />
+              <div className="up-event-main">
+                <div><span className="skel" style={{ width: 120 }} /></div>
+                <div style={{ marginTop: 4 }}><span className="skel skel-sub" style={{ width: 200 }} /></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : incidents.length === 0 ? (
+        <div className="up-empty">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2.2"><path d="M5 12l5 5L20 7"/></svg>
+          <span>{emptyLabel}{monitorSince ? ` since ${window.WG.formatAbsTime(monitorSince)}` : ''}</span>
+        </div>
+      ) : (
+        <div className="up-events">
+          {incidents.map((ev, i) => {
+            const isDown = ev.state === 'down';
+            const dur = ev.ongoing ? Math.floor((now - ev.start_ms) / 1000) : ev.duration_s;
+            return (
+              <div key={`${ev.start_ms}-${i}`} className={`up-event ${isDown ? 'is-down' : 'is-gap'}`}>
+                <span className="up-event-dot" />
+                <div className="up-event-main">
+                  <div className="up-event-title">
+                    {isDown ? downTitle : 'Monitoring gap'}
+                    {ev.ongoing && <span className="up-event-ongoing">ongoing</span>}
+                  </div>
+                  <div className="up-event-sub mono">
+                    {window.WG.formatAbsTime(ev.start_ms)}{ev.end_ms ? ` → ${window.WG.formatAbsTime(ev.end_ms)}` : ''}
+                  </div>
+                </div>
+                <span className="up-event-dur mono">{_fmtDurS(dur)}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div className="up-footnote mono">
+        {monitorSince
+          ? `Monitoring since ${window.WG.formatAbsTime(monitorSince)} · history kept for 90 days`
+          : 'Monitoring starts with the first sample · history kept for 90 days'}
+      </div>
+    </section>
+  );
+}
+
+function UptimeDrawer({ unit, onClose }) {
+  const [tab, setTab] = _useState('service');
+  const [data, setData] = _useState(null);
+  const [range, setRange] = _useState(() => {
+    const saved = localStorage.getItem('WG_UPTIME_RANGE');
+    return UPTIME_RANGES.includes(saved) ? saved : '24h';
+  });
+  const [now, setNow] = _useState(Date.now());
+
+  _useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  _useEffect(() => {
+    localStorage.setItem('WG_UPTIME_RANGE', range);
+    let cancelled = false;
+    const load = () => window.WG.apiCall(`/api/uptime?range=${range}`, { silent: true })
+      .then(j => { if (!cancelled) setData(j); })
+      .catch(() => {});
+    load();
+    const id = setInterval(load, 15000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [range]);
+
+  // Tick the session counter every second while the drawer is open
+  _useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const loaded = !!data;
+  const cur = data?.current;
+  const active = !!cur?.active;
+  const sinceMs = cur?.since_ms || 0;
+  const sessionMs = sinceMs ? Math.max(0, now - sinceMs) : 0;
+  const monitorSince = data?.monitor?.since_ms || 0;
+  const intervalS = data?.monitor?.interval_s || 30;
+
+  const net = data?.net;
+  const netCur = net?.current;
+  const netState = netCur?.state || 'unknown';
+  const netUp = netState === 'up';
+  const netSinceMs = netCur?.since_ms || 0;
+  const netTarget = _pingTargetLabel(netCur?.target || net?.monitor?.targets?.[0]);
+  const netLatency = net?.latency || {};
+  const latSeries = (netLatency.series || []).map(s => s.ms);
+  const latMeta = netLatency.avg_ms != null
+    ? `avg ${netLatency.avg_ms} ms · min ${netLatency.min_ms} · max ${netLatency.max_ms} · last 24h`
+    : 'last 24h';
+
+  const sub = tab === 'service'
+    ? `${unit || data?.unit || 'wg-quick'} · sampled every ${intervalS}s`
+    : `pinging ${netTarget} every ${intervalS}s`;
+
+  return (
+    <>
+      <div className="drawer-scrim" onClick={onClose} />
+      <aside className="drawer" role="dialog" aria-label="Uptime">
+        <header className="drawer-head">
+          <div className="drawer-head-left">
+            <div className="peer-avatar" style={{ background: 'var(--avatar-bg)' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            </div>
+            <div>
+              <h2 className="drawer-title">Uptime</h2>
+              <div className="drawer-sub">{sub}</div>
+            </div>
+          </div>
+          <button className="icon-btn" onClick={onClose} aria-label="Close">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </header>
+
+        <div className="drawer-tabs">
+          <button className={`drawer-tab ${tab === 'service' ? 'on' : ''}`} onClick={() => setTab('service')}>Service uptime</button>
+          <button className={`drawer-tab ${tab === 'net' ? 'on' : ''}`} onClick={() => setTab('net')}>
+            Internet connectivity
+            {loaded && !netUp && netState !== 'unknown' && <span className="drawer-tab-dot" title="Internet is unreachable" />}
+          </button>
+        </div>
+
+        {tab === 'service' && (
+        <div className="drawer-body">
+          <section className="drawer-section">
+            <div className={`up-hero ${loaded ? (active ? 'is-up' : 'is-down') : ''}`}>
+              <div className="up-hero-status">
+                {loaded ? (
+                  <span className={`kpi-badge ${active ? 'badge-ok' : 'badge-down'}`}>
+                    <span className={`pulse-dot ${active ? '' : 'pulse-dot-down'}`} />
+                    {active ? 'running' : 'stopped'}
+                  </span>
+                ) : <span className="skel" style={{ width: 60 }} />}
+                <span className="up-hero-since mono">
+                  {loaded
+                    ? (sinceMs ? `since ${window.WG.formatAbsTime(sinceMs)}` : '')
+                    : <span className="skel skel-sub" style={{ width: 140 }} />}
+                </span>
+              </div>
+              <div className="up-hero-clock">
+                {loaded
+                  ? (sinceMs ? _fmtLiveDur(sessionMs) : (active ? '—' : 'stopped'))
+                  : <span className="skel" style={{ width: 150, height: 28 }} />}
+              </div>
+              <div className="up-hero-lbl">{active || !loaded ? 'current session uptime' : 'down for'}</div>
+            </div>
+          </section>
+
+          <UpAvailabilitySection stats={data?.stats} loaded={loaded} />
+          <UpTimelineSection timeline={data?.timeline} range={range} setRange={setRange} loaded={loaded} ariaLabel="Service uptime timeline" />
+          <UpIncidentsSection
+            incidents={data?.incidents} loaded={loaded} now={now}
+            sectionLabel="DOWNTIME LOG" downTitle="Service down"
+            emptyLabel="No downtime recorded" monitorSince={monitorSince}
+          />
+        </div>
+        )}
+
+        {tab === 'net' && (
+        <div className="drawer-body">
+          <section className="drawer-section">
+            <div className={`up-hero ${loaded ? (netUp ? 'is-up' : netState === 'down' ? 'is-down' : '') : ''}`}>
+              <div className="up-hero-status">
+                {loaded ? (
+                  <span className={`kpi-badge ${netUp ? 'badge-ok' : netState === 'down' ? 'badge-down' : ''}`}>
+                    <span className={`pulse-dot ${netUp ? '' : netState === 'down' ? 'pulse-dot-down' : 'pulse-dot-off'}`} />
+                    {netUp ? 'online' : netState === 'down' ? 'offline' : 'no data'}
+                  </span>
+                ) : <span className="skel" style={{ width: 60 }} />}
+                <span className="up-hero-since mono">
+                  {loaded
+                    ? (netSinceMs ? `since ${window.WG.formatAbsTime(netSinceMs)}` : '')
+                    : <span className="skel skel-sub" style={{ width: 140 }} />}
+                </span>
+              </div>
+              <div className="up-hero-clock">
+                {loaded
+                  ? (netUp
+                      ? (netCur?.latency_ms != null ? `${netCur.latency_ms >= 100 ? Math.round(netCur.latency_ms) : netCur.latency_ms.toFixed(1)} ms` : '—')
+                      : netState === 'down'
+                        ? (netSinceMs ? _fmtLiveDur(Math.max(0, now - netSinceMs)) : 'offline')
+                        : '—')
+                  : <span className="skel" style={{ width: 150, height: 28 }} />}
+              </div>
+              <div className="up-hero-lbl">
+                {!loaded || netUp ? `current ping · ${netTarget}` : netState === 'down' ? 'offline for' : 'waiting for first sample'}
+              </div>
+            </div>
+          </section>
+
+          <section className="drawer-section">
+            <div className="section-head">
+              <span className="section-label">LATENCY</span>
+              <span className="section-meta">{latMeta}</span>
+            </div>
+            <div className="drawer-chart">
+              {loaded && latSeries.length > 1 ? (
+                <PingBars data={latSeries} height={72} color="var(--accent-2)" />
+              ) : (
+                <div className="empty-chart" style={{ height: 72 }}>{loaded ? 'no latency data yet' : 'loading…'}</div>
+              )}
+            </div>
+          </section>
+
+          <UpAvailabilitySection stats={net?.stats} loaded={loaded} />
+          <UpTimelineSection timeline={net?.timeline} range={range} setRange={setRange} loaded={loaded} ariaLabel="Internet connectivity timeline" />
+          <UpIncidentsSection
+            incidents={net?.incidents} loaded={loaded} now={now}
+            sectionLabel="OUTAGE LOG" downTitle="Internet down"
+            emptyLabel="No outages recorded" monitorSince={net?.monitor?.since_ms || 0}
+          />
+        </div>
+        )}
+      </aside>
+    </>
+  );
+}
+
+// ============================================================
+Object.assign(window, { PeerDrawer, LogsPanel, DataBudgetDrawer, LogsDrawer, PortCheckDrawer, SettingsDrawer, NotifIcon, UptimeDrawer });

@@ -111,6 +111,16 @@ DNS_STATS_RETENTION_SECONDS=24*60*60
 DNS_STATS_FLUSH_SECONDS=15
 DNS_MONITOR_LOCK=os.environ.get("DNS_MONITOR_LOCK", "/tmp/wg-dashboard-dns.lock")
 _dns_stats_lock=threading.Lock()
+UPTIME_DB=os.environ.get("UPTIME_DB", os.path.join(WG_DIR, "uptime_history.json"))
+UPTIME_RETENTION_SECONDS=90*24*60*60
+UPTIME_SAMPLE_INTERVAL=max(5, int(os.environ.get("UPTIME_SAMPLE_INTERVAL", "30")))
+UPTIME_GAP_SECONDS=3*UPTIME_SAMPLE_INTERVAL
+UPTIME_FLUSH_SECONDS=60
+NET_PING_TARGETS=[t.strip() for t in os.environ.get("NET_PING_TARGETS", "1.1.1.1,8.8.8.8").split(",") if t.strip()]
+NET_LATENCY_RETENTION_SECONDS=24*60*60
+# ping -W is milliseconds on macOS (dev) but seconds on Linux (prod)
+_PING_WAIT_FLAG="-W2000" if os.uname().sysname == "Darwin" else "-W2"
+_uptime_lock=threading.Lock()
 GEO_CACHE_SECONDS=6*60*60
 SUDO_BIN=os.environ.get("SUDO_BIN","/usr/bin/sudo")
 BASH_BIN=os.environ.get("BASH_BIN","/bin/bash")
@@ -762,6 +772,286 @@ def _downsample_traffic(samples: List[Dict[str, Any]], max_points: int) -> List[
             "tx": bucket[-1].get("tx", 0),
         })
     return out
+
+def _valid_uptime_event(x: Any) -> bool:
+    return (
+        isinstance(x, dict)
+        and isinstance(x.get("ts"), (int, float))
+        and x.get("state") in ("up", "down", "unknown")
+    )
+
+def _parse_uptime_events(raw: Any) -> List[Dict[str, Any]]:
+    events = [
+        {"ts": float(e["ts"]), "state": e["state"]}
+        for e in (raw or [])
+        if _valid_uptime_event(e)
+    ]
+    events.sort(key=lambda e: e["ts"])
+    return _prune_uptime_events(events)
+
+def _load_uptime_db() -> Dict[str, Any]:
+    _default = {"events": [], "last_sample": 0.0,
+                "net_events": [], "net_last_sample": 0.0, "net_latency": [], "net_target": ""}
+    content = ""
+    try:
+        with open(UPTIME_DB, "r", encoding="utf-8") as f:
+            content = f.read()
+    except FileNotFoundError:
+        return _default
+    except PermissionError:
+        out, rc = _sudo_cat(UPTIME_DB)
+        if rc != 0:
+            return _default
+        content = out
+    except Exception:
+        return _default
+    try:
+        raw = json.loads(content)
+    except Exception:
+        return _default
+    if not isinstance(raw, dict):
+        return _default
+    lat_cutoff = time.time() - NET_LATENCY_RETENTION_SECONDS
+    latency = [
+        {"ts": float(s["ts"]), "ms": float(s["ms"])}
+        for s in (raw.get("net_latency") or [])
+        if isinstance(s, dict) and isinstance(s.get("ts"), (int, float))
+        and isinstance(s.get("ms"), (int, float)) and float(s["ts"]) >= lat_cutoff
+    ]
+    return {
+        "events": _parse_uptime_events(raw.get("events")),
+        "last_sample": float(raw.get("last_sample") or 0.0),
+        "net_events": _parse_uptime_events(raw.get("net_events")),
+        "net_last_sample": float(raw.get("net_last_sample") or 0.0),
+        "net_latency": latency,
+        "net_target": str(raw.get("net_target") or ""),
+    }
+
+def _save_uptime_db(db: Dict[str, Any]) -> None:
+    import tempfile
+    fd, tmp_path = tempfile.mkstemp(prefix="uptime.", suffix=".json.tmp", dir="/tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(db, f, separators=(",", ":"))
+        try:
+            os.makedirs(os.path.dirname(UPTIME_DB), exist_ok=True)
+            os.replace(tmp_path, UPTIME_DB)
+            return
+        except Exception:
+            pass
+        _sudo(["/usr/bin/install", "-m", "640", "-o", "root", "-g", "www-data", tmp_path, UPTIME_DB])
+    finally:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except:
+            pass
+
+def _uptime_db() -> Dict[str, Any]:
+    if "_uptime_db" not in app.config:
+        app.config["_uptime_db"] = _load_uptime_db()
+        app.config["_uptime_last_flush"] = 0.0
+    return app.config["_uptime_db"]
+
+def _prune_uptime_events(events: List[Dict[str, Any]], now: float = None) -> List[Dict[str, Any]]:
+    """Drop events past retention but keep the boundary state, clamped to the cutoff."""
+    if not events:
+        return []
+    cutoff = (now if now is not None else time.time()) - UPTIME_RETENTION_SECONDS
+    kept = [e for e in events if e["ts"] >= cutoff]
+    dropped = [e for e in events if e["ts"] < cutoff]
+    if dropped and (not kept or kept[0]["ts"] > cutoff):
+        boundary = dict(dropped[-1])
+        boundary["ts"] = cutoff
+        kept.insert(0, boundary)
+    return kept
+
+def _uptime_append_state(db: Dict[str, Any], ev_key: str, ls_key: str, state: str, now: float) -> bool:
+    """Append gap + state-change events for one channel; returns True if events changed."""
+    events = db.setdefault(ev_key, [])
+    changed = False
+    last_sample = float(db.get(ls_key) or 0.0)
+    # If the monitor itself was offline we cannot know what happened in
+    # between — mark the blind window as "unknown" instead of extending
+    # the previous state over it.
+    if events and last_sample > 0 and now - last_sample > UPTIME_GAP_SECONDS and events[-1]["state"] != "unknown":
+        gap_ts = max(events[-1]["ts"], min(last_sample + UPTIME_SAMPLE_INTERVAL, now))
+        events.append({"ts": gap_ts, "state": "unknown"})
+        changed = True
+    if not events or events[-1]["state"] != state:
+        events.append({"ts": now, "state": state})
+        changed = True
+    db[ls_key] = now
+    db[ev_key] = _prune_uptime_events(events, now)
+    return changed
+
+def _uptime_flush(db: Dict[str, Any], changed: bool, now: float) -> None:
+    app.config["_uptime_db"] = db
+    last_flush = float(app.config.get("_uptime_last_flush", 0) or 0)
+    if changed or now - last_flush >= UPTIME_FLUSH_SECONDS:
+        _save_uptime_db(db)
+        app.config["_uptime_last_flush"] = now
+
+def _record_uptime_sample(active: bool = None) -> None:
+    """Record one service up/down sample; appends an event only on state change."""
+    if active is None:
+        try:
+            active = service_active()
+        except Exception:
+            return
+    now = time.time()
+    with _uptime_lock:
+        db = _uptime_db()
+        changed = _uptime_append_state(db, "events", "last_sample", "up" if active else "down", now)
+        _uptime_flush(db, changed, now)
+
+def _ping_internet() -> Tuple[bool, float, str]:
+    """Ping the first reachable target; returns (ok, latency_ms, target)."""
+    for ip in NET_PING_TARGETS:
+        o, c = _run(f"ping -c1 {_PING_WAIT_FLAG} {ip} 2>/dev/null")
+        if c == 0:
+            m = re.search(r"time[=<]([\d.]+)\s*ms", o)
+            return True, float(m.group(1)) if m else 0.0, ip
+    return False, 0.0, NET_PING_TARGETS[0] if NET_PING_TARGETS else ""
+
+def _record_net_sample(ok: bool = None, latency_ms: float = None, target: str = "") -> None:
+    """Record one internet reachability sample (state + latency)."""
+    if ok is None:
+        try:
+            ok, latency_ms, target = _ping_internet()
+        except Exception:
+            return
+    now = time.time()
+    with _uptime_lock:
+        db = _uptime_db()
+        changed = _uptime_append_state(db, "net_events", "net_last_sample", "up" if ok else "down", now)
+        if ok and latency_ms is not None:
+            lat = db.setdefault("net_latency", [])
+            lat.append({"ts": now, "ms": round(float(latency_ms), 2)})
+            cutoff = now - NET_LATENCY_RETENTION_SECONDS
+            db["net_latency"] = [s for s in lat if s["ts"] >= cutoff]
+        if target:
+            db["net_target"] = target
+        _uptime_flush(db, changed, now)
+
+def _uptime_intervals(events: List[Dict[str, Any]], now: float) -> List[Tuple[float, float, str]]:
+    """Turn the event list into contiguous (start, end, state) spans up to now."""
+    out = []
+    for i, e in enumerate(events):
+        start = float(e["ts"])
+        end = float(events[i + 1]["ts"]) if i + 1 < len(events) else now
+        if end > start:
+            out.append((start, end, e["state"]))
+    return out
+
+def _uptime_window_stats(intervals: List[Tuple[float, float, str]], start: float, end: float) -> Dict[str, Any]:
+    up = down = unknown = 0.0
+    incidents = 0
+    longest = 0.0
+    for (s, e, st) in intervals:
+        s2, e2 = max(s, start), min(e, end)
+        if e2 <= s2:
+            continue
+        d = e2 - s2
+        if st == "up":
+            up += d
+        elif st == "down":
+            down += d
+            incidents += 1
+            longest = max(longest, d)
+        else:
+            unknown += d
+    known = up + down
+    return {
+        "uptime_pct": round(up / known * 100.0, 3) if known > 0 else None,
+        "up_s": int(up),
+        "down_s": int(down),
+        "unknown_s": int(unknown),
+        "incidents": incidents,
+        "longest_down_s": int(longest),
+    }
+
+def _uptime_buckets(intervals: List[Tuple[float, float, str]], start: float, end: float, n: int) -> List[Dict[str, Any]]:
+    size = (end - start) / n
+    buckets = []
+    for i in range(n):
+        bs = start + i * size
+        be = bs + size
+        up = down = unknown = 0.0
+        for (s, e, st) in intervals:
+            s2, e2 = max(s, bs), min(e, be)
+            if e2 <= s2:
+                continue
+            d = e2 - s2
+            if st == "up":
+                up += d
+            elif st == "down":
+                down += d
+            else:
+                unknown += d
+        known = up + down
+        if known <= 0:
+            state = "unknown"
+        elif down <= 0:
+            state = "up"
+        elif up <= 0:
+            state = "down"
+        else:
+            state = "partial"
+        buckets.append({
+            "ts_ms": int(bs * 1000),
+            "state": state,
+            "up_pct": round(up / known * 100.0, 2) if known > 0 else None,
+            "down_s": int(down),
+            "unknown_s": int(unknown),
+        })
+    return buckets
+
+def _uptime_incident_list(intervals: List[Tuple[float, float, str]], now: float, limit: int = 40) -> List[Dict[str, Any]]:
+    """Down periods and monitoring gaps, newest first."""
+    out = []
+    for (s, e, st) in intervals:
+        if st == "up":
+            continue
+        ongoing = e >= now - 1
+        out.append({
+            "state": st,
+            "start_ms": int(s * 1000),
+            "end_ms": None if ongoing else int(e * 1000),
+            "duration_s": int(e - s),
+            "ongoing": ongoing,
+        })
+    out.reverse()
+    return out[:limit]
+
+def _downsample_latency(samples: List[Dict[str, Any]], max_points: int = 96) -> List[Dict[str, Any]]:
+    if max_points <= 0 or len(samples) <= max_points:
+        return samples
+    bucket_size = max(1, int((len(samples) + max_points - 1) / max_points))
+    out = []
+    for i in range(0, len(samples), bucket_size):
+        bucket = samples[i:i + bucket_size]
+        if not bucket:
+            continue
+        out.append({
+            "ts": bucket[-1]["ts"],
+            "ms": round(sum(s["ms"] for s in bucket) / len(bucket), 2),
+        })
+    return out
+
+def _bg_uptime_loop() -> None:
+    """Record service + internet up/down transitions even when no dashboard client is open."""
+    time.sleep(5)
+    while True:
+        try:
+            _record_uptime_sample()
+        except Exception:
+            pass
+        try:
+            _record_net_sample()
+        except Exception:
+            pass
+        time.sleep(UPTIME_SAMPLE_INTERVAL)
 
 def _load_peer_spark_history() -> Dict[str, List[Dict[str, Any]]]:
     content = ""
@@ -2297,7 +2587,142 @@ def api_service():
         _log_dashboard_event(f"service {action} via dashboard ({UNIT})")
     else:
         _log_dashboard_event(f"service {action} failed ({UNIT})", "error")
-    return jsonify({"ok":c==0,"out":o,"active":service_active(),"enabled":service_enabled()})
+    active=service_active()
+    try:
+        _record_uptime_sample(active)
+    except Exception:
+        pass
+    return jsonify({"ok":c==0,"out":o,"active":active,"enabled":service_enabled()})
+
+_UPTIME_RANGES = {
+    "24h": (24 * 3600, 48),
+    "7d":  (7 * 24 * 3600, 84),
+    "30d": (30 * 24 * 3600, 60),
+    "90d": (90 * 24 * 3600, 90),
+}
+
+@app.route("/api/uptime")
+def api_uptime():
+    rng = request.args.get("range", "24h")
+    if rng not in _UPTIME_RANGES:
+        rng = "24h"
+    try:
+        active = service_active()
+    except Exception:
+        active = False
+    try:
+        _record_uptime_sample(active)
+    except Exception:
+        app.logger.exception("uptime_sample_failed")
+    # Ping in-request only when the background sampler is stale, so opening
+    # the drawer never blocks on a ping in normal operation.
+    try:
+        with _uptime_lock:
+            net_stale = time.time() - float(_uptime_db().get("net_last_sample") or 0.0) > 2 * UPTIME_SAMPLE_INTERVAL
+        if net_stale:
+            _record_net_sample()
+    except Exception:
+        app.logger.exception("net_sample_failed")
+    now = time.time()
+    with _uptime_lock:
+        db = _uptime_db()
+        events = [dict(e) for e in db["events"]]
+        last_sample = float(db.get("last_sample") or 0.0)
+        net_events = [dict(e) for e in db.get("net_events") or []]
+        net_latency = [dict(s) for s in db.get("net_latency") or []]
+        net_target = str(db.get("net_target") or "")
+    intervals = _uptime_intervals(events, now)
+    net_intervals = _uptime_intervals(net_events, now)
+
+    since_ms = 0
+    if active:
+        try:
+            since_ms = service_started_at_ms()
+        except Exception:
+            since_ms = 0
+    # Fall back to our own event history (also covers the "down since" case)
+    if not since_ms:
+        cur_state = "up" if active else "down"
+        for (s, _e, st) in reversed(intervals):
+            if st != cur_state:
+                break
+            since_ms = int(s * 1000)
+
+    span_s, n_buckets = _UPTIME_RANGES[rng]
+    start = now - span_s
+    payload = {
+        "unit": UNIT,
+        "current": {
+            "state": "up" if active else "down",
+            "active": active,
+            "since_ms": since_ms,
+        },
+        "monitor": {
+            "interval_s": UPTIME_SAMPLE_INTERVAL,
+            "since_ms": int(events[0]["ts"] * 1000) if events else 0,
+            "last_sample_ms": int(last_sample * 1000),
+        },
+        "stats": {
+            key: _uptime_window_stats(intervals, now - span, now)
+            for key, (span, _n) in _UPTIME_RANGES.items()
+        },
+        "timeline": {
+            "range": rng,
+            "start_ms": int(start * 1000),
+            "end_ms": int(now * 1000),
+            "bucket_s": int(span_s / n_buckets),
+            "buckets": _uptime_buckets(intervals, start, now, n_buckets),
+        },
+        "incidents": _uptime_incident_list(intervals, now),
+    }
+
+    net_state = net_events[-1]["state"] if net_events else "unknown"
+    net_since_ms = 0
+    for (s, _e, st) in reversed(net_intervals):
+        if st != net_state:
+            break
+        net_since_ms = int(s * 1000)
+    lat_vals = [s["ms"] for s in net_latency]
+    payload["net"] = {
+        "current": {
+            "state": net_state,
+            "since_ms": net_since_ms,
+            "target": net_target,
+            "latency_ms": net_latency[-1]["ms"] if net_latency else None,
+        },
+        "monitor": {
+            "interval_s": UPTIME_SAMPLE_INTERVAL,
+            "since_ms": int(net_events[0]["ts"] * 1000) if net_events else 0,
+            "targets": NET_PING_TARGETS,
+        },
+        "stats": {
+            key: _uptime_window_stats(net_intervals, now - span, now)
+            for key, (span, _n) in _UPTIME_RANGES.items()
+        },
+        "timeline": {
+            "range": rng,
+            "start_ms": int(start * 1000),
+            "end_ms": int(now * 1000),
+            "bucket_s": int(span_s / n_buckets),
+            "buckets": _uptime_buckets(net_intervals, start, now, n_buckets),
+        },
+        "incidents": _uptime_incident_list(net_intervals, now),
+        "latency": {
+            "avg_ms": round(sum(lat_vals) / len(lat_vals), 1) if lat_vals else None,
+            "min_ms": round(min(lat_vals), 1) if lat_vals else None,
+            "max_ms": round(max(lat_vals), 1) if lat_vals else None,
+            "window_s": NET_LATENCY_RETENTION_SECONDS,
+            "series": [
+                {"ts_ms": int(s["ts"] * 1000), "ms": s["ms"]}
+                for s in _downsample_latency(net_latency)
+            ],
+        },
+    }
+    try:
+        payload["current"]["enabled"] = service_enabled()
+    except Exception:
+        payload["current"]["enabled"] = False
+    return jsonify(payload)
 
 @app.route("/api/users",methods=["GET","POST"])
 def api_users():
@@ -3417,6 +3842,7 @@ if os.environ.get("WERKZEUG_RUN_MAIN") != "false":
     threading.Thread(target=_bg_traffic_loop, daemon=True, name="bg-traffic").start()
     threading.Thread(target=_bg_retention_loop, daemon=True, name="bg-retention").start()
     threading.Thread(target=_bg_dns_monitor_loop, daemon=True, name="bg-dns-monitor").start()
+    threading.Thread(target=_bg_uptime_loop, daemon=True, name="bg-uptime").start()
 
 def create_app():
     return app

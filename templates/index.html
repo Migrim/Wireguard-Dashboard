@@ -425,6 +425,8 @@ html.theme-switching .theme-toggle-icon {
   animation: pulse 1.6s infinite;
 }
 .pulse-dot-off { background: var(--muted); animation: none; }
+.pulse-dot-down { background: var(--danger); animation: none; }
+.kpi-badge.badge-down { color: var(--danger); }
 .kpi-body {
   display: flex; align-items: flex-end; justify-content: space-between;
   gap: 12px;
@@ -473,6 +475,17 @@ html.theme-switching .theme-toggle-icon {
 .svc-stat:last-child { border-right: none; }
 .svc-stat-label { font-family: var(--mono); font-size: 9px; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
 .svc-stat-val { font-size: 12px; color: var(--ink); margin-top: 1px; font-weight: 500; }
+.svc-stat-btn {
+  display: block; width: 100%; margin: 0; text-align: left;
+  background: transparent; border: none; border-right: 1px solid var(--border);
+  font-family: inherit; cursor: pointer;
+  transition: background 0.12s;
+}
+.svc-stat-btn:hover { background: color-mix(in oklab, var(--accent) 6%, transparent); }
+.svc-stat-btn .svc-stat-label { display: inline-flex; align-items: center; gap: 3px; }
+.svc-stat-btn:hover .svc-stat-label { color: var(--accent); }
+.svc-stat-chev { opacity: 0.65; transition: opacity 0.12s, transform 0.15s; flex-shrink: 0; }
+.svc-stat-btn:hover .svc-stat-chev { opacity: 1; transform: translateX(1px); }
 
 .svc-buttons {
   display: flex; gap: 6px;
@@ -730,6 +743,79 @@ html.theme-switching .theme-toggle-icon {
 .tension-slider::-moz-range-track { height: 4px; background: transparent; border-radius: 99px; border: none; }
 .tension-slider::-moz-range-progress { height: 4px; background: var(--accent); border-radius: 99px; }
 .tension-slider::-moz-range-thumb { width: 0; height: 0; border: none; }
+
+/* Uptime drawer */
+.up-hero {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 18px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: border-color 0.3s;
+}
+.up-hero.is-down { border-color: color-mix(in oklab, var(--danger) 35%, var(--border)); }
+.up-hero-status { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.up-hero-since { font-size: 10.5px; color: var(--muted); }
+.up-hero-clock {
+  font-family: var(--serif);
+  font-size: 38px;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+}
+.up-hero.is-down .up-hero-clock { color: var(--danger); }
+.up-hero-lbl { font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.up-stat-sub { font-size: 10px; color: var(--muted); margin-top: 4px; }
+.up-strip-card {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 14px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.up-strip { display: flex; gap: 2px; height: 26px; }
+.up-tick { flex: 1; min-width: 2px; border-radius: 2px; transition: opacity 0.12s, transform 0.12s; }
+.up-tick:hover { opacity: 0.75; transform: scaleY(1.12); }
+.up-tick-up { background: var(--success); }
+.up-tick-partial { background: var(--warn); }
+.up-tick-down { background: var(--danger); }
+.up-tick-unknown { background: var(--border); }
+.up-strip-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); }
+.up-legend { display: flex; gap: 14px; font-size: 10px; color: var(--muted); padding-top: 6px; border-top: 1px dashed var(--border); }
+.up-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.up-dot { display: inline-block; width: 7px; height: 7px; border-radius: 2px; }
+.up-events { display: flex; flex-direction: column; gap: 6px; }
+.up-event {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.up-event-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+.up-event.is-down .up-event-dot { background: var(--danger); }
+.up-event.is-gap .up-event-dot { background: var(--muted); opacity: 0.5; }
+.up-event.is-gap .up-event-title { color: var(--ink-2); }
+.up-event-main { flex: 1; min-width: 0; }
+.up-event-title { font-size: 12.5px; font-weight: 500; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+.up-event-ongoing {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.05em;
+  color: var(--danger); background: var(--danger-soft);
+  padding: 1px 7px; border-radius: 999px;
+}
+.up-event-sub { font-size: 10.5px; color: var(--muted); margin-top: 3px; }
+.up-event-dur { font-size: 11px; color: var(--ink-2); flex-shrink: 0; margin-top: 2px; }
+.up-empty {
+  display: flex; align-items: center; gap: 9px;
+  padding: 14px;
+  background: var(--bg-2);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  font-size: 12px; color: var(--ink-2);
+}
+.up-footnote { font-size: 10px; color: var(--muted); margin-top: 10px; }
 
 /* Port check drawer */
 .pc-hero { background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }

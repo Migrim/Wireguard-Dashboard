@@ -19,6 +19,7 @@ function App({ tweaks, setTweaks, onLogout }) {
   const [logsDrawerOpen, setLogsDrawerOpen] = uS(false);
   const [addOpen, setAddOpen] = uS(false);
   const [settingsOpen, setSettingsOpen] = uS(false);
+  const [uptimeOpen, setUptimeOpen] = uS(false);
   const [updateAvailable, setUpdateAvailable] = uS(false);
   const [dataBudget, setDataBudget] = uS(50);
   const [budgetEnabled, setBudgetEnabled] = uS(true);
@@ -661,6 +662,7 @@ function App({ tweaks, setTweaks, onLogout }) {
           serviceLoading={serviceLoading}
           updateAvailable={updateAvailable}
           onOpenSettings={() => { setSettingsOpen(true); setUpdateAvailable(false); }}
+          onOpenUptime={() => setUptimeOpen(true)}
         />
         <KPIThroughput currentRx={currentRx} currentTx={currentTx} dataIn={chartTraffic.rx} dataOut={chartTraffic.tx} smooth={tweaks.smoothThroughput} />
         <KPIDataToday total={totalToday} budget={dataBudget} enabled={budgetEnabled} peerBudgets={peerBudgets} onClick={() => setDataDrawerOpen(true)} />
@@ -800,6 +802,7 @@ function App({ tweaks, setTweaks, onLogout }) {
         />
       )}
       {settingsOpen && <SettingsDrawer tweaks={tweaks} setTweaks={setTweaks} connectedCount={connectedCount} totalPeers={peers.length} onClose={() => setSettingsOpen(false)} onUpdateAvailable={setUpdateAvailable} />}
+      {uptimeOpen && <UptimeDrawer unit={unit} onClose={() => setUptimeOpen(false)} />}
       {dyndnsOpen && <DynDNSDrawer onClose={() => setDyndnsOpen(false)} />}
       {portCheckOpen && <PortCheckDrawer peers={peers} onClose={() => setPortCheckOpen(false)} />}
       {logsDrawerOpen && <LogsDrawer alerts={alerts} onClose={() => setLogsDrawerOpen(false)} verbose={logsVerbose} setVerbose={setLogsVerbose} onDismiss={dismissAlert} />}
@@ -825,7 +828,7 @@ function App({ tweaks, setTweaks, onLogout }) {
 // ============================================================
 // KPI tiles
 // ============================================================
-function KPIServiceControl({ serviceActive, startedAt, servicePort, connectedCount, totalCount, doService, serviceLoading, updateAvailable, onOpenSettings }) {
+function KPIServiceControl({ serviceActive, startedAt, servicePort, connectedCount, totalCount, doService, serviceLoading, updateAvailable, onOpenSettings, onOpenUptime }) {
   const uptime = (() => {
     if (!serviceActive) return 'stopped';
     if (!startedAt) return '—';
@@ -872,10 +875,13 @@ function KPIServiceControl({ serviceActive, startedAt, servicePort, connectedCou
         </button>
       </div>
       <div className="svc-stats">
-        <div className="svc-stat">
-          <div className="svc-stat-label">Uptime</div>
+        <button className="svc-stat svc-stat-btn" onClick={onOpenUptime} title="Show uptime history">
+          <div className="svc-stat-label">
+            Uptime
+            <svg className="svc-stat-chev" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
           <div className="svc-stat-val mono">{uptime}</div>
-        </div>
+        </button>
         <div className="svc-stat">
           <div className="svc-stat-label">Port</div>
           <div className="svc-stat-val mono">{servicePort || '—'}</div>
