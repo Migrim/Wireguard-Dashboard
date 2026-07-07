@@ -817,6 +817,23 @@ html.theme-switching .theme-toggle-icon {
 }
 .up-footnote { font-size: 10px; color: var(--muted); margin-top: 10px; }
 
+/* Ping chart hover tooltip (PingBars — uptime + peer drawers) */
+.pingbar-tip {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: 4px 9px;
+  background: var(--card);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 5;
+}
+.pingbar-tip-val { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--ink); }
+.pingbar-tip-lbl { font-family: var(--mono); font-size: 9.5px; color: var(--muted); }
+
 /* Port check drawer */
 .pc-hero { background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
 .pc-hero-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }

@@ -5,9 +5,10 @@ const { useState: _useState, useEffect: _useEffect, useRef: _useRef, useMemo: _u
 // ============================================================
 // PingBars — thin bar chart with Y-axis, newest bar on the left
 // ============================================================
-function PingBars({ data, height = 68, color = 'var(--accent-2)' }) {
+function PingBars({ data, height = 68, color = 'var(--accent-2)', labels }) {
   const containerRef = _useRef(null);
   const [cw, setCw] = _useState(500);
+  const [hover, setHover] = _useState(null); // { i, y }
 
   _useEffect(() => {
     const el = containerRef.current;
@@ -36,9 +37,29 @@ function PingBars({ data, height = 68, color = 'var(--accent-2)' }) {
   const gap = 2;
   const barW = Math.max(2, (iw - gap * (n - 1)) / n);
   const fmt = v => v === 0 ? '0' : v >= 1000 ? `${(v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}s` : `${v}ms`;
+  const fmtExact = v => v == null || v <= 0 ? 'no data'
+    : v >= 1000 ? `${(v / 1000).toFixed(2)} s`
+    : `${v >= 100 ? Math.round(v) : Number(v.toFixed(1))} ms`;
+
+  const barX = i => PL + i * (barW + gap);
+
+  const onMove = (e) => {
+    const el = containerRef.current;
+    if (!el || n === 0) return;
+    const rect = el.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    if (x < PL || x > cw - PR) { setHover(null); return; }
+    const i = Math.min(n - 1, Math.max(0, Math.floor((x - PL) / (barW + gap))));
+    setHover({ i, y: e.clientY - rect.top });
+  };
 
   return (
-    <div ref={containerRef} style={{ width: '100%' }}>
+    <div
+      ref={containerRef}
+      style={{ width: '100%', position: 'relative', cursor: 'crosshair' }}
+      onMouseMove={onMove}
+      onMouseLeave={() => setHover(null)}
+    >
       <svg viewBox={`0 0 ${cw} ${height}`} preserveAspectRatio="none" style={{ width: '100%', height, display: 'block' }}>
         {ticks.map((t, i) => {
           const y = yAt(t);
@@ -50,13 +71,29 @@ function PingBars({ data, height = 68, color = 'var(--accent-2)' }) {
             </g>
           );
         })}
+        {hover && (
+          <rect x={barX(hover.i) - gap / 2} y={PT} width={barW + gap} height={ih}
+            fill="var(--ink)" opacity="0.07" rx="2" />
+        )}
         {data.map((v, i) => {
-          const x = PL + i * (barW + gap);
+          const x = barX(i);
           const bh = (v / niceMax) * ih;
           return <rect key={i} x={x} y={yAt(v)} width={barW} height={bh}
-            fill={color} opacity={0.2 + 0.8 * (i / Math.max(n - 1, 1))} rx="1" />;
+            fill={color} opacity={hover && hover.i === i ? 1 : 0.2 + 0.8 * (i / Math.max(n - 1, 1))} rx="1" />;
         })}
       </svg>
+      {hover && (
+        <div
+          className="pingbar-tip"
+          style={{
+            left: Math.max(PL + 20, Math.min(cw - PR - 20, barX(hover.i) + barW / 2)),
+            top: Math.max(14, hover.y - 12),
+          }}
+        >
+          <span className="pingbar-tip-val">{fmtExact(data[hover.i])}</span>
+          {labels && labels[hover.i] != null && <span className="pingbar-tip-lbl">{labels[hover.i]}</span>}
+        </div>
+      )}
     </div>
   );
 }
@@ -2545,6 +2582,8 @@ function UptimeDrawer({ unit, onClose }) {
   const netTarget = _pingTargetLabel(netCur?.target || net?.monitor?.targets?.[0]);
   const netLatency = net?.latency || {};
   const latSeries = (netLatency.series || []).map(s => s.ms);
+  const latLabels = (netLatency.series || []).map(s =>
+    new Date(s.ts_ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
   const latMeta = netLatency.avg_ms != null
     ? `avg ${netLatency.avg_ms} ms · min ${netLatency.min_ms} · max ${netLatency.max_ms} · last 24h`
     : 'last 24h';
@@ -2655,7 +2694,7 @@ function UptimeDrawer({ unit, onClose }) {
             </div>
             <div className="drawer-chart">
               {loaded && latSeries.length > 1 ? (
-                <PingBars data={latSeries} height={72} color="var(--accent-2)" />
+                <PingBars data={latSeries} labels={latLabels} height={72} color="var(--accent-2)" />
               ) : (
                 <div className="empty-chart" style={{ height: 72 }}>{loaded ? 'no latency data yet' : 'loading…'}</div>
               )}
