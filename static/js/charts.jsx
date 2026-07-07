@@ -41,6 +41,14 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
   const animRangeRef  = useRef(null);
   const rafRef        = useRef(null);
   const nowMsRef      = useRef(null);
+  const hoverRef      = useRef(null);
+  const xhairRef      = useRef(null);
+  const mkInRef       = useRef(null);
+  const mkOutRef      = useRef(null);
+  const tipRef        = useRef(null);
+  const tipTimeRef    = useRef(null);
+  const tipInRef      = useRef(null);
+  const tipOutRef     = useRef(null);
 
   samplesRef.current  = samples;
   rangeRef.current    = range;
@@ -288,6 +296,50 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
       if (lblMid.current)   { lblMid.current.setAttribute('x',   (PAD.l + w / 2).toFixed(1));   lblMid.current.textContent   = `-${fmtDur(rangeMs / 2)}`; }
       if (lblRight.current) { lblRight.current.setAttribute('x', (PAD.l + w).toFixed(1));        lblRight.current.textContent = 'now'; }
 
+      // Hover crosshair + tooltip — driven from the RAF so it stays glued to the
+      // nearest sample even while the window scrolls under a stationary cursor.
+      const hv = hoverRef.current;
+      let hovered = null;
+      if (hv && visible.length > 0 && hv.x >= PAD.l && hv.x <= PAD.l + w) {
+        const hoverTs = winStart + ((hv.x - PAD.l) / w) * rangeMs;
+        let bestD = Infinity;
+        for (const s of visible) {
+          if (s.ts > winStart + rangeMs) continue; // off-screen lead in smooth mode
+          const d = Math.abs(s.ts - hoverTs);
+          if (d < bestD) { bestD = d; hovered = s; }
+        }
+      }
+      if (hovered) {
+        const sx = Math.max(PAD.l, Math.min(PAD.l + w, xAt(hovered.ts)));
+        xhairRef.current?.setAttribute('x1', sx.toFixed(1));
+        xhairRef.current?.setAttribute('x2', sx.toFixed(1));
+        xhairRef.current?.setAttribute('y1', PAD.t.toFixed(1));
+        xhairRef.current?.setAttribute('y2', (PAD.t + h).toFixed(1));
+        xhairRef.current?.setAttribute('opacity', '0.45');
+        mkInRef.current?.setAttribute('cx', sx.toFixed(1));
+        mkInRef.current?.setAttribute('cy', yAt(hovered.rx || 0).toFixed(1));
+        mkInRef.current?.setAttribute('opacity', '1');
+        mkOutRef.current?.setAttribute('cx', sx.toFixed(1));
+        mkOutRef.current?.setAttribute('cy', yAt(hovered.tx || 0).toFixed(1));
+        mkOutRef.current?.setAttribute('opacity', '1');
+        if (tipRef.current) {
+          tipRef.current.style.display = 'flex';
+          tipRef.current.style.left = `${Math.max(PAD.l + 46, Math.min(PAD.l + w - 46, sx))}px`;
+          tipRef.current.style.top = `${Math.max(12, hv.y - 14)}px`;
+          const d = new Date(hovered.ts);
+          if (tipTimeRef.current) tipTimeRef.current.textContent = rangeMs <= 300000
+            ? d.toLocaleTimeString()
+            : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          if (tipInRef.current)  tipInRef.current.textContent  = window.WG.formatRate(hovered.rx || 0);
+          if (tipOutRef.current) tipOutRef.current.textContent = window.WG.formatRate(hovered.tx || 0);
+        }
+      } else {
+        xhairRef.current?.setAttribute('opacity', '0');
+        mkInRef.current?.setAttribute('opacity', '0');
+        mkOutRef.current?.setAttribute('opacity', '0');
+        if (tipRef.current) tipRef.current.style.display = 'none';
+      }
+
       rafRef.current = requestAnimationFrame(tick);
     };
 
@@ -296,7 +348,15 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
   }, [height]); // re-create only if height changes
 
   return (
-    <div ref={containerRef} style={{ width: '100%' }}>
+    <div
+      ref={containerRef}
+      style={{ width: '100%', position: 'relative', cursor: 'crosshair' }}
+      onMouseMove={e => {
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (rect) hoverRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      }}
+      onMouseLeave={() => { hoverRef.current = null; }}
+    >
       <svg ref={svgRef} viewBox={`0 0 ${widthProp} ${height}`} preserveAspectRatio="none" style={{ width: '100%', height, display: 'block' }}>
         <defs>
           <linearGradient id={`${uid}-gIn`}  x1="0" x2="0" y1="0" y2="1">
@@ -339,10 +399,28 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
         <circle ref={dotInRef}  cx={0} cy={0} r="3" fill={accent}  opacity="0" />
         <circle ref={dotOutRef} cx={0} cy={0} r="3" fill={accent2} opacity="0" />
 
+        {/* Hover crosshair + sample markers — positioned by the RAF loop */}
+        <line ref={xhairRef} x1={0} x2={0} y1={0} y2={0} stroke="var(--ink)" strokeWidth="1" strokeDasharray="3 3" opacity="0" />
+        <circle ref={mkInRef}  cx={0} cy={0} r="3.5" fill={accent}  stroke="var(--card)" strokeWidth="1.5" opacity="0" />
+        <circle ref={mkOutRef} cx={0} cy={0} r="3.5" fill={accent2} stroke="var(--card)" strokeWidth="1.5" opacity="0" />
+
         <text ref={lblLeft}  x={PAD.l} y={height - 8} fontSize="10" fill="var(--muted)" fontFamily="var(--mono)" />
         <text ref={lblMid}   x={PAD.l} y={height - 8} fontSize="10" fill="var(--muted)" fontFamily="var(--mono)" textAnchor="middle" />
         <text ref={lblRight} x={PAD.l} y={height - 8} fontSize="10" fill="var(--muted)" fontFamily="var(--mono)" textAnchor="end" />
       </svg>
+      <div ref={tipRef} className="pingbar-tip chart-tip" style={{ display: 'none' }}>
+        <span ref={tipTimeRef} className="pingbar-tip-lbl" />
+        <div className="chart-tip-row">
+          <i className="chart-tip-key" style={{ background: accent }} />
+          <span ref={tipInRef} className="pingbar-tip-val" />
+          <span className="chart-tip-name">inbound</span>
+        </div>
+        <div className="chart-tip-row">
+          <i className="chart-tip-key" style={{ background: accent2 }} />
+          <span ref={tipOutRef} className="pingbar-tip-val" />
+          <span className="chart-tip-name">outbound</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -350,8 +428,9 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
 // ============================================================
 // Sparkline — tiny live chart for peer rows
 // ============================================================
-function Sparkline({ data, width = 120, height = 32, color = 'var(--accent)', active = true }) {
+function Sparkline({ data, width = 120, height = 32, color = 'var(--accent)', active = true, format }) {
   const uid = useRef(`sp-${Math.random().toString(36).slice(2)}`).current;
+  const [hover, setHover] = useState(null); // { i }
   const n = data.length;
   if (n < 2) return <svg style={{ width, height, display: 'block' }} />;
   const max = Math.max(...data, 0.01);
@@ -365,8 +444,9 @@ function Sparkline({ data, width = 120, height = 32, color = 'var(--accent)', ac
   const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
   const area = d + ` L${(width - 1).toFixed(1)},${height - 1} L1,${height - 1} Z`;
   const last = pts[n - 1];
+  const hv = format && hover ? hover : null;
 
-  return (
+  const svg = (
     <svg viewBox={`0 0 ${width} ${height}`} style={{ width, height, display: 'block' }}>
       <defs>
         <linearGradient id={`sg-${color.replace(/[^a-z0-9]/gi, '')}`} x1="0" x2="0" y1="0" y2="1">
@@ -383,7 +463,7 @@ function Sparkline({ data, width = 120, height = 32, color = 'var(--accent)', ac
         <path d={area} fill={`url(#sg-${color.replace(/[^a-z0-9]/gi, '')})`} opacity={active ? 1 : 0.3} />
         <path d={d} fill="none" stroke={color} strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" opacity={active ? 1 : 0.4} />
       </g>
-      {active && (
+      {active && !hv && (
         <>
           <circle cx={last[0]} cy={last[1]} r="3" fill={color} opacity="0">
             <animate attributeName="opacity" from="0" to="0.5" begin="0.65s" dur="0.2s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0 0 0.2 1" />
@@ -395,15 +475,46 @@ function Sparkline({ data, width = 120, height = 32, color = 'var(--accent)', ac
           </circle>
         </>
       )}
+      {hv && (
+        <>
+          <line x1={pts[hv.i][0]} x2={pts[hv.i][0]} y1={2} y2={height - 2} stroke="var(--ink)" strokeWidth="1" strokeDasharray="2 2" opacity="0.35" />
+          <circle cx={pts[hv.i][0]} cy={pts[hv.i][1]} r="2.6" fill={color} stroke="var(--card)" strokeWidth="1.2" />
+        </>
+      )}
     </svg>
+  );
+
+  if (!format) return svg;
+  return (
+    <div
+      style={{ position: 'relative', width, height, cursor: 'crosshair' }}
+      onMouseMove={e => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / (rect.width || width) * width;
+        const i = Math.max(0, Math.min(n - 1, Math.round(((x - 1) / (width - 2)) * (n - 1))));
+        setHover({ i });
+      }}
+      onMouseLeave={() => setHover(null)}
+    >
+      {svg}
+      {hv && (
+        <div
+          className="pingbar-tip"
+          style={{ left: Math.max(14, Math.min(width - 14, pts[hv.i][0])), top: Math.max(4, pts[hv.i][1] - 8) }}
+        >
+          <span className="pingbar-tip-val">{format(data[hv.i])}</span>
+        </div>
+      )}
+    </div>
   );
 }
 
 // ============================================================
 // MiniBar — per-KPI live mini chart (bars)
 // ============================================================
-function MiniBars({ data, width = 140, height = 36, color = 'var(--accent)', smooth = false, slots = 20 }) {
+function MiniBars({ data, width = 140, height = 36, color = 'var(--accent)', smooth = false, slots = 20, format }) {
   const uid = useRef(`mb-${Math.random().toString(36).slice(2)}`).current;
+  const [hover, setHover] = useState(null); // { i, px }
   // Fixed slot count: left-pad with zeros so the bar count never changes —
   // values shift through the slots instead of new bars mounting.
   const vals = data.length >= slots
@@ -414,8 +525,9 @@ function MiniBars({ data, width = 140, height = 36, color = 'var(--accent)', smo
   // In smooth mode each slot's height eases toward the value that shifted
   // into it, so the data appears to flow from bar to bar.
   const barStyle = smooth ? { transition: 'y 0.6s ease, height 0.6s ease' } : undefined;
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height, display: 'block' }}>
+  const hv = format && hover ? hover : null;
+  const svg = (
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ width: '100%', height, display: 'block' }}>
       <defs>
         <clipPath id={uid}>
           <rect x="0" width={width}>
@@ -429,10 +541,32 @@ function MiniBars({ data, width = 140, height = 36, color = 'var(--accent)', smo
           const h = Math.max(1.5, (v / max) * (height - 4));
           const x = i * (barW + 2);
           const y = height - h - 2;
-          return <rect key={i} x={x} y={y} width={barW} height={h} fill={color} opacity={0.3 + 0.7 * (i / slots)} rx="1" style={barStyle} />;
+          return <rect key={i} x={x} y={y} width={barW} height={h} fill={color}
+            opacity={hv && hv.i === i ? 1 : 0.3 + 0.7 * (i / slots)} rx="1" style={barStyle} />;
         })}
       </g>
     </svg>
+  );
+  if (!format) return svg;
+  return (
+    <div
+      style={{ position: 'relative', width: '100%', cursor: 'crosshair' }}
+      onMouseMove={e => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const vx = (e.clientX - rect.left) / (rect.width || width) * width;
+        const i = Math.max(0, Math.min(slots - 1, Math.floor(vx / (barW + 2))));
+        const px = ((i * (barW + 2) + barW / 2) / width) * (rect.width || width);
+        setHover({ i, px });
+      }}
+      onMouseLeave={() => setHover(null)}
+    >
+      {svg}
+      {hv && (
+        <div className="pingbar-tip" style={{ left: hv.px, top: -2 }}>
+          <span className="pingbar-tip-val">{format(vals[hv.i])}</span>
+        </div>
+      )}
+    </div>
   );
 }
 

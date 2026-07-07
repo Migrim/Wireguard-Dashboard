@@ -917,7 +917,7 @@ function KPIThroughput({ currentRx, currentTx, dataIn, dataOut, smooth = false }
           <span className="kpi-unit">{window.WG.formatRate(total).split(' ')[1]}</span>
         </div>
         <div className="kpi-mini">
-          <MiniBars data={miniData} width={140} height={40} color="var(--accent)" smooth={smooth} slots={20} />
+          <MiniBars data={miniData} width={140} height={40} color="var(--accent)" smooth={smooth} slots={20} format={v => window.WG.formatRate(v)} />
         </div>
       </div>
       <div className="kpi-foot">
@@ -975,7 +975,7 @@ function KPIActiveSessions({ connectedCount, totalCount, avgPingHistory }) {
           <span className="kpi-unit">/ {totalCount}</span>
         </div>
         <div className="kpi-mini" style={{ maxWidth: 210, marginLeft: -12 }}>
-          <Sparkline data={avgPingHistory} width={200} height={48} color="var(--accent-2)" />
+          <Sparkline data={avgPingHistory} width={200} height={48} color="var(--accent-2)" format={v => v > 0 ? `${Math.round(v)} ms` : 'no data'} />
         </div>
       </div>
       <div className="kpi-foot">
@@ -1058,7 +1058,7 @@ function PeerRow({ peer, spark, onClick }) {
       <div className="mono peer-address-cell">{peer.addr}</div>
       <div className="peer-traffic-cell">
         {isOnline
-          ? <Sparkline data={spark} width={110} height={30} color="var(--accent)" active={true} />
+          ? <Sparkline data={spark} width={110} height={30} color="var(--accent)" active={true} format={v => v > 0 ? window.WG.formatBytes(v) : '—'} />
           : <OfflinePlaceholder width={110} height={30} />
         }
       </div>

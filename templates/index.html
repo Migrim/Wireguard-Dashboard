@@ -833,6 +833,11 @@ html.theme-switching .theme-toggle-icon {
 }
 .pingbar-tip-val { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--ink); }
 .pingbar-tip-lbl { font-family: var(--mono); font-size: 9.5px; color: var(--muted); }
+/* Multi-series variant (throughput charts): time header + one line-keyed row per series */
+.chart-tip { align-items: flex-start; gap: 3px; }
+.chart-tip-row { display: flex; align-items: center; gap: 6px; }
+.chart-tip-key { display: inline-block; width: 10px; height: 2px; border-radius: 1px; flex-shrink: 0; }
+.chart-tip-name { font-family: var(--mono); font-size: 9.5px; color: var(--muted); }
 
 /* Port check drawer */
 .pc-hero { background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
