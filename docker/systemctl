@@ -1,0 +1,86 @@
+#!/bin/bash
+
+WG_DIR=${WG_DIR:-/etc/wireguard}
+LOG=/var/log/wg-quick.log
+STAMP=/run/wg-dashboard/active_since
+AUTOSTART="${WG_DIR}/.wg-autostart"
+
+verb="" unit="" prop=""
+for a in "$@"; do
+  case "$a" in
+    --property=*) prop=${a#--property=} ;;
+    -*) ;;
+    *) if [ -z "$verb" ]; then verb=$a; elif [ -z "$unit" ]; then unit=$a; fi ;;
+  esac
+done
+
+iface_of() { local u=${1%.service}; printf '%s' "${u#wg-quick@}"; }
+
+log_ts() {
+  while IFS= read -r line; do
+    printf '%s %s wg-quick[1]: %s\n' "$(date '+%b %d %H:%M:%S')" "$(hostname)" "$line"
+  done >> "$LOG"
+}
+
+mark_active() { date '+%a %Y-%m-%d %H:%M:%S %Z' > "$STAMP" 2>/dev/null || true; }
+
+case "$verb" in
+  daemon-reload|daemon-reexec)
+    exit 0 ;;
+
+  is-active)
+    case "$unit" in
+      wg-quick@*)
+        if wg show "$(iface_of "$unit")" >/dev/null 2>&1; then
+          echo active; exit 0
+        else
+          echo inactive; exit 3
+        fi ;;
+      *) echo active; exit 0 ;;
+    esac ;;
+
+  is-enabled)
+    if grep -q enabled "$AUTOSTART" 2>/dev/null; then
+      echo enabled; exit 0
+    else
+      echo disabled; exit 1
+    fi ;;
+
+  show)
+    [ "$prop" = "ActiveEnterTimestamp" ] && cat "$STAMP" 2>/dev/null
+    exit 0 ;;
+
+  enable)  echo enabled  > "$AUTOSTART"; exit 0 ;;
+  disable) echo disabled > "$AUTOSTART"; exit 0 ;;
+
+  start|stop|restart|reload)
+    case "$unit" in
+      wg-quick@*)
+        iface=$(iface_of "$unit")
+        case "$verb" in
+          start)
+            wg-quick up "$iface" 2>&1 | log_ts
+            rc=${PIPESTATUS[0]}
+            [ "$rc" -eq 0 ] && mark_active
+            exit "$rc" ;;
+          stop)
+            wg-quick down "$iface" 2>&1 | log_ts
+            exit "${PIPESTATUS[0]}" ;;
+          restart)
+            wg-quick down "$iface" 2>&1 | log_ts
+            wg-quick up "$iface" 2>&1 | log_ts
+            rc=${PIPESTATUS[0]}
+            [ "$rc" -eq 0 ] && mark_active
+            exit "$rc" ;;
+          reload)
+            wg syncconf "$iface" <(wg-quick strip "$iface") 2>&1 | log_ts
+            exit "${PIPESTATUS[0]}" ;;
+        esac ;;
+      wg-dashboard*)
+        kill -HUP 1
+        exit 0 ;;
+      *) exit 0 ;;
+    esac ;;
+
+  *) exit 0 ;;
+esac
