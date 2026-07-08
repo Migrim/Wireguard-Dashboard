@@ -910,6 +910,13 @@ html.theme-switching .theme-toggle-icon {
 .dd-stat-label { font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
 .dd-stat-val { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11.5px; color: var(--ink); min-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dd-stat-val.is-muted { color: var(--muted); }
+.dd-stat-src { font-size: 9px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dd-provider-select { width: 100%; padding: 9px 12px; font-size: 12.5px; box-sizing: border-box; }
+.dd-provider-fields { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
+.dd-push-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.dd-push-info { flex: 1; min-width: 0; }
+.dd-code { font-family: var(--mono); background: var(--bg-2); padding: 0 3px; border-radius: 3px; }
+.dd-foot-note { font-size: 12px; color: var(--warn); font-family: var(--mono); display: inline-flex; align-items: center; gap: 7px; }
 .dd-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
 .dd-dot.ok { background: var(--success); } .dd-dot.warn { background: var(--warn); } .dd-dot.fail { background: var(--danger); }
 .dd-field-status { display: flex; align-items: center; gap: 7px; margin-top: 8px; font-family: var(--mono); font-size: 10.5px; color: var(--muted); line-height: 1.4; min-width: 0; }
@@ -980,6 +987,7 @@ html.theme-switching .theme-toggle-icon {
   border-radius: 50%;
 }
 .range-pills {
+  position: relative;
   display: flex; gap: 2px;
   background: var(--bg-2);
   border: 1px solid var(--border);
@@ -987,6 +995,7 @@ html.theme-switching .theme-toggle-icon {
   padding: 2px;
 }
 .range-pill {
+  position: relative; z-index: 1;
   font-family: var(--mono);
   font-size: 10.5px;
   padding: 4px 10px;
@@ -994,9 +1003,43 @@ html.theme-switching .theme-toggle-icon {
   color: var(--muted);
   border-radius: 5px;
   cursor: pointer;
+  transition: color 0.25s ease;
 }
-.range-pill.active { background: var(--card); color: var(--ink); box-shadow: var(--shadow-sm); }
+.range-pill.active { color: var(--ink); }
+.range-pill-thumb {
+  position: absolute;
+  background: var(--card);
+  border-radius: 5px;
+  box-shadow: var(--shadow-sm);
+  pointer-events: none;
+  transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1), top 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              width 0.3s cubic-bezier(0.4, 0, 0.2, 1), height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
 [data-theme="dark"] .range-pills { background: var(--bg); border-color: var(--border); }
+.hero-head-right { display: flex; align-items: stretch; gap: 6px; }
+.chart-pause-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 27px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+}
+.chart-pause-btn:hover { color: var(--ink); }
+.chart-pause-btn.active { color: var(--accent); border-color: var(--accent); }
+[data-theme="dark"] .chart-pause-btn { background: var(--bg); }
+.chart-pause-ico { position: relative; width: 10px; height: 10px; display: block; }
+.chart-pause-ico svg {
+  position: absolute; inset: 0;
+  transition: opacity 0.3s ease, filter 0.3s ease, transform 0.3s ease;
+}
+.chart-pause-ico .ico-pause { opacity: 1; filter: blur(0); transform: scale(1); }
+.chart-pause-ico .ico-play  { opacity: 0; filter: blur(3px); transform: scale(1.25); }
+.chart-pause-btn.active .ico-pause { opacity: 0; filter: blur(3px); transform: scale(1.25); }
+.chart-pause-btn.active .ico-play  { opacity: 1; filter: blur(0); transform: scale(1); }
 
 /* LOGS PANEL */
 .logs-card-shell { position: relative; }

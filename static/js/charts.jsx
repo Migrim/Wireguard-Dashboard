@@ -10,7 +10,7 @@ const PAD = { l: 70, r: 16, t: 18, b: 28 };
 const MAX_YTICKS = 6;
 
 // samples: [{ts: ms, rx: bytes/s, tx: bytes/s}, ...]
-function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, accent = 'var(--accent)', accent2 = 'var(--accent-2)', range = '1m', spline = false, splineTension = 1, smoothScroll = false, smoothScale = false }) {
+function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, accent = 'var(--accent)', accent2 = 'var(--accent-2)', range = '1m', spline = false, splineTension = 1, smoothScroll = false, smoothScale = false, paused = false }) {
   const uid = useRef(`tc-${Math.random().toString(36).slice(2)}`).current;
   const containerRef   = useRef(null);
   const svgRef         = useRef(null);
@@ -41,6 +41,8 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
   const animRangeRef  = useRef(null);
   const rafRef        = useRef(null);
   const nowMsRef      = useRef(null);
+  const pausedRef     = useRef(paused);
+  const pausedNowRef  = useRef(null);
   const hoverRef      = useRef(null);
   const xhairRef      = useRef(null);
   const mkInRef       = useRef(null);
@@ -56,6 +58,7 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
   smoothRef.current         = smoothScroll;
   smoothScaleRef.current    = smoothScale;
   splineTensionRef.current  = splineTension;
+  pausedRef.current         = paused;
 
   // Measure container width
   useEffect(() => {
@@ -130,6 +133,15 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
         nowMsRef.current = null; // reset so re-enabling smooth mode re-anchors
         nowMs = all.length > 0 ? all[all.length - 1].ts : Date.now();
       }
+      // Paused: freeze the display window where it is. Samples keep accumulating
+      // and the smooth-mode anchor above keeps advancing, so resuming jumps
+      // straight back to live.
+      if (pausedRef.current) {
+        if (pausedNowRef.current === null) pausedNowRef.current = nowMs;
+        nowMs = pausedNowRef.current;
+      } else {
+        pausedNowRef.current = null;
+      }
       // Clamp the window to the data actually available so the plot is always
       // fully used — with only 20s of samples a 1m/1h window would squeeze the
       // line into the right edge. The window grows with the data (10s → 30s → …)
@@ -151,7 +163,9 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
       // Include samples up to 6 s beyond nowMs so new arrivals (still off-screen
       // to the right) are already in the path and scroll into view smoothly.
       // The clipPath handles the visual right boundary.
-      const sampleCeil = smoothRef.current ? nowMs + 6000 : nowMs;
+      // While paused, exclude the off-screen lead so late arrivals can't shift
+      // the y-scale of the frozen view.
+      const sampleCeil = (smoothRef.current && !pausedRef.current) ? nowMs + 6000 : nowMs;
       const visible = [];
       for (let i = 0; i < all.length; i++) {
         if (all[i].ts >= winStart - 2000 && all[i].ts <= sampleCeil) visible.push(all[i]);
@@ -258,7 +272,9 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
         const dX = smoothRef.current
           ? (PAD.l + w).toFixed(1)
           : Math.min(PAD.l + w, xAt(dotSrc.ts)).toFixed(1);
-        const dotOpacity = smoothRef.current ? '0' : '1';
+        // Hide the live dot while paused — it tracks the newest sample, which
+        // sits outside the frozen window.
+        const dotOpacity = (smoothRef.current || pausedRef.current) ? '0' : '1';
         dotInRef.current?.setAttribute('cx', dX);
         dotInRef.current?.setAttribute('cy', dotInYRef.current.toFixed(2));
         dotInRef.current?.setAttribute('opacity', dotOpacity);
@@ -294,7 +310,7 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
       // Time-axis labels — reflect the effective (possibly clamped) window
       if (lblLeft.current)  { lblLeft.current.setAttribute('x',  PAD.l.toString());              lblLeft.current.textContent  = `-${fmtDur(rangeMs)}`; }
       if (lblMid.current)   { lblMid.current.setAttribute('x',   (PAD.l + w / 2).toFixed(1));   lblMid.current.textContent   = `-${fmtDur(rangeMs / 2)}`; }
-      if (lblRight.current) { lblRight.current.setAttribute('x', (PAD.l + w).toFixed(1));        lblRight.current.textContent = 'now'; }
+      if (lblRight.current) { lblRight.current.setAttribute('x', (PAD.l + w).toFixed(1));        lblRight.current.textContent = pausedRef.current ? 'paused' : 'now'; }
 
       // Hover crosshair + tooltip — driven from the RAF so it stays glued to the
       // nearest sample even while the window scrolls under a stationary cursor.

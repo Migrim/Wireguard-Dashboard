@@ -52,6 +52,7 @@ function App({ tweaks, setTweaks, onLogout }) {
   const [ifaceName, setIfaceName] = uS('wg0');
 
   const [trafficRange, setTrafficRange] = uS(() => localStorage.getItem('trafficRange') || '1m');
+  const [trafficPaused, setTrafficPaused] = uS(false);
   const [trafficHistory, setTrafficHistory] = uS([]);
   const [dismissedAlerts, setDismissedAlerts] = uS(() => {
     try { return new Set(JSON.parse(localStorage.getItem(DISMISSED_ALERTS_KEY) || '[]')); }
@@ -692,14 +693,25 @@ function App({ tweaks, setTweaks, onLogout }) {
               </div>
             </div>
             <div className="hero-head-right">
-              <div className="range-pills">
-                {['10s', '30s', '1m', '5m', '1h', '24h'].map(r => (
-                  <button key={r} className={`range-pill ${trafficRange === r ? 'active' : ''}`} onClick={() => { localStorage.setItem('trafficRange', r); setTrafficRange(r); }}>{r}</button>
-                ))}
-              </div>
+              <RangePills
+                options={['10s', '30s', '1m', '5m', '1h', '24h']}
+                value={trafficRange}
+                onChange={r => { localStorage.setItem('trafficRange', r); setTrafficRange(r); }}
+              />
+              <button
+                className={`chart-pause-btn ${trafficPaused ? 'active' : ''}`}
+                title={trafficPaused ? 'Resume live chart' : 'Pause chart to inspect'}
+                aria-label={trafficPaused ? 'Resume live chart' : 'Pause chart'}
+                onClick={() => setTrafficPaused(p => !p)}
+              >
+                <span className="chart-pause-ico">
+                  <svg className="ico-pause" width="10" height="10" viewBox="0 0 10 10"><rect x="1.6" y="1" width="2.5" height="8" rx="0.8" fill="currentColor" /><rect x="5.9" y="1" width="2.5" height="8" rx="0.8" fill="currentColor" /></svg>
+                  <svg className="ico-play" width="10" height="10" viewBox="0 0 10 10"><path d="M2.6 1.2 L8.8 5 L2.6 8.8 Z" fill="currentColor" /></svg>
+                </span>
+              </button>
             </div>
           </div>
-          <ThroughputChart samples={trafficHistory} width={900} height={240} range={trafficRange} spline={tweaks.splineChart} splineTension={tweaks.splineTension ?? 1} smoothScroll={tweaks.smoothThroughput} smoothScale={tweaks.smoothScale} />
+          <ThroughputChart samples={trafficHistory} width={900} height={240} range={trafficRange} spline={tweaks.splineChart} splineTension={tweaks.splineTension ?? 1} smoothScroll={tweaks.smoothThroughput} smoothScale={tweaks.smoothScale} paused={trafficPaused} />
         </div>
 
         <div className="logs-card-shell">
@@ -899,6 +911,38 @@ function KPIServiceControl({ serviceActive, startedAt, servicePort, connectedCou
           <svg className="svc-settings-chev" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
         </button>
       </div>
+    </div>
+  );
+}
+
+// Segmented range control with a sliding highlight behind the active pill.
+// The thumb is measured from the active button so it follows the mono-font
+// width differences and the mobile two-row grid layout.
+function RangePills({ options, value, onChange }) {
+  const wrapRef = uR(null);
+  const [thumb, setThumb] = uS(null); // { left, top, width, height }
+
+  const measure = uC(() => {
+    const el = wrapRef.current?.querySelector('.range-pill.active');
+    if (!el) { setThumb(null); return; }
+    setThumb({ left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight });
+  }, []);
+
+  React.useLayoutEffect(measure, [value, measure]);
+  uE(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(wrap);
+    return () => ro.disconnect();
+  }, [measure]);
+
+  return (
+    <div ref={wrapRef} className="range-pills">
+      {thumb && <span className="range-pill-thumb" style={{ left: thumb.left, top: thumb.top, width: thumb.width, height: thumb.height }} />}
+      {options.map(r => (
+        <button key={r} className={`range-pill ${value === r ? 'active' : ''}`} onClick={() => onChange(r)}>{r}</button>
+      ))}
     </div>
   );
 }
