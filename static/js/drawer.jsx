@@ -2427,12 +2427,32 @@ function UpAvailabilitySection({ stats, loaded }) {
 
 function UpTimelineSection({ timeline, range, setRange, loaded, ariaLabel }) {
   const buckets = timeline?.buckets || [];
-  const tickTitle = (b) => {
-    const t = new Date(b.ts_ms).toLocaleString();
-    if (b.state === 'unknown') return `${t} — no data`;
-    if (b.state === 'up') return `${t} — up`;
-    return `${t} — ${b.up_pct != null ? `up ${b.up_pct.toFixed(1)}%` : 'down'} · down ${_fmtDurS(b.down_s)}`;
+  const [hover, setHover] = _useState(null); // { i }
+  const n = buckets.length;
+
+  const tickText = (b) => {
+    if (b.state === 'unknown') return 'no data';
+    if (b.state === 'up') return 'up';
+    if (b.state === 'down') return `down · ${_fmtDurS(b.down_s)}`;
+    return `up ${b.up_pct != null ? b.up_pct.toFixed(1) : '—'}% · down ${_fmtDurS(b.down_s)}`;
   };
+  const tickRange = (b) => {
+    const bs = (timeline?.bucket_s || 0) * 1000;
+    const st = new Date(b.ts_ms);
+    const en = new Date(Math.min(b.ts_ms + bs, timeline?.end_ms || b.ts_ms + bs));
+    const dOpts = { month: 'short', day: 'numeric' };
+    const tOpts = { hour: '2-digit', minute: '2-digit' };
+    const sameDay = st.toDateString() === en.toDateString();
+    return `${st.toLocaleString([], { ...dOpts, ...tOpts })} – ${en.toLocaleString([], sameDay ? tOpts : { ...dOpts, ...tOpts })}`;
+  };
+  const onMove = (e) => {
+    if (!n) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const i = Math.max(0, Math.min(n - 1, Math.floor((e.clientX - rect.left) / (rect.width || 1) * n)));
+    setHover({ i });
+  };
+  const hv = hover && buckets[hover.i] ? { i: hover.i, b: buckets[hover.i] } : null;
+
   const rangeStartLabel = timeline?.start_ms
     ? new Date(timeline.start_ms).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     : '';
@@ -2449,10 +2469,28 @@ function UpTimelineSection({ timeline, range, setRange, loaded, ariaLabel }) {
       <div className="up-strip-card">
         {loaded ? (
           <>
-            <div className="up-strip" role="img" aria-label={`${ariaLabel}, last ${range}`}>
-              {buckets.map((b, i) => (
-                <span key={i} className={`up-tick up-tick-${b.state}`} title={tickTitle(b)} />
-              ))}
+            <div
+              className="up-strip-wrap"
+              onMouseMove={onMove}
+              onMouseLeave={() => setHover(null)}
+            >
+              <div className="up-strip" role="img" aria-label={`${ariaLabel}, last ${range}`}>
+                {buckets.map((b, i) => (
+                  <span key={i} className={`up-tick up-tick-${b.state}${hv && hv.i === i ? ' is-hover' : ''}`} />
+                ))}
+              </div>
+              {hv && (
+                <div
+                  className="pingbar-tip"
+                  style={{ left: `clamp(70px, ${(((hv.i + 0.5) / n) * 100).toFixed(2)}%, calc(100% - 70px))`, top: -6 }}
+                >
+                  <span className="pingbar-tip-val up-tip-val">
+                    <i className={`up-dot up-tick-${hv.b.state}`} />
+                    {tickText(hv.b)}
+                  </span>
+                  <span className="pingbar-tip-lbl">{tickRange(hv.b)}</span>
+                </div>
+              )}
             </div>
             <div className="up-strip-labels mono">
               <span>{rangeStartLabel}</span>

@@ -775,9 +775,11 @@ html.theme-switching .theme-toggle-icon {
   border: 1px solid var(--border);
   border-radius: 10px;
 }
+.up-strip-wrap { position: relative; cursor: crosshair; }
 .up-strip { display: flex; gap: 2px; height: 26px; }
 .up-tick { flex: 1; min-width: 2px; border-radius: 2px; transition: opacity 0.12s, transform 0.12s; }
-.up-tick:hover { opacity: 0.75; transform: scaleY(1.12); }
+.up-tick.is-hover { opacity: 0.75; transform: scaleY(1.12); }
+.up-tip-val { display: inline-flex; align-items: center; gap: 5px; }
 .up-tick-up { background: var(--success); }
 .up-tick-partial { background: var(--warn); }
 .up-tick-down { background: var(--danger); }
