@@ -462,7 +462,9 @@ html.theme-switching .theme-toggle-icon {
 .kpi-clickable { cursor: pointer; transition: border-color 0.15s; }
 .kpi-clickable:hover { border-color: var(--border-strong); }
 .kpi-clickable:hover .kpi-link { color: var(--accent); }
-.kpi-link { color: var(--muted); transition: color 0.15s; }
+.kpi-link { color: var(--muted); transition: color 0.15s; display: inline-flex; align-items: center; gap: 2px; }
+.kpi-link-chev { flex-shrink: 0; transition: transform 0.15s; }
+.kpi-clickable:hover .kpi-link-chev { transform: translateX(1px); }
 
 .svc-stats {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 0;
@@ -1049,7 +1051,9 @@ html.theme-switching .theme-toggle-icon {
 .logs-card-clickable { cursor: pointer; transition: border-color 0.15s; }
 .logs-card-clickable:hover { border-color: var(--border-strong); }
 .logs-card-clickable:hover .log-expand-hint { color: var(--accent); }
-.log-expand-hint { color: var(--muted); font-size: 10.5px; margin-left: 8px; transition: color 0.15s; }
+.log-expand-hint { color: var(--muted); font-size: 10.5px; margin-left: 8px; transition: color 0.15s; display: inline-flex; align-items: center; gap: 2px; }
+.log-expand-chev { flex-shrink: 0; transition: transform 0.15s; }
+.logs-card-clickable:hover .log-expand-chev { transform: translateX(1px); }
 .alerts-block { padding: 14px 16px 0; display: flex; flex-direction: column; gap: 8px; }
 .alert {
   display: flex; align-items: flex-start; gap: 10px;

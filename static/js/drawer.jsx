@@ -688,7 +688,7 @@ function LogsPanel({ logs, notifications = [], onExpand, onDismiss = () => {}, s
             <span className="section-label">LIVE LOGS</span>
             <div className="log-meta">
               <span className={serviceActive ? 'pulse-dot' : 'pulse-dot pulse-dot-off'} /> {ifaceName}
-              <span className="log-expand-hint">expand →</span>
+              <span className="log-expand-hint">expand <svg className="log-expand-chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M9 18l6-6-6-6"/></svg></span>
             </div>
           </div>
           <div className="logs-stream" ref={scrollRef}>

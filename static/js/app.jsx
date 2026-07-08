@@ -999,7 +999,7 @@ function KPIDataToday({ total, budget = 50, enabled = true, peerBudgets = {}, on
       </div>
       <div className="kpi-foot">
         <span className="mono">{unlimited ? 'used today' : `${pct.toFixed(1)}% of budget`}</span>
-        <span className="mono kpi-link">configure →</span>
+        <span className="mono kpi-link">configure <svg className="kpi-link-chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M9 18l6-6-6-6"/></svg></span>
       </div>
     </div>
   );
@@ -1102,7 +1102,7 @@ function PeerRow({ peer, spark, onClick }) {
       <div className="mono peer-address-cell">{peer.addr}</div>
       <div className="peer-traffic-cell">
         {isOnline
-          ? <Sparkline data={spark} width={110} height={30} color="var(--accent)" active={true} format={v => v > 0 ? window.WG.formatBytes(v) : '—'} />
+          ? <Sparkline data={spark} width={110} height={30} color="var(--accent)" active={true} />
           : <OfflinePlaceholder width={110} height={30} />
         }
       </div>
