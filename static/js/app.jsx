@@ -1079,6 +1079,9 @@ const CTX_ICON = {
   revoke: <><path d="M4 7h16" /><path d="M9 7V4h6v3" /><path d="M6 7l1 13h10l1-13" /><path d="M10 11v6M14 11v6" /></>,
 };
 
+const ARROW = 10;
+const ARROW_INSET = 22; // distance from the menu's right edge to the arrow's tip
+
 function PeerContextMenu({ peer, anchor, triggerRef, onClose, onOpenDetails, onPeerUpdated }) {
   const menuRef = uR(null);
   const [pos, setPos] = uS(null);
@@ -1158,15 +1161,21 @@ function PeerContextMenu({ peer, anchor, triggerRef, onClose, onOpenDetails, onP
     const M = 12;
     const { offsetWidth: w, offsetHeight: h } = el;
     let top = anchor.top;
-    let origin = 'top right';
+    let flipped = false;
     if (top + h > window.innerHeight - M) {
       top = anchor.flipTop - h;
-      origin = 'bottom right';
+      flipped = true;
     }
+    const left = Math.min(Math.max(M, anchor.left), window.innerWidth - w - M);
     setPos({
-      left: Math.min(Math.max(M, anchor.left), window.innerWidth - w - M),
+      left,
       top: Math.max(M, top),
-      origin,
+      origin: flipped ? 'bottom right' : 'top right',
+      flipped,
+      // Point the arrow at the trigger's centre, but keep it clear of the corners
+      arrowLeft: anchor.arrowX == null
+        ? null
+        : Math.min(Math.max(14, anchor.arrowX - left - ARROW / 2), w - 14 - ARROW),
     });
     // Take focus off the trigger, otherwise Enter re-toggles the button
     el.focus({ preventScroll: true });
@@ -1224,6 +1233,13 @@ function PeerContextMenu({ peer, anchor, triggerRef, onClose, onOpenDetails, onP
       onClick={e => e.stopPropagation()}
       onContextMenu={e => { e.preventDefault(); e.stopPropagation(); }}
     >
+      {pos?.arrowLeft != null && (
+        <span
+          className={`ctx-arrow${pos.flipped ? ' is-flipped' : ''}`}
+          style={{ left: pos.arrowLeft }}
+          aria-hidden="true"
+        />
+      )}
       <div className="ctx-menu-head">
         <div className={`peer-avatar-sm${peer.paused ? ' is-paused' : ''}`}>
           {peer.paused
@@ -1279,7 +1295,14 @@ function PeerRow({ peer, spark, onClick, onPeerUpdated }) {
     e.stopPropagation();
     if (menuAnchor) { setMenuAnchor(null); return; }
     const r = e.currentTarget.getBoundingClientRect();
-    setMenuAnchor({ left: r.right - CTX_MENU_W, top: r.bottom + 6, flipTop: r.top - 6 });
+    const arrowX = r.left + r.width / 2;
+    setMenuAnchor({
+      // Right-aligned, but pulled in far enough that the arrow clears the corner radius
+      left: arrowX - (CTX_MENU_W - ARROW_INSET),
+      top: r.bottom + 8,
+      flipTop: r.top - 8,
+      arrowX,
+    });
   };
 
   const openMenuFromRow = (e) => {

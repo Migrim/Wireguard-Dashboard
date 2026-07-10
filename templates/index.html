@@ -398,6 +398,24 @@ html.theme-switching .theme-toggle-icon {
   animation: ctx-menu-in 0.14s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .ctx-menu:focus { outline: none; }
+
+/* Rotated square whose outer half pokes out at the trigger; the inner half sits
+   on the panel's padding and hides the border segment behind it. */
+.ctx-arrow {
+  position: absolute;
+  top: -6px;
+  width: 10px; height: 10px;
+  background: var(--card-raised);
+  border-top: 1px solid var(--border-strong);
+  border-left: 1px solid var(--border-strong);
+  border-radius: 2px 0 0 0;
+  transform: rotate(45deg);
+}
+.ctx-arrow.is-flipped {
+  top: auto;
+  bottom: -6px;
+  transform: rotate(225deg);
+}
 @keyframes ctx-menu-in {
   from { opacity: 0; transform: scale(0.95) translateY(-3px); }
   to   { opacity: 1; transform: scale(1) translateY(0); }
