@@ -328,17 +328,8 @@ function PeerDrawer({ peer, onClose, throughputBuffers, peerPingHistory = {}, on
   const downloadConfig = async () => {
     setDownloading(true);
     try {
-      const r = await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/ovpn', { silent: true });
-      if (r && r.profile) {
-        const blob = new Blob([r.profile], { type: 'text/plain' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = peer.name + '.conf';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.WG.toast?.success?.('Config downloaded', `${peer.name}.conf`);
-      }
+      await window.WG.downloadPeerConfig(peer.name);
+      window.WG.toast?.success?.('Config downloaded', `${peer.name}.conf`);
     } catch (e) {
       window.WG.toast?.error?.('Download failed', e.message || 'API error');
     } finally {
@@ -356,7 +347,7 @@ function PeerDrawer({ peer, onClose, throughputBuffers, peerPingHistory = {}, on
           setRevoking(true);
           const t = window.WG.toast?.loading?.(`Revoking "${peer.name}"…`);
           try {
-            await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/revoke', { silent: true, method: 'POST' });
+            await window.WG.revokePeer(peer.name);
             t?.success?.('Peer revoked', `"${peer.name}" has been removed`);
             onClose();
             if (onRevoke) onRevoke();
@@ -376,7 +367,7 @@ function PeerDrawer({ peer, onClose, throughputBuffers, peerPingHistory = {}, on
     setPendingAction(action);
     const t = window.WG.toast?.loading?.(wasPaused ? `Resuming "${peer.name}"…` : `Pausing "${peer.name}"…`);
     try {
-      await window.WG.apiCall('/api/users/' + encodeURIComponent(peer.name) + '/' + action, { silent: true, method: 'POST' });
+      await window.WG.setPeerPaused(peer.name, !wasPaused);
       if (onPeerUpdated) onPeerUpdated();
       if (wasPaused) {
         t?.success?.('Peer resumed', `"${peer.name}" is active again`);

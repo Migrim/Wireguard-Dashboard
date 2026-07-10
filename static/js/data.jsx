@@ -190,10 +190,32 @@ function makeInitialLogs() {
   ];
 }
 
+// ---- Peer actions (shared by the peer drawer and the row context menu) ----
+const peerUrl = (name, path) => '/api/users/' + encodeURIComponent(name) + path;
+
+async function downloadPeerConfig(name) {
+  const r = await apiCall(peerUrl(name, '/ovpn'), { silent: true });
+  if (!r || !r.profile) throw new Error('Server returned an empty profile');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([r.profile], { type: 'text/plain' }));
+  a.download = name + '.conf';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+}
+
+const setPeerPaused = (name, paused) =>
+  apiCall(peerUrl(name, paused ? '/pause' : '/resume'), { silent: true, method: 'POST' });
+
+const revokePeer = (name) =>
+  apiCall(peerUrl(name, '/revoke'), { silent: true, method: 'POST' });
+
 window.WG = {
   apiCall, mapApiPeers, parseLogLines, HS_TIMEOUT,
   TRAFFIC_RANGES,
   initThroughput, initSparkline, seededNoise,
   formatBytes, formatRate, formatRelTime, formatAbsTime,
   LOG_TEMPLATES, makeInitialLogs,
+  downloadPeerConfig, setPeerPaused, revokePeer,
 };

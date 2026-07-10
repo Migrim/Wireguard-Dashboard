@@ -85,6 +85,12 @@ function App({ tweaks, setTweaks, onLogout }) {
   // Previous cumulative bytes per peer — used to compute sparkline deltas
   const prevBytesRef = uR({});
 
+  const refreshPeers = uC(() => {
+    window.WG.apiCall('/api/status', { silent: true })
+      .then(j => setPeers(window.WG.mapApiPeers(j.clients.issued, j.clients.live)))
+      .catch(() => {});
+  }, []);
+
   uE(() => {
     const handler = e => {
       if ((IS_MAC ? e.metaKey : e.ctrlKey) && e.key === 'k') {
@@ -759,7 +765,7 @@ function App({ tweaks, setTweaks, onLogout }) {
             </div>
           )}
           {filtered.map(p => (
-            <PeerRow key={p.id} peer={p} spark={sparks[p.id] || []} onClick={() => setSelectedPeer(p.id)} />
+            <PeerRow key={p.id} peer={p} spark={sparks[p.id] || []} onClick={() => setSelectedPeer(p.id)} onPeerUpdated={refreshPeers} />
           ))}
         </div>
       </section>
@@ -771,17 +777,8 @@ function App({ tweaks, setTweaks, onLogout }) {
           throughputBuffers={peerThr}
           peerPingHistory={peerPingHistory}
           tweaks={tweaks}
-          onRevoke={() => {
-            // Re-fetch peers after revoke
-            window.WG.apiCall('/api/status', { silent: true }).then(j => {
-              setPeers(window.WG.mapApiPeers(j.clients.issued, j.clients.live));
-            }).catch(() => {});
-          }}
-          onPeerUpdated={() => {
-            window.WG.apiCall('/api/status', { silent: true }).then(j => {
-              setPeers(window.WG.mapApiPeers(j.clients.issued, j.clients.live));
-            }).catch(() => {});
-          }}
+          onRevoke={refreshPeers}
+          onPeerUpdated={refreshPeers}
         />
       )}
 
@@ -1070,7 +1067,204 @@ function PeerRowSkeleton({ seed = 0 }) {
   );
 }
 
-function PeerRow({ peer, spark, onClick }) {
+// ============================================================
+// Peer row context menu — portaled so the table never clips it
+// ============================================================
+const CTX_ICON = {
+  details: <><path d="M4 5h16a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1z" /><path d="M14 5v14" /></>,
+  copy: <><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 012-2h8" /></>,
+  download: <><path d="M12 3v12" /><path d="M8 11l4 4 4-4" /><path d="M4 20h16" /></>,
+  pause: <><rect x="7" y="5" width="3.5" height="14" rx="1" /><rect x="13.5" y="5" width="3.5" height="14" rx="1" /></>,
+  resume: <path d="M7 4.5l12 7.5-12 7.5z" />,
+  revoke: <><path d="M4 7h16" /><path d="M9 7V4h6v3" /><path d="M6 7l1 13h10l1-13" /><path d="M10 11v6M14 11v6" /></>,
+};
+
+function PeerContextMenu({ peer, anchor, triggerRef, onClose, onOpenDetails, onPeerUpdated }) {
+  const menuRef = uR(null);
+  const [pos, setPos] = uS(null);
+  const [active, setActive] = uS(-1);
+
+  const statusColor = peer.paused ? 'var(--warn)' : peer.throttled ? 'var(--danger)' : peer.status === 'connected' ? 'var(--success)' : 'var(--muted)';
+  const statusLabel = peer.paused ? 'Paused' : peer.throttled ? 'Throttled' : peer.status === 'connected' ? 'Online' : 'Offline';
+
+  const copyAddress = () => {
+    navigator.clipboard?.writeText(peer.addr);
+    window.WG.toast?.success?.('Address copied', peer.addr);
+  };
+
+  const downloadConfig = async () => {
+    const t = window.WG.toast?.loading?.(`Preparing "${peer.name}.conf"…`);
+    try {
+      await window.WG.downloadPeerConfig(peer.name);
+      t?.success?.('Config downloaded', `${peer.name}.conf`);
+    } catch (e) {
+      t?.error?.('Download failed', e.message || 'API error');
+    }
+  };
+
+  const togglePause = async () => {
+    const wasPaused = peer.paused;
+    const t = window.WG.toast?.loading?.(wasPaused ? `Resuming "${peer.name}"…` : `Pausing "${peer.name}"…`);
+    try {
+      await window.WG.setPeerPaused(peer.name, !wasPaused);
+      onPeerUpdated?.();
+      if (wasPaused) t?.success?.('Peer resumed', `"${peer.name}" is active again`);
+      else t?.update?.({ type: 'pause', title: 'Peer paused', desc: `"${peer.name}" is now blocked`, duration: 4000 });
+    } catch (e) {
+      t?.error?.(`Failed to ${wasPaused ? 'resume' : 'pause'} peer`, e.message || 'API error');
+    }
+  };
+
+  const revoke = () => {
+    window.WG.toast?.confirm?.(
+      'Revoke this peer?',
+      `"${peer.name}" will be permanently removed and disconnected.`,
+      {
+        confirmLabel: 'Revoke',
+        onConfirm: async () => {
+          const t = window.WG.toast?.loading?.(`Revoking "${peer.name}"…`);
+          try {
+            await window.WG.revokePeer(peer.name);
+            t?.success?.('Peer revoked', `"${peer.name}" has been removed`);
+            onPeerUpdated?.();
+          } catch (e) {
+            t?.error?.('Revoke failed', e.message || 'API error');
+          }
+        },
+      }
+    );
+  };
+
+  const items = [
+    { key: 'details', label: 'View details', icon: CTX_ICON.details, run: onOpenDetails },
+    { key: 'copy', label: 'Copy address', icon: CTX_ICON.copy, hint: peer.addr, run: copyAddress, disabled: !peer.addr || peer.addr === '—' },
+    { key: 'download', label: 'Download config', icon: CTX_ICON.download, hint: '.conf', run: downloadConfig },
+    { key: 'pause', label: peer.paused ? 'Resume peer' : 'Pause peer', icon: peer.paused ? CTX_ICON.resume : CTX_ICON.pause, run: togglePause },
+    { sep: true },
+    { key: 'revoke', label: 'Revoke peer', icon: CTX_ICON.revoke, run: revoke, danger: true },
+  ];
+  const selectable = items.filter(it => !it.sep && !it.disabled);
+
+  const select = (item) => {
+    if (!item || item.disabled) return;
+    onClose();
+    item.run();
+  };
+
+  // Measure, then clamp into the viewport and flip upward when short on space
+  React.useLayoutEffect(() => {
+    const el = menuRef.current;
+    if (!el) return;
+    const M = 12;
+    const { offsetWidth: w, offsetHeight: h } = el;
+    let top = anchor.top;
+    let origin = 'top right';
+    if (top + h > window.innerHeight - M) {
+      top = anchor.flipTop - h;
+      origin = 'bottom right';
+    }
+    setPos({
+      left: Math.min(Math.max(M, anchor.left), window.innerWidth - w - M),
+      top: Math.max(M, top),
+      origin,
+    });
+    // Take focus off the trigger, otherwise Enter re-toggles the button
+    el.focus({ preventScroll: true });
+  }, [anchor]);
+
+  uE(() => {
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Tab') {
+        if (e.key === 'Escape') triggerRef?.current?.focus({ preventScroll: true });
+        onClose();
+        return;
+      }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const step = e.key === 'ArrowDown' ? 1 : -1;
+        setActive(i => i < 0
+          ? (step > 0 ? 0 : selectable.length - 1)
+          : (i + step + selectable.length) % selectable.length);
+      } else if (e.key === 'Enter' && active >= 0) {
+        e.preventDefault();
+        select(selectable[active]);
+      }
+    };
+    // The trigger owns its own toggle — let its click handler close the menu
+    const onPointerDown = (e) => {
+      if (menuRef.current?.contains(e.target) || triggerRef?.current?.contains(e.target)) return;
+      onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('resize', onClose);
+    window.addEventListener('scroll', onClose, true);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('resize', onClose);
+      window.removeEventListener('scroll', onClose, true);
+    };
+  });
+
+  let sIdx = -1;
+  return ReactDOM.createPortal(
+    <div
+      ref={menuRef}
+      className="ctx-menu"
+      role="menu"
+      tabIndex={-1}
+      aria-label={`Actions for ${peer.name}`}
+      style={{
+        left: pos ? pos.left : anchor.left,
+        top: pos ? pos.top : anchor.top,
+        visibility: pos ? 'visible' : 'hidden',
+        '--ctx-origin': pos ? pos.origin : 'top right',
+      }}
+      onClick={e => e.stopPropagation()}
+      onContextMenu={e => { e.preventDefault(); e.stopPropagation(); }}
+    >
+      <div className="ctx-menu-head">
+        <div className={`peer-avatar-sm${peer.paused ? ' is-paused' : ''}`}>
+          {peer.paused
+            ? <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" /></svg>
+            : peer.name.split('-').map(s => s[0]).join('').slice(0, 2).toUpperCase()}
+        </div>
+        <div className="ctx-menu-ident">
+          <div className="ctx-menu-name">{peer.name}</div>
+          <div className="ctx-menu-sub"><i style={{ background: statusColor }} />{statusLabel}</div>
+        </div>
+      </div>
+      {items.map((item, i) => {
+        if (item.sep) return <div key={`sep-${i}`} className="ctx-sep" />;
+        if (!item.disabled) sIdx += 1;
+        const idx = item.disabled ? -1 : sIdx;
+        return (
+          <button
+            key={item.key}
+            type="button"
+            role="menuitem"
+            className={`ctx-item${item.danger ? ' danger' : ''}${idx >= 0 && idx === active ? ' is-active' : ''}`}
+            disabled={item.disabled}
+            onMouseEnter={() => setActive(idx)}
+            onClick={() => select(item)}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{item.icon}</svg>
+            <span className="ctx-item-label">{item.label}</span>
+            {item.hint && <span className="ctx-item-hint">{item.hint}</span>}
+          </button>
+        );
+      })}
+    </div>,
+    document.body
+  );
+}
+
+const CTX_MENU_W = 224;
+
+function PeerRow({ peer, spark, onClick, onPeerUpdated }) {
+  const [menuAnchor, setMenuAnchor] = uS(null);
+  const menuBtnRef = uR(null);
   const statusColor = peer.paused ? 'var(--warn)' : peer.throttled ? 'var(--danger)' : peer.status === 'connected' ? 'var(--success)' : 'var(--muted)';
   const isOnline = peer.status === 'connected';
   const statusLabel = peer.paused ? 'Paused' : peer.throttled ? 'Throttled' : isOnline ? 'Online' : 'Offline';
@@ -1081,8 +1275,20 @@ function PeerRow({ peer, spark, onClick }) {
   let hasDraft = false;
   try { hasDraft = !!localStorage.getItem('WG_PEER_DRAFT_' + peer.name); } catch (_) {}
 
+  const openMenuFromButton = (e) => {
+    e.stopPropagation();
+    if (menuAnchor) { setMenuAnchor(null); return; }
+    const r = e.currentTarget.getBoundingClientRect();
+    setMenuAnchor({ left: r.right - CTX_MENU_W, top: r.bottom + 6, flipTop: r.top - 6 });
+  };
+
+  const openMenuFromRow = (e) => {
+    e.preventDefault();
+    setMenuAnchor({ left: e.clientX, top: e.clientY + 4, flipTop: e.clientY - 4 });
+  };
+
   return (
-    <div className={`peers-row data-row${!isOnline ? ' row-offline' : ''}`} onClick={onClick}>
+    <div className={`peers-row data-row${!isOnline ? ' row-offline' : ''}`} onClick={onClick} onContextMenu={openMenuFromRow}>
       <div className="peer-status-cell">
         <span
           className={`status-dot-wrap status-${peer.paused ? 'paused' : peer.throttled ? 'paused' : peer.status}`}
@@ -1132,10 +1338,27 @@ function PeerRow({ peer, spark, onClick }) {
         <div className="handshake-abs">{peer.lastHs ? window.WG.formatAbsTime(peer.lastHs) : ''}</div>
       </div>
       <div className="row-action">
-        <button className="icon-btn-sm" onClick={(e) => { e.stopPropagation(); onClick(); }}>
+        <button
+          ref={menuBtnRef}
+          className={`icon-btn-sm${menuAnchor ? ' is-open' : ''}`}
+          aria-label={`Actions for ${peer.name}`}
+          aria-haspopup="menu"
+          aria-expanded={!!menuAnchor}
+          onClick={openMenuFromButton}
+        >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
         </button>
       </div>
+      {menuAnchor && (
+        <PeerContextMenu
+          peer={peer}
+          anchor={menuAnchor}
+          triggerRef={menuBtnRef}
+          onClose={() => setMenuAnchor(null)}
+          onOpenDetails={onClick}
+          onPeerUpdated={onPeerUpdated}
+        />
+      )}
     </div>
   );
 }
