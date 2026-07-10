@@ -3083,6 +3083,12 @@ def api_diag_perms():
     return jsonify(info)
 
 
+def _logs_cleared_at() -> int:
+    try:
+        return int(_load_dash_settings().get("logs_cleared_at", 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+
 @app.route("/api/logs")
 def api_logs():
     n=int(request.args.get("n","200"))
@@ -3092,7 +3098,26 @@ def api_logs():
         lines=_merge_dashboard_log_lines(lines)
     except Exception:
         app.logger.exception("dashboard_log_merge_failed")
+    cutoff=_logs_cleared_at()
+    if cutoff:
+        # Lines with no parseable timestamp (boot markers etc.) are kept.
+        lines=[ln for ln in lines if (_journal_line_ts(ln) or cutoff) >= cutoff]
     return jsonify({"lines":lines,"verbose":verbose,"count":len(lines)})
+
+@app.route("/api/logs/clear",methods=["POST"])
+def api_logs_clear():
+    # The journal is owned by systemd and journalctl can only vacuum it host-wide,
+    # never per-unit — so rather than destroy unrelated system logs we record a
+    # cutoff and hide everything older from the dashboard's Logs panel.
+    cutoff=int(time.time())
+    _save_dash_setting("logs_cleared_at",cutoff)
+    try:
+        with _dash_events_lock:
+            _write_json_file_root(DASH_EVENTS_DB,[])
+    except Exception:
+        app.logger.exception("dash_events_clear_failed")
+    _log_dashboard_event("logs cleared via dashboard")
+    return jsonify({"ok":True,"cleared_at":cutoff})
 
 @app.route("/api/logs/retention",methods=["GET","POST"])
 def api_logs_retention():

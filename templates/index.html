@@ -657,6 +657,9 @@ html.theme-switching .theme-toggle-icon {
 .set-stat-val.mono { font-family: var(--mono); font-size: 11.5px; }
 .set-stat-val.is-new { color: var(--success); animation: setStatPop 0.5s ease; }
 @keyframes setStatPop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.skel-stat { height: 12px; max-width: 100%; }
+.set-stat-in { animation: setStatIn 0.32s cubic-bezier(0.2, 0.9, 0.25, 1) both; }
+@keyframes setStatIn { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 
 /* Settings drawer — update card */
 .upd-card { background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
@@ -759,7 +762,11 @@ html.theme-switching .theme-toggle-icon {
 /* GitHub project card at the foot of the settings drawer. */
 .gh-profile { display: flex; align-items: center; gap: 12px; padding: 11px 12px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; text-decoration: none; color: inherit; transition: border-color 0.15s, background 0.15s; }
 .gh-profile:hover { border-color: var(--accent); background: color-mix(in oklch, var(--accent) 6%, var(--bg-2)); }
-.gh-avatar { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; background: var(--border); object-fit: cover; }
+.gh-avatar-wrap { position: relative; width: 40px; height: 40px; flex-shrink: 0; }
+.gh-avatar { width: 40px; height: 40px; border-radius: 50%; display: block; background: var(--border); object-fit: cover; opacity: 0; transition: opacity 0.25s ease; }
+.gh-avatar-wrap.is-ready .gh-avatar { opacity: 1; }
+.gh-avatar-skel, .gh-avatar-fallback { position: absolute; inset: 0; width: 40px; height: 40px; border-radius: 50%; }
+.gh-avatar-fallback { display: flex; align-items: center; justify-content: center; background: var(--border); color: var(--muted); }
 .gh-meta { flex: 1; min-width: 0; }
 .gh-user { font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gh-repo { font-size: 11px; color: var(--muted); font-family: var(--mono); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1134,6 +1141,18 @@ html.theme-switching .theme-toggle-icon {
   scroll-behavior: smooth;
 }
 .logs-stream-tall.logs-stream { max-height: 320px; padding: 10px 14px; }
+.logs-empty {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  padding: 44px 20px 40px; font-family: var(--sans);
+}
+.logs-empty-icon {
+  width: 44px; height: 44px; border-radius: 13px;
+  background: var(--accent-soft); color: var(--accent);
+  display: grid; place-items: center; margin-bottom: 13px;
+}
+.logs-empty-title { font-size: 13.5px; font-weight: 600; color: var(--ink); margin-bottom: 5px; }
+.logs-empty-desc { font-size: 12px; color: var(--muted); line-height: 1.55; max-width: 260px; }
+.logs-empty-btn { margin-top: 16px; height: 32px; }
 .log-line {
   display: grid;
   grid-template-columns: 60px 48px 1fr;
@@ -1373,6 +1392,8 @@ html.theme-switching .theme-toggle-icon {
 .mini-btn:hover { color: var(--accent); border-color: var(--accent); }
 .mini-btn-icon { display: inline-flex; align-items: center; justify-content: center; padding: 0; width: 22px; height: 20px; flex-shrink: 0; }
 .action-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.logs-action-row { flex-wrap: nowrap; }
+.logs-action-row .btn { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cs-grid { display: flex; flex-direction: column; gap: 6px; }
 .cs-chip { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 12px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; }
 .cs-chip-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); flex-shrink: 0; }
@@ -3377,7 +3398,13 @@ html:not([data-theme="dark"]) .coll.open .ap-input:focus { background: var(--car
     }, [tweaks.devUpdates]);
 
     React.useEffect(() => {
-      if (tweaks.accent) localStorage.setItem(ACCENT_KEY, tweaks.accent);
+      const accent = tweaks.accent || 'terracotta';
+      const root = document.documentElement;
+      // The dark-mode accent overrides are keyed to [data-theme="dark"].accent-*,
+      // so the class has to live on <html> alongside data-theme.
+      Array.from(root.classList).forEach(c => { if (c.startsWith('accent-')) root.classList.remove(c); });
+      root.classList.add('accent-' + accent);
+      localStorage.setItem(ACCENT_KEY, accent);
     }, [tweaks.accent]);
 
     React.useEffect(() => {

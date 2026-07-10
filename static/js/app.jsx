@@ -551,11 +551,10 @@ function App({ tweaks, setTweaks, onLogout }) {
   const ghostSuffix = searchSuggestion.length > filter.length ? searchSuggestion.slice(filter.length) : '';
 
   const density = tweaks.density || 'dense';
-  const accent = tweaks.accent || 'terracotta';
   const WGToaster = window.Toaster;
 
   return (
-    <div className={`app density-${density} accent-${accent}`}>
+    <div className={`app density-${density}`}>
       <header className="topbar">
         <div className="brand">
           <div className="brand-mark">

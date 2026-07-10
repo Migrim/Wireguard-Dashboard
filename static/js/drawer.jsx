@@ -1304,11 +1304,32 @@ function LogsDrawer({ alerts, onClose, verbose, setVerbose, onDismiss }) {
     URL.revokeObjectURL(a.href);
   };
 
+  const clearLogs = () => {
+    window.WG.toast?.confirm?.(
+      'Clear the log view?',
+      `${localLogs.length} lines will be hidden from this panel. The system journal itself is not deleted.`,
+      {
+        confirmLabel: 'Clear',
+        onConfirm: async () => {
+          const t = window.WG.toast?.loading?.('Clearing logs…');
+          try {
+            await window.WG.apiCall('/api/logs/clear', { silent: true, method: 'POST' });
+            setLocalLogs([]);
+            t?.success?.('Logs cleared', 'Older entries are hidden from the panel');
+          } catch (e) {
+            t?.error?.('Could not clear logs', e.message || 'API unreachable');
+          }
+        },
+      },
+    );
+  };
+
   const filtered = localLogs.filter(l => {
     if (levelFilter !== 'all' && l.level !== levelFilter) return false;
     if (search && !l.msg.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
+  const isFiltered = levelFilter !== 'all' || !!search;
 
   const counts = {
     info:  localLogs.filter(l => l.level === 'info').length,
@@ -1401,7 +1422,26 @@ function LogsDrawer({ alerts, onClose, verbose, setVerbose, onDismiss }) {
                   </div>
                 ))
               ) : filtered.length === 0 ? (
-                <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 11 }}>No matching logs</div>
+                <div className="logs-empty">
+                  <span className="logs-empty-icon">
+                    {isFiltered ? (
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                    ) : (
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6h13M8 12h13M8 18h9"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>
+                    )}
+                  </span>
+                  <div className="logs-empty-title">{isFiltered ? 'No matching logs' : 'No log entries'}</div>
+                  <div className="logs-empty-desc">
+                    {isFiltered
+                      ? 'No lines match the current search and level filter.'
+                      : 'Nothing has been logged yet. New entries appear here as the service runs.'}
+                  </div>
+                  {isFiltered && (
+                    <button className="btn logs-empty-btn" onClick={() => { setSearch(''); setLevelFilter('all'); }}>
+                      Reset filters
+                    </button>
+                  )}
+                </div>
               ) : filtered.map((l, i) => (
                 <div key={i} className={`log-line log-${l.level}${verbose ? ' no-ts' : ''}`}>
                   {!verbose && <span className="log-time">{new Date(l.t).toTimeString().slice(0, 8)}</span>}
@@ -1455,14 +1495,18 @@ function LogsDrawer({ alerts, onClose, verbose, setVerbose, onDismiss }) {
           </section>
 
           <section className="drawer-section">
-            <div className="action-row">
+            <div className="action-row logs-action-row">
               <button className="btn btn-primary" onClick={downloadLogs} disabled={localLogs.length === 0}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
                 Download logs ({localLogs.length} lines)
               </button>
               <button className="btn" onClick={downloadPdfLogs} disabled={localLogs.length === 0}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9z"/><path d="M14 3v6h6"/></svg>
-                Download PDF (formatted)
+                Download PDF
+              </button>
+              <button className="btn btn-danger" onClick={clearLogs} disabled={localLogs.length === 0}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+                Clear logs
               </button>
             </div>
           </section>
@@ -1833,6 +1877,7 @@ function SettingsDrawer({ tweaks, setTweaks, onClose, onUpdateAvailable }) {
   const [newVersion, setNewVersion] = _useState('');
   const [phase, setPhase] = _useState('loading');
   const [sysInfo, setSysInfo] = _useState(null);
+  const [avatarState, setAvatarState] = _useState('loading');
   const [stageIdx, setStageIdx] = _useState(-1);
   const [stageDetails, setStageDetails] = _useState({});
   const [updateError, setUpdateError] = _useState('');
@@ -2166,13 +2211,13 @@ function SettingsDrawer({ tweaks, setTweaks, onClose, onUpdateAvailable }) {
           <section className="drawer-section">
             <div className="section-head"><span className="section-label">SERVER</span></div>
             <div className="set-stats">
-              {stats.map(s => (
+              {stats.map((s, i) => (
                 <div className="set-stat" key={s.label}>
                   <div className="set-stat-label">{s.label}</div>
                   <div className={`set-stat-val ${s.mono ? 'mono' : ''} ${s.highlight ? 'is-new' : ''}`}>
                     {s.value != null
-                      ? s.value
-                      : <span className="skel" style={{ width: s.skelW }} />}
+                      ? <span className="set-stat-in">{s.value}</span>
+                      : <span className="skel skel-stat" style={{ width: s.skelW, animationDelay: `${i * -110}ms` }} />}
                   </div>
                 </div>
               ))}
@@ -2390,21 +2435,32 @@ function SettingsDrawer({ tweaks, setTweaks, onClose, onUpdateAvailable }) {
             <div className="section-head"><span className="section-label">ABOUT</span></div>
             <a
               className="gh-profile"
-              href="https://github.com/Migrim/OpenVPN-Dashboard"
+              href="https://github.com/Migrim/Wireguard-Quick"
               target="_blank"
               rel="noopener noreferrer"
             >
-              <img
-                className="gh-avatar"
-                src="https://github.com/Migrim.png?size=80"
-                alt="Migrim"
-                width="40"
-                height="40"
-                loading="lazy"
-              />
+              <span className={`gh-avatar-wrap ${avatarState === 'ready' ? 'is-ready' : ''}`}>
+                {avatarState === 'loading' && <span className="skel gh-avatar-skel" />}
+                {avatarState === 'error' && (
+                  <span className="gh-avatar-fallback" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  </span>
+                )}
+                <img
+                  className="gh-avatar"
+                  src="https://github.com/Migrim.png?size=160"
+                  srcSet="https://github.com/Migrim.png?size=80 1x, https://github.com/Migrim.png?size=160 2x"
+                  alt="Migrim"
+                  width="40"
+                  height="40"
+                  decoding="async"
+                  onLoad={() => setAvatarState('ready')}
+                  onError={() => setAvatarState('error')}
+                />
+              </span>
               <div className="gh-meta">
                 <div className="gh-user">Migrim</div>
-                <div className="gh-repo">OpenVPN-Dashboard</div>
+                <div className="gh-repo">Wireguard-Quick</div>
               </div>
               <span className="gh-open" aria-hidden="true" title="Open on GitHub">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/></svg>
