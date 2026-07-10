@@ -261,6 +261,7 @@ function DnsActivity({ peer, onPeerUpdated }) {
 // ============================================================
 function PeerQrModal({ peer, onClose }) {
   const [qr, setQr] = _useState({ loading: true, url: '', error: '' });
+  const [shown, setShown] = _useState(false); // set once the QR image has decoded
   const closeRef = _useRef(null);
 
   _useEffect(() => {
@@ -273,6 +274,7 @@ function PeerQrModal({ peer, onClose }) {
   _useEffect(() => {
     let cancelled = false;
     setQr({ loading: true, url: '', error: '' });
+    setShown(false);
     (async () => {
       try {
         const profile = await window.WG.fetchPeerConfig(peer.name);
@@ -306,18 +308,30 @@ function PeerQrModal({ peer, onClose }) {
           </button>
         </header>
         <div className="qr-modal-body">
-          <div className="qr-modal-frame">
-            {/* 260 = 240px QR + the 10px padding ap-qr-img adds on each side (border-box) */}
-            {qr.url && <img src={qr.url} width={260} height={260} alt={`WireGuard config QR code for ${peer.name}`} className="ap-qr-img" />}
-            {qr.loading && <div className="qr-modal-state">Generating…</div>}
-            {qr.error && <div className="qr-modal-state qr-modal-err">{qr.error}</div>}
+          <div className="qr-modal-stage">
+            {qr.error ? (
+              <div className="qr-modal-err">{qr.error}</div>
+            ) : (
+              <>
+                <div className={`skel qr-modal-skel${shown ? ' is-gone' : ''}`} aria-hidden="true" />
+                {/* 260 = 240px QR + the 10px padding ap-qr-img adds on each side (border-box) */}
+                {qr.url && (
+                  <img
+                    src={qr.url}
+                    width={260}
+                    height={260}
+                    alt={`WireGuard config QR code for ${peer.name}`}
+                    className={`ap-qr-img qr-modal-img${shown ? ' is-shown' : ''}`}
+                    onLoad={() => setShown(true)}
+                  />
+                )}
+              </>
+            )}
           </div>
-          <div className="qr-modal-steps">
-            <span>Open the WireGuard app, then <em>Add tunnel → Scan from QR code</em>.</span>
-          </div>
-          <div className="qr-modal-warn">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
-            <span>This code carries the peer's private key — don't share or screenshot it.</span>
+          <div className="qr-modal-cap">Scan in the WireGuard app to import this tunnel</div>
+          <div className="qr-modal-note">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg>
+            Contains the private key
           </div>
         </div>
       </div>
