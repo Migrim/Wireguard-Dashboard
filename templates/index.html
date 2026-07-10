@@ -523,6 +523,8 @@ html.theme-switching .theme-toggle-icon {
   flex: 1;
 }
 .kpi-body-radial { justify-content: center; align-items: center; }
+/* DATA TODAY with no cap: headline number over a composition bar. */
+.kpi-body-comp { flex-direction: column; align-items: stretch; justify-content: space-between; gap: 12px; }
 .kpi-number {
   display: flex; align-items: baseline; gap: 4px;
   line-height: 1;
@@ -809,24 +811,8 @@ html.theme-switching .theme-toggle-icon {
 .budget-enf { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: -4px; padding-top: 12px; border-top: 1px solid var(--border); font-family: var(--mono); font-size: 10.5px; color: var(--muted); flex-wrap: wrap; }
 .budget-enf-counts { display: flex; align-items: center; gap: 6px; }
 
-/* Budget hero, tracking-only state: composition of today's total by peer.
-   Segment fills step from --accent to --accent-soft, so they follow the
-   selected accent and both color schemes without a second palette. */
 .budget-track { display: flex; align-items: center; gap: 10px; }
 .budget-track-chip { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--border-strong); border-radius: 999px; padding: 4px 9px; white-space: nowrap; }
-.budget-comp-wrap { display: flex; flex-direction: column; gap: 10px; }
-.budget-comp { display: flex; height: 10px; gap: 2px; }
-.budget-comp-seg { min-width: 3px; border-radius: 2px; transition: width 0.6s ease, opacity 0.2s; }
-.budget-comp-seg:first-child { border-radius: 5px 2px 2px 5px; }
-.budget-comp-seg:last-child { border-radius: 2px 5px 5px 2px; }
-.budget-comp-seg:only-child { border-radius: 5px; }
-.budget-comp:hover .budget-comp-seg { opacity: 0.45; }
-.budget-comp .budget-comp-seg:hover { opacity: 1; }
-.budget-comp-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
-.budget-comp-item { display: flex; align-items: center; gap: 6px; }
-.budget-comp-dot { width: 7px; height: 7px; border-radius: 2px; flex-shrink: 0; }
-.budget-comp-name { color: var(--ink-2); max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.budget-comp-empty { height: 10px; border-radius: 5px; border: 1px dashed var(--border-strong); }
 
 .peer-usage-list { display: flex; flex-direction: column; gap: 8px; }
 .peer-usage-row { display: grid; grid-template-columns: 100px 1fr 70px; gap: 12px; align-items: center; font-size: 12px; }
@@ -974,6 +960,59 @@ html.theme-switching .theme-toggle-icon {
 }
 .up-loadmore:hover { border-color: var(--border-strong); color: var(--ink); }
 .up-footnote { font-size: 10px; color: var(--muted); margin-top: 10px; }
+
+/* ============================================================
+   BudgetComposition — part-to-whole bar of today's traffic by peer.
+   Used by the DATA TODAY tile and the budget drawer hero.
+
+   The five fills are steps along the *selected* accent's own hue, so they track
+   --accent through every accent theme. Each theme picks its own direction:
+   light steps up in lightness, dark steps down, because a lighter step that
+   reads on cream disappears on espresso. Chroma drops as lightness travels so
+   the pale end stays a tint rather than a wash.
+============================================================ */
+:root {
+  --bcomp-0: var(--accent);
+  --bcomp-1: color-mix(in oklch, var(--accent) 72%, var(--accent-soft));
+  --bcomp-2: color-mix(in oklch, var(--accent) 50%, var(--accent-soft));
+  --bcomp-3: color-mix(in oklch, var(--accent) 30%, var(--accent-soft));
+  --bcomp-4: color-mix(in oklch, var(--accent) 12%, var(--accent-soft));
+}
+@supports (color: oklch(from white l c h)) {
+  :root {
+    --bcomp-1: oklch(from var(--accent) calc(l + 0.09) calc(c * 0.88) h);
+    --bcomp-2: oklch(from var(--accent) calc(l + 0.17) calc(c * 0.74) h);
+    --bcomp-3: oklch(from var(--accent) calc(l + 0.25) calc(c * 0.58) h);
+    --bcomp-4: oklch(from var(--accent) calc(l + 0.32) calc(c * 0.42) h);
+  }
+  [data-theme="dark"] {
+    --bcomp-1: oklch(from var(--accent) calc(l - 0.10) calc(c * 0.92) h);
+    --bcomp-2: oklch(from var(--accent) calc(l - 0.19) calc(c * 0.82) h);
+    --bcomp-3: oklch(from var(--accent) calc(l - 0.27) calc(c * 0.70) h);
+    --bcomp-4: oklch(from var(--accent) calc(l - 0.34) calc(c * 0.58) h);
+  }
+}
+
+.bcomp-wrap { position: relative; display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.bcomp-bar { display: flex; gap: 2px; }
+.bcomp-seg { min-width: 3px; border-radius: 2px; transition: width 0.6s ease, opacity 0.18s ease; }
+.bcomp-seg:first-child { border-radius: 5px 2px 2px 5px; }
+.bcomp-seg:last-child { border-radius: 2px 5px 5px 2px; }
+.bcomp-seg:only-child { border-radius: 5px; }
+/* Dim the rest on hover so the hovered share reads against the whole. */
+.bcomp-bar.is-hovering .bcomp-seg { opacity: 0.35; }
+.bcomp-bar.is-hovering .bcomp-seg.on { opacity: 1; }
+.bcomp-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+.bcomp-legend-sm { gap: 3px 10px; font-size: 9.5px; }
+.bcomp-item { display: flex; align-items: center; gap: 6px; transition: opacity 0.18s ease; }
+.bcomp-legend.is-hovering .bcomp-item { opacity: 0.4; }
+.bcomp-legend.is-hovering .bcomp-item.on { opacity: 1; }
+.bcomp-dot { width: 7px; height: 7px; border-radius: 2px; flex-shrink: 0; }
+.bcomp-name { color: var(--ink-2); max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bcomp-empty { border-radius: 5px; border: 1px dashed var(--border-strong); }
+.bcomp-tip { position: absolute; transform: translate(-50%, -100%); z-index: 6; }
+.bcomp-tip-name { font-family: var(--mono); font-size: 10.5px; font-weight: 600; color: var(--ink); }
+.bcomp-tip-val { font-family: var(--mono); font-size: 9.5px; color: var(--muted); }
 
 /* Ping chart hover tooltip (PingBars — uptime + peer drawers) */
 .pingbar-tip {

@@ -679,7 +679,7 @@ function App({ tweaks, setTweaks, onLogout }) {
           onOpenUptime={() => setUptimeOpen(true)}
         />
         <KPIThroughput currentRx={currentRx} currentTx={currentTx} dataIn={chartTraffic.rx} dataOut={chartTraffic.tx} smooth={tweaks.smoothThroughput} />
-        <KPIDataToday total={totalToday} budget={dataBudget} enabled={budgetEnabled} peerBudgets={peerBudgets} onClick={() => setDataDrawerOpen(true)} />
+        <KPIDataToday total={totalToday} budget={dataBudget} enabled={budgetEnabled} peerBudgets={peerBudgets} peerRows={budgetUsage.peers} onClick={() => setDataDrawerOpen(true)} />
         <KPIActiveSessions connectedCount={connectedCount} totalCount={peers.length} avgPingHistory={avgPingHistory} />
       </section>
 
@@ -979,7 +979,7 @@ function KPIThroughput({ currentRx, currentTx, dataIn, dataOut, smooth = false }
   );
 }
 
-function KPIDataToday({ total, budget = 50, enabled = true, peerBudgets = {}, onClick }) {
+function KPIDataToday({ total, budget = 50, enabled = true, peerBudgets = {}, peerRows = [], onClick }) {
   const entries = Object.values(peerBudgets);
   const budgetGB = entries.reduce((s, b) => s + (b === 'inf' || b == null ? 0 : b), 0);
   const allInfinite = entries.length > 0 && budgetGB === 0;
@@ -987,23 +987,41 @@ function KPIDataToday({ total, budget = 50, enabled = true, peerBudgets = {}, on
   const effectiveGB = budgetGB > 0 ? budgetGB : budget;
   const cap = unlimited ? Math.max(total, 1) : effectiveGB * 1024 * 1024 * 1024;
   const pct = unlimited ? 0 : (total / cap) * 100;
+
+  // With no cap there is nothing for a gauge to fill against, so show where the
+  // traffic went instead of a ring that is always exactly full.
+  const rows = uM(
+    () => (peerRows || []).map(r => ({ id: r.name, name: r.name, total: r.bytes || 0 })),
+    [peerRows]
+  );
+
   return (
     <div className="kpi-tile kpi-clickable" onClick={onClick} role="button" tabIndex={0}>
       <div className="kpi-head">
         <span className="section-label">DATA TODAY</span>
         {enabled && <span className="kpi-badge">{allInfinite ? '∞ no limit' : `of ${effectiveGB} GB`}</span>}
       </div>
-      <div className="kpi-body kpi-body-radial">
-        <RadialGauge
-          value={total}
-          max={cap}
-          unlimited={unlimited}
-          width={110}
-          color={unlimited ? 'var(--accent)' : pct > 90 ? 'var(--danger)' : pct > 70 ? 'var(--warn)' : 'var(--accent)'}
-          label={window.WG.formatBytes(total).split(' ')[0]}
-          sublabel={window.WG.formatBytes(total).split(' ')[1]}
-        />
-      </div>
+      {unlimited ? (
+        <div className="kpi-body kpi-body-comp">
+          <div className="kpi-number">
+            <span className="kpi-big">{window.WG.formatBytes(total).split(' ')[0]}</span>
+            <span className="kpi-unit">{window.WG.formatBytes(total).split(' ')[1]}</span>
+          </div>
+          <BudgetComposition rows={rows} height={8} legendMax={3} compact emptyLabel="no traffic yet" />
+        </div>
+      ) : (
+        <div className="kpi-body kpi-body-radial">
+          <RadialGauge
+            value={total}
+            max={cap}
+            unlimited={unlimited}
+            width={110}
+            color={pct > 90 ? 'var(--danger)' : pct > 70 ? 'var(--warn)' : 'var(--accent)'}
+            label={window.WG.formatBytes(total).split(' ')[0]}
+            sublabel={window.WG.formatBytes(total).split(' ')[1]}
+          />
+        </div>
+      )}
       <div className="kpi-foot">
         <span className="mono">{unlimited ? 'used today' : `${pct.toFixed(1)}% of budget`}</span>
         <span className="mono kpi-link">configure <svg className="kpi-link-chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M9 18l6-6-6-6"/></svg></span>

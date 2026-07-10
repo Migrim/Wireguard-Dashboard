@@ -658,4 +658,98 @@ function RadialGauge({ value, max, width = 120, color = 'var(--accent)', label, 
   );
 }
 
-Object.assign(window, { ThroughputChart, Sparkline, MiniBars, RadialGauge });
+// ============================================================
+// BudgetComposition — part-to-whole bar of today's traffic by peer.
+// Shown wherever there is no cap to measure against, since "percent of nothing"
+// has no answer but "who used it" always does.
+// ============================================================
+const BCOMP_MAX_SEGMENTS = 5;
+const bcompColor = (i) => `var(--bcomp-${i})`;
+
+// Top peers by usage, remainder folded into one "others" segment. The ramp is
+// never cycled: an 8th peer joins "others", it does not reuse step 0.
+function budgetComposition(rows) {
+  const ranked = rows.filter(r => r.total > 0).sort((a, b) => b.total - a.total);
+  if (ranked.length <= BCOMP_MAX_SEGMENTS) return ranked;
+  const keep = ranked.slice(0, BCOMP_MAX_SEGMENTS - 1);
+  const rest = ranked.slice(BCOMP_MAX_SEGMENTS - 1);
+  return [...keep, {
+    id: '__other',
+    name: `${rest.length} others`,
+    total: rest.reduce((s, r) => s + r.total, 0),
+  }];
+}
+
+function BudgetComposition({ rows, height = 10, legend = true, legendMax = Infinity, compact = false, emptyLabel = 'no traffic recorded yet today' }) {
+  const [hover, setHover] = useState(null); // { i, x }
+  const barRef = useRef(null);
+
+  const comp = useMemo(() => budgetComposition(rows || []), [rows]);
+  // Sized against their own sum, not the interface total — per-peer counters can
+  // lag it, and a bar that stops short of its track reads as a rendering bug.
+  const compTotal = comp.reduce((s, p) => s + p.total, 0) || 1;
+
+  if (comp.length === 0) {
+    return (
+      <div className="bcomp-wrap">
+        <div className="bcomp-empty" style={{ height }} />
+        {legend && <div className="bcomp-legend"><span>{emptyLabel}</span></div>}
+      </div>
+    );
+  }
+
+  const share = (p) => (p.total / compTotal) * 100;
+  const onEnter = (i, e) => {
+    const bar = barRef.current;
+    if (!bar) return;
+    const seg = e.currentTarget.getBoundingClientRect();
+    const box = bar.getBoundingClientRect();
+    setHover({ i, x: seg.left - box.left + seg.width / 2 });
+  };
+
+  const hovering = hover !== null;
+  const legendItems = comp.slice(0, legendMax);
+  const hiddenCount = comp.length - legendItems.length;
+
+  return (
+    <div className="bcomp-wrap">
+      {hovering && (
+        <div className="pingbar-tip bcomp-tip" style={{ left: hover.x, top: -6 }}>
+          <span className="bcomp-tip-name">{comp[hover.i].name}</span>
+          <span className="bcomp-tip-val">
+            {window.WG.formatBytes(comp[hover.i].total)} · {share(comp[hover.i]).toFixed(1)}%
+          </span>
+        </div>
+      )}
+      <div
+        ref={barRef}
+        className={`bcomp-bar${hovering ? ' is-hovering' : ''}`}
+        style={{ height }}
+        onMouseLeave={() => setHover(null)}
+      >
+        {comp.map((p, i) => (
+          <div
+            key={p.id}
+            className={`bcomp-seg${hover?.i === i ? ' on' : ''}`}
+            style={{ width: `${share(p)}%`, background: bcompColor(i) }}
+            onMouseEnter={(e) => onEnter(i, e)}
+          />
+        ))}
+      </div>
+      {legend && (
+        <div className={`bcomp-legend${compact ? ' bcomp-legend-sm' : ''}${hovering ? ' is-hovering' : ''}`}>
+          {legendItems.map((p, i) => (
+            <span key={p.id} className={`bcomp-item${hover?.i === i ? ' on' : ''}`}>
+              <span className="bcomp-dot" style={{ background: bcompColor(i) }} />
+              <span className="bcomp-name" title={p.name}>{p.name}</span>
+              <span>{window.WG.formatBytes(p.total)}</span>
+            </span>
+          ))}
+          {hiddenCount > 0 && <span className="bcomp-item">+{hiddenCount} more</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+Object.assign(window, { ThroughputChart, Sparkline, MiniBars, RadialGauge, BudgetComposition });

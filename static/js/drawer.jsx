@@ -840,18 +840,6 @@ function StepperInput({ value, unit, min = 1, max = 100000, disabled, onCommit }
 // ============================================================
 // DataBudgetDrawer
 // ============================================================
-// Five steps from --accent (largest share) to --accent-soft (smallest).
-const BUDGET_COMP_MIX = [100, 70, 45, 25, 9];
-const budgetCompColor = (i) => `color-mix(in oklch, var(--accent) ${BUDGET_COMP_MIX[i]}%, var(--accent-soft))`;
-
-// Top 4 peers by usage, remainder folded into "Other" — never more than 5 segments.
-function budgetComposition(rows) {
-  const ranked = rows.filter(r => r.total > 0).sort((a, b) => b.total - a.total);
-  if (ranked.length <= 5) return ranked;
-  const rest = ranked.slice(4).reduce((s, r) => s + r.total, 0);
-  return [...ranked.slice(0, 4), { id: '__other', name: `${ranked.length - 4} others`, total: rest }];
-}
-
 function DataBudgetDrawer({ total, budget, enabled = true, alerts, resetTime, peers, peerBudgets = {}, setPeerBudget, enforcement = { action: 'none', throttle_mbps: 5 }, budgetUsage, updateBudgetSettings, onClose }) {
   const [saving, setSaving] = _useState(false);
   const [msg, setMsg] = _useState('');
@@ -881,10 +869,6 @@ function DataBudgetDrawer({ total, budget, enabled = true, alerts, resetTime, pe
     return { ...p, id: row.name, name: row.name, total: row.bytes || 0 };
   });
   const maxPeerTotal = Math.max(...peerBreakdown.map(p => p.total), 1);
-  const composition = enabled ? [] : budgetComposition(peerBreakdown);
-  // Segments are sized against their own sum, not `total` — per-peer counters can
-  // lag the interface total, and a bar that stops short of its track reads as a bug.
-  const compTotal = composition.reduce((s, p) => s + p.total, 0) || 1;
 
   const saveSettings = async (patch) => {
     setSaving(true);
@@ -965,35 +949,7 @@ function DataBudgetDrawer({ total, budget, enabled = true, alerts, resetTime, pe
                   </div>
                 )}
               </div>
-              {!enabled && (
-                <div className="budget-comp-wrap">
-                  {composition.length === 0 ? (
-                    <div className="budget-comp-empty" title="No traffic recorded yet today" />
-                  ) : (
-                    <div className="budget-comp">
-                      {composition.map((p, i) => (
-                        <div
-                          key={p.id}
-                          className="budget-comp-seg"
-                          style={{ width: `${(p.total / compTotal) * 100}%`, background: budgetCompColor(i) }}
-                          title={`${p.name} · ${window.WG.formatBytes(p.total)} · ${((p.total / compTotal) * 100).toFixed(1)}%`}
-                        />
-                      ))}
-                    </div>
-                  )}
-                  <div className="budget-comp-legend">
-                    {composition.length === 0
-                      ? <span>no traffic recorded yet today</span>
-                      : composition.map((p, i) => (
-                          <span key={p.id} className="budget-comp-item">
-                            <span className="budget-comp-dot" style={{ background: budgetCompColor(i) }} />
-                            <span className="budget-comp-name" title={p.name}>{p.name}</span>
-                            <span>{window.WG.formatBytes(p.total)}</span>
-                          </span>
-                        ))}
-                  </div>
-                </div>
-              )}
+              {!enabled && <BudgetComposition rows={peerBreakdown} />}
               {enabled && (
                 <div className="budget-bar-wrap">
                   <div className="budget-bar">
