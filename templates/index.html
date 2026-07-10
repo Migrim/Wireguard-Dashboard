@@ -808,6 +808,26 @@ html.theme-switching .theme-toggle-icon {
 .budget-bar-labels { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10px; color: var(--muted); }
 .budget-enf { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: -4px; padding-top: 12px; border-top: 1px solid var(--border); font-family: var(--mono); font-size: 10.5px; color: var(--muted); flex-wrap: wrap; }
 .budget-enf-counts { display: flex; align-items: center; gap: 6px; }
+
+/* Budget hero, tracking-only state: composition of today's total by peer.
+   Segment fills step from --accent to --accent-soft, so they follow the
+   selected accent and both color schemes without a second palette. */
+.budget-track { display: flex; align-items: center; gap: 10px; }
+.budget-track-chip { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--border-strong); border-radius: 999px; padding: 4px 9px; white-space: nowrap; }
+.budget-comp-wrap { display: flex; flex-direction: column; gap: 10px; }
+.budget-comp { display: flex; height: 10px; gap: 2px; }
+.budget-comp-seg { min-width: 3px; border-radius: 2px; transition: width 0.6s ease, opacity 0.2s; }
+.budget-comp-seg:first-child { border-radius: 5px 2px 2px 5px; }
+.budget-comp-seg:last-child { border-radius: 2px 5px 5px 2px; }
+.budget-comp-seg:only-child { border-radius: 5px; }
+.budget-comp:hover .budget-comp-seg { opacity: 0.45; }
+.budget-comp .budget-comp-seg:hover { opacity: 1; }
+.budget-comp-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+.budget-comp-item { display: flex; align-items: center; gap: 6px; }
+.budget-comp-dot { width: 7px; height: 7px; border-radius: 2px; flex-shrink: 0; }
+.budget-comp-name { color: var(--ink-2); max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.budget-comp-empty { height: 10px; border-radius: 5px; border: 1px dashed var(--border-strong); }
+
 .peer-usage-list { display: flex; flex-direction: column; gap: 8px; }
 .peer-usage-row { display: grid; grid-template-columns: 100px 1fr 70px; gap: 12px; align-items: center; font-size: 12px; }
 .peer-usage-name { color: var(--ink); font-weight: 500; }
@@ -1397,24 +1417,27 @@ html.theme-switching .theme-toggle-icon {
   flex-shrink: 0;
 }
 .row-offline .peer-avatar-sm { background: var(--border-strong); color: var(--muted); }
-/* Paused peers swap their initials for a pause glyph — the row's only paused cue
-   besides the status dot, so it pulses to stay noticeable while scanning. */
+/* Paused and throttled peers swap their initials for a glyph — the row's only cue
+   besides the status dot, so it pulses to stay noticeable while scanning. Tint is
+   what tells the two apart. */
 .peer-avatar-sm.is-paused {
   background: color-mix(in oklch, var(--warn) 14%, transparent);
   color: var(--warn);
 }
-/* Throttled peers get the same treatment in danger tint. No pulse — paused is the
-   state that pulses, so a still glyph keeps the two distinguishable at a glance. */
 .peer-avatar-sm.is-throttled {
   background: color-mix(in oklch, var(--danger) 14%, transparent);
   color: var(--danger);
 }
-.peer-avatar-pause { animation: avatarPauseBlink 1.4s ease-in-out infinite; }
-@keyframes avatarPauseBlink {
+.peer-avatar-pause,
+.peer-avatar-throttle { animation: avatarGlyphBlink 1.4s ease-in-out infinite; }
+@keyframes avatarGlyphBlink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }
-@media (prefers-reduced-motion: reduce) { .peer-avatar-pause { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .peer-avatar-pause,
+  .peer-avatar-throttle { animation: none; }
+}
 .peer-name { font-weight: 500; color: var(--ink); line-height: 1.2; }
 .peer-device { font-size: 10.5px; color: var(--muted); margin-top: 1px; }
 .handshake-cell { line-height: 1.3; }
