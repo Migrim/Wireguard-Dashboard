@@ -51,6 +51,15 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
   const tipTimeRef    = useRef(null);
   const tipInRef      = useRef(null);
   const tipOutRef     = useRef(null);
+  // Eased hover geometry — lerped toward their targets each frame so the
+  // crosshair/markers glide between samples instead of snapping slot to slot,
+  // and the tooltip trails the cursor instead of teleporting.
+  const hoverShownRef = useRef(false);
+  const xhairXRef     = useRef(0);
+  const mkInYRef      = useRef(0);
+  const mkOutYRef     = useRef(0);
+  const tipXRef       = useRef(0);
+  const tipYRef       = useRef(0);
 
   samplesRef.current  = samples;
   rangeRef.current    = range;
@@ -326,22 +335,47 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
         }
       }
       if (hovered) {
-        const sx = Math.max(PAD.l, Math.min(PAD.l + w, xAt(hovered.ts)));
+        // Targets: crosshair and markers stay locked to the hovered sample (the
+        // values in the tooltip must be the ones being pointed at), while the
+        // tooltip itself tracks the raw cursor position.
+        const tXhair = Math.max(PAD.l, Math.min(PAD.l + w, xAt(hovered.ts)));
+        const tMkIn  = yAt(hovered.rx || 0);
+        const tMkOut = yAt(hovered.tx || 0);
+        const tTipX  = Math.max(PAD.l + 46, Math.min(PAD.l + w - 46, hv.x));
+        const tTipY  = Math.max(12, hv.y - 14);
+
+        // On the first frame of a hover, snap — easing from wherever the cursor
+        // left the chart last time would fling the tooltip across the plot.
+        const fresh = !hoverShownRef.current;
+        hoverShownRef.current = true;
+        // ~55 ms time constant: fast enough to feel glued to the cursor, slow
+        // enough to smear the sample-to-sample steps into a glide.
+        const ease = fresh ? 1 : 1 - Math.exp(-dt / 55);
+        xhairXRef.current += (tXhair - xhairXRef.current) * ease;
+        mkInYRef.current  += (tMkIn  - mkInYRef.current)  * ease;
+        mkOutYRef.current += (tMkOut - mkOutYRef.current) * ease;
+        tipXRef.current   += (tTipX  - tipXRef.current)   * ease;
+        tipYRef.current   += (tTipY  - tipYRef.current)   * ease;
+
+        const sx = xhairXRef.current;
         xhairRef.current?.setAttribute('x1', sx.toFixed(1));
         xhairRef.current?.setAttribute('x2', sx.toFixed(1));
         xhairRef.current?.setAttribute('y1', PAD.t.toFixed(1));
         xhairRef.current?.setAttribute('y2', (PAD.t + h).toFixed(1));
         xhairRef.current?.setAttribute('opacity', '0.45');
         mkInRef.current?.setAttribute('cx', sx.toFixed(1));
-        mkInRef.current?.setAttribute('cy', yAt(hovered.rx || 0).toFixed(1));
+        mkInRef.current?.setAttribute('cy', mkInYRef.current.toFixed(1));
         mkInRef.current?.setAttribute('opacity', '1');
         mkOutRef.current?.setAttribute('cx', sx.toFixed(1));
-        mkOutRef.current?.setAttribute('cy', yAt(hovered.tx || 0).toFixed(1));
+        mkOutRef.current?.setAttribute('cy', mkOutYRef.current.toFixed(1));
         mkOutRef.current?.setAttribute('opacity', '1');
         if (tipRef.current) {
-          tipRef.current.style.display = 'flex';
-          tipRef.current.style.left = `${Math.max(PAD.l + 46, Math.min(PAD.l + w - 46, sx))}px`;
-          tipRef.current.style.top = `${Math.max(12, hv.y - 14)}px`;
+          // transform (not left/top) so the per-frame move is composited rather
+          // than relayed out; the -50%/-100% recentring lives here now instead
+          // of in the .pingbar-tip base rule.
+          tipRef.current.style.transform =
+            `translate3d(${tipXRef.current.toFixed(1)}px, ${tipYRef.current.toFixed(1)}px, 0) translate(-50%, -100%)`;
+          tipRef.current.style.opacity = '1';
           const d = new Date(hovered.ts);
           if (tipTimeRef.current) tipTimeRef.current.textContent = rangeMs <= 300000
             ? d.toLocaleTimeString()
@@ -350,10 +384,11 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
           if (tipOutRef.current) tipOutRef.current.textContent = window.WG.formatRate(hovered.tx || 0);
         }
       } else {
+        hoverShownRef.current = false;
         xhairRef.current?.setAttribute('opacity', '0');
         mkInRef.current?.setAttribute('opacity', '0');
         mkOutRef.current?.setAttribute('opacity', '0');
-        if (tipRef.current) tipRef.current.style.display = 'none';
+        if (tipRef.current) tipRef.current.style.opacity = '0';
       }
 
       rafRef.current = requestAnimationFrame(tick);
@@ -424,7 +459,7 @@ function ThroughputChart({ samples = [], width: widthProp = 900, height = 280, a
         <text ref={lblMid}   x={PAD.l} y={height - 8} fontSize="10" fill="var(--muted)" fontFamily="var(--mono)" textAnchor="middle" />
         <text ref={lblRight} x={PAD.l} y={height - 8} fontSize="10" fill="var(--muted)" fontFamily="var(--mono)" textAnchor="end" />
       </svg>
-      <div ref={tipRef} className="pingbar-tip chart-tip" style={{ display: 'none' }}>
+      <div ref={tipRef} className="pingbar-tip chart-tip" style={{ left: 0, top: 0, opacity: 0 }}>
         <span ref={tipTimeRef} className="pingbar-tip-lbl" />
         <div className="chart-tip-row">
           <i className="chart-tip-key" style={{ background: accent }} />

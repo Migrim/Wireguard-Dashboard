@@ -3100,8 +3100,9 @@ def api_logs():
         app.logger.exception("dashboard_log_merge_failed")
     cutoff=_logs_cleared_at()
     if cutoff:
-        # Lines with no parseable timestamp (boot markers etc.) are kept.
-        lines=[ln for ln in lines if (_journal_line_ts(ln) or cutoff) >= cutoff]
+        # Undatable lines (boot markers etc.) are dropped too, so a cleared
+        # panel reads as genuinely empty rather than showing leftover noise.
+        lines=[ln for ln in lines if _journal_line_ts(ln) >= cutoff]
     return jsonify({"lines":lines,"verbose":verbose,"count":len(lines)})
 
 @app.route("/api/logs/clear",methods=["POST"])
@@ -3116,7 +3117,9 @@ def api_logs_clear():
             _write_json_file_root(DASH_EVENTS_DB,[])
     except Exception:
         app.logger.exception("dash_events_clear_failed")
-    _log_dashboard_event("logs cleared via dashboard")
+    # Deliberately not recorded as a dashboard event — that would immediately
+    # re-populate the panel the user just emptied.
+    app.logger.info("logs cleared via dashboard")
     return jsonify({"ok":True,"cleared_at":cutoff})
 
 @app.route("/api/logs/retention",methods=["GET","POST"])

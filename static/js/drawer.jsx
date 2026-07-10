@@ -691,8 +691,16 @@ function LogsPanel({ logs, notifications = [], onExpand, onDismiss = () => {}, s
               <span className="log-expand-hint">expand <svg className="log-expand-chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M9 18l6-6-6-6"/></svg></span>
             </div>
           </div>
-          <div className="logs-stream" ref={scrollRef}>
-            {logs.map((l, i) => (
+          <div className={`logs-stream${logs.length === 0 ? ' is-empty' : ''}`} ref={scrollRef}>
+            {logs.length === 0 ? (
+              <div className="logs-empty logs-empty-mini">
+                <span className="logs-empty-icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6h13M8 12h13M8 18h9"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>
+                </span>
+                <div className="logs-empty-title">No log entries</div>
+                <div className="logs-empty-desc">New lines appear here as the service runs.</div>
+              </div>
+            ) : logs.map((l, i) => (
               <div key={i} className={`log-line log-${l.level}`}>
                 <span className="log-time">{new Date(l.t).toTimeString().slice(0, 8)}</span>
                 <span className="log-level">{l.level}</span>
@@ -1224,10 +1232,8 @@ function LogsDrawer({ alerts, onClose, verbose, setVerbose, onDismiss }) {
         const n = verbose ? 1000 : 300;
         const j = await window.WG.apiCall(`/api/logs?n=${n}&verbose=${verbose ? 1 : 0}`, { silent: true });
         if (cancelled) return;
-        if (j.lines && j.lines.length) {
-          setLocalLogs(window.WG.parseLogLines(j.lines, verbose));
-          setLoading(false);
-        }
+        if (j.lines) setLocalLogs(window.WG.parseLogLines(j.lines, verbose));
+        setLoading(false);
       } catch (_) {}
     };
     poll();

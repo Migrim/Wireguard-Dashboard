@@ -398,9 +398,7 @@ function App({ tweaks, setTweaks, onLogout }) {
       try {
         const j = await window.WG.apiCall('/api/logs?n=60', { silent: true });
         if (cancelled) return;
-        if (j.lines && j.lines.length) {
-          setLogs(window.WG.parseLogLines(j.lines));
-        }
+        if (j.lines) setLogs(window.WG.parseLogLines(j.lines));
       } catch (_) {}
     };
     fetchLogs();
@@ -1075,27 +1073,44 @@ function PeerRowSkeleton({ seed = 0 }) {
 function PeerRow({ peer, spark, onClick }) {
   const statusColor = peer.paused ? 'var(--warn)' : peer.throttled ? 'var(--danger)' : peer.status === 'connected' ? 'var(--success)' : 'var(--muted)';
   const isOnline = peer.status === 'connected';
+  const statusLabel = peer.paused ? 'Paused' : peer.throttled ? 'Throttled' : isOnline ? 'Online' : 'Offline';
+  const statusDetail = peer.paused ? 'Traffic suspended'
+    : peer.throttled ? 'Rate limited'
+    : peer.lastHs ? `${isOnline ? 'Handshake' : 'Last seen'} ${window.WG.formatRelTime(peer.lastHs)}`
+    : 'Never connected';
   let hasDraft = false;
   try { hasDraft = !!localStorage.getItem('WG_PEER_DRAFT_' + peer.name); } catch (_) {}
 
   return (
     <div className={`peers-row data-row${!isOnline ? ' row-offline' : ''}`} onClick={onClick}>
       <div className="peer-status-cell">
-        <span className={`status-dot-wrap status-${peer.paused ? 'paused' : peer.throttled ? 'paused' : peer.status}`}>
+        <span
+          className={`status-dot-wrap status-${peer.paused ? 'paused' : peer.throttled ? 'paused' : peer.status}`}
+          role="img"
+          aria-label={`${statusLabel} — ${statusDetail}`}
+        >
           <span className="status-dot" style={{ background: statusColor }} />
         </span>
+        <div className="pingbar-tip status-tip" aria-hidden="true">
+          <span className="pingbar-tip-val status-tip-val">
+            <i className="status-tip-dot" style={{ background: statusColor }} />
+            {statusLabel}
+          </span>
+          <span className="pingbar-tip-lbl">{statusDetail}</span>
+        </div>
       </div>
       <div className="peer-name-cell">
-        <div className="peer-avatar-sm">
-          {peer.name.split('-').map(s => s[0]).join('').slice(0, 2).toUpperCase()}
+        <div className={`peer-avatar-sm${peer.paused ? ' is-paused' : ''}`}
+          role={peer.paused ? 'img' : undefined}
+          aria-label={peer.paused ? 'Paused' : undefined}>
+          {peer.paused
+            ? <svg className="peer-avatar-pause" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" /></svg>
+            : peer.name.split('-').map(s => s[0]).join('').slice(0, 2).toUpperCase()}
         </div>
         <div>
           <div className="peer-name">
             {peer.name}
             {hasDraft && <span className="peer-draft-dot" title="Unsaved config changes" />}
-            {peer.paused && (
-              <span style={{ marginLeft: 6, fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--warn)', background: 'color-mix(in oklch, var(--warn) 12%, transparent)', padding: '1px 5px', borderRadius: 4, verticalAlign: 'middle' }}>paused</span>
-            )}
             {peer.throttled && !peer.paused && (
               <span style={{ marginLeft: 6, fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--danger)', background: 'color-mix(in oklch, var(--danger) 12%, transparent)', padding: '1px 5px', borderRadius: 4, verticalAlign: 'middle' }}>throttled</span>
             )}

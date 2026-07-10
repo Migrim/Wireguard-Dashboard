@@ -878,11 +878,16 @@ html.theme-switching .theme-toggle-icon {
   pointer-events: none;
   white-space: nowrap;
   z-index: 5;
+  /* Glide between discrete sample slots rather than snapping to each one */
+  transition: left 0.11s cubic-bezier(0.22, 1, 0.36, 1), top 0.11s cubic-bezier(0.22, 1, 0.36, 1);
 }
+@media (prefers-reduced-motion: reduce) { .pingbar-tip { transition: none; } }
 .pingbar-tip-val { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--ink); }
 .pingbar-tip-lbl { font-family: var(--mono); font-size: 9.5px; color: var(--muted); }
-/* Multi-series variant (throughput charts): time header + one line-keyed row per series */
-.chart-tip { align-items: flex-start; gap: 3px; }
+/* Multi-series variant (throughput charts): time header + one line-keyed row per series.
+   Positioned by transform from the chart's RAF loop, so left/top stay pinned at 0
+   and only the fade is left to CSS. */
+.chart-tip { align-items: flex-start; gap: 3px; transition: opacity 0.12s ease; will-change: transform; }
 .chart-tip-row { display: flex; align-items: center; gap: 6px; }
 .chart-tip-key { display: inline-block; width: 10px; height: 2px; border-radius: 1px; flex-shrink: 0; }
 .chart-tip-name { font-family: var(--mono); font-size: 9.5px; color: var(--muted); }
@@ -1141,10 +1146,15 @@ html.theme-switching .theme-toggle-icon {
   scroll-behavior: smooth;
 }
 .logs-stream-tall.logs-stream { max-height: 320px; padding: 10px 14px; }
+.logs-stream.is-empty { display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .logs-empty {
   display: flex; flex-direction: column; align-items: center; text-align: center;
   padding: 44px 20px 40px; font-family: var(--sans);
 }
+.logs-empty-mini { padding: 12px 16px; }
+.logs-empty-mini .logs-empty-icon { width: 36px; height: 36px; border-radius: 11px; margin-bottom: 10px; }
+.logs-empty-mini .logs-empty-title { font-size: 12.5px; }
+.logs-empty-mini .logs-empty-desc { font-size: 11px; max-width: 220px; }
 .logs-empty-icon {
   width: 44px; height: 44px; border-radius: 13px;
   background: var(--accent-soft); color: var(--accent);
@@ -1272,6 +1282,24 @@ html.theme-switching .theme-toggle-icon {
   50% { opacity: 0.3; }
 }
 
+/* Status-dot hover tooltip — same shell as the chart tooltips, anchored to the
+   dot's left edge so it never spills past the card on the first column. */
+.peer-status-cell { position: relative; }
+.status-tip {
+  left: -1px; top: -6px;
+  align-items: flex-start; gap: 2px;
+  transform: translateY(calc(-100% + 3px));
+  opacity: 0;
+  transition: opacity 0.12s ease, transform 0.12s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.peer-status-cell:hover .status-tip {
+  opacity: 1;
+  transform: translateY(-100%);
+}
+.status-tip-val { display: inline-flex; align-items: center; gap: 6px; }
+.status-tip-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+@media (prefers-reduced-motion: reduce) { .status-tip { transition: opacity 0.12s ease; } }
+
 .peer-name-cell { display: flex; align-items: center; gap: 10px; }
 .peer-avatar-sm {
   width: 28px; height: 28px;
@@ -1286,6 +1314,18 @@ html.theme-switching .theme-toggle-icon {
   flex-shrink: 0;
 }
 .row-offline .peer-avatar-sm { background: var(--border-strong); color: var(--muted); }
+/* Paused peers swap their initials for a pause glyph — the row's only paused cue
+   besides the status dot, so it pulses to stay noticeable while scanning. */
+.peer-avatar-sm.is-paused {
+  background: color-mix(in oklch, var(--warn) 14%, transparent);
+  color: var(--warn);
+}
+.peer-avatar-pause { animation: avatarPauseBlink 1.4s ease-in-out infinite; }
+@keyframes avatarPauseBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+@media (prefers-reduced-motion: reduce) { .peer-avatar-pause { animation: none; } }
 .peer-name { font-weight: 500; color: var(--ink); line-height: 1.2; }
 .peer-device { font-size: 10.5px; color: var(--muted); margin-top: 1px; }
 .handshake-cell { line-height: 1.3; }
