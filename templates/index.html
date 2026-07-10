@@ -386,17 +386,20 @@ html.theme-switching .theme-toggle-icon {
 
 /* PEER ROW CONTEXT MENU */
 .ctx-menu {
+  --ctx-bg: var(--card-raised);
   position: fixed;
   z-index: 60;
   width: 224px;
   padding: 5px;
-  background: var(--card-raised);
+  background: var(--ctx-bg);
   border: 1px solid var(--border-strong);
   border-radius: 12px;
   box-shadow: var(--shadow-lg);
   transform-origin: var(--ctx-origin, top right);
   animation: ctx-menu-in 0.14s cubic-bezier(0.16, 1, 0.3, 1);
 }
+/* Dark mode drops the raised tint — the menu reads as a hole punched in the page */
+[data-theme="dark"] .ctx-menu { --ctx-bg: var(--bg); }
 .ctx-menu:focus { outline: none; }
 
 /* Rotated square whose outer half pokes out at the trigger; the inner half sits
@@ -405,7 +408,7 @@ html.theme-switching .theme-toggle-icon {
   position: absolute;
   top: -6px;
   width: 10px; height: 10px;
-  background: var(--card-raised);
+  background: var(--ctx-bg);
   border-top: 1px solid var(--border-strong);
   border-left: 1px solid var(--border-strong);
   border-radius: 2px 0 0 0;
@@ -1169,7 +1172,7 @@ html.theme-switching .theme-toggle-icon {
   padding: 0;
 }
 .chart-pause-btn:hover { color: var(--ink); }
-.chart-pause-btn.active { color: var(--accent); border-color: var(--accent); }
+.chart-pause-btn.active { color: var(--accent); }
 [data-theme="dark"] .chart-pause-btn { background: var(--bg); }
 .chart-pause-ico { position: relative; width: 10px; height: 10px; display: block; }
 .chart-pause-ico svg {
