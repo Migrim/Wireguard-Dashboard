@@ -1,7 +1,3 @@
-// DynDNS configuration drawer
-// Allows configuring a dynamic DNS hostname as the server endpoint
-// so peers reconnect automatically after a public IP change.
-
 const { useState: uSD, useEffect: uED, useCallback: uCD } = React;
 
 const DYNDNS_PROVIDERS = [
@@ -101,7 +97,6 @@ function DynDNSDrawer({ onClose }) {
   const publicIp     = cfg?.public_ip || '';
   const lastUpdate   = cfg?.last_update || null;
 
-  // Is the auto-update provider fully filled in?
   const providerConfigured = !!cfg?.provider && (
     cfg.provider === 'custom'
       ? !!(cfg.custom_url || '').trim()
@@ -116,8 +111,6 @@ function DynDNSDrawer({ onClose }) {
         body: JSON.stringify({ hostname: host }),
         silent: true,
       });
-      // The server re-detects its own public IP on every check, so the
-      // sync comparison never uses a stale boot-time snapshot.
       if (r.public_ip) setCfg(prev => prev ? { ...prev, public_ip: r.public_ip, public_ip_source: r.public_ip_source || prev.public_ip_source } : prev);
       setResolveResult({ ok: true, ip: r.ip, host });
     } catch (e) {
@@ -127,8 +120,6 @@ function DynDNSDrawer({ onClose }) {
     }
   }, []);
 
-  // Live check: resolve the hostname on open and (debounced) while typing,
-  // so the sync status is always visible without pressing a button.
   uED(() => {
     if (loading || !isDynDNS) return;
     if (!hostname) { setResolveResult(null); return; }
@@ -204,7 +195,6 @@ function DynDNSDrawer({ onClose }) {
     }
   }, [tokenRevealed, tokenDirty]);
 
-  // ── Overall status for the hero card ─────────────────
   const status = (() => {
     if (!isDynDNS) return {
       level: 'idle', icon: 'globe',
@@ -398,9 +388,6 @@ function DynDNSDrawer({ onClose }) {
                       onChange={e => set('hostname', e.target.value)}
                     />
                     {hostnameStatus}
-                    <div className="ap-hint">
-                      Written into every generated peer .conf as the Endpoint.
-                    </div>
                   </div>
                 )}
               </section>

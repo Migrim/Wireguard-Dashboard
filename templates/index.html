@@ -486,6 +486,12 @@ html.theme-switching .theme-toggle-icon {
 .svc-stat-btn:hover { background: color-mix(in oklab, var(--accent) 6%, transparent); }
 .svc-stat-btn .svc-stat-label { display: inline-flex; align-items: center; gap: 3px; }
 .svc-stat-btn:hover .svc-stat-label { color: var(--accent); }
+.svc-stat-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--warn); flex-shrink: 0;
+  box-shadow: 0 0 0 2px var(--warn-soft);
+  animation: dotPop 0.22s ease-out;
+}
 .svc-stat-chev { opacity: 0.65; transition: opacity 0.12s, transform 0.15s; flex-shrink: 0; }
 .svc-stat-btn:hover .svc-stat-chev { opacity: 1; transform: translateX(1px); }
 
@@ -738,6 +744,27 @@ html.theme-switching .theme-toggle-icon {
 .toggle.on { background: var(--accent); }
 .toggle-knob { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; background: var(--card); border-radius: 50%; transition: transform 0.2s; box-shadow: var(--shadow-sm); }
 .toggle.on .toggle-knob { transform: translateX(16px); }
+/* Master switch partial state — some but not all sub-settings enabled. */
+.toggle.mixed { background: color-mix(in oklch, var(--accent) 42%, var(--border)); }
+.toggle.mixed .toggle-knob { transform: translateX(8px); }
+/* "Customize" disclosure button on the master chart switch. */
+.chart-fine-toggle { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 500; color: var(--muted); background: none; border: none; padding: 4px 6px; border-radius: 6px; cursor: pointer; font-family: inherit; transition: color 0.15s, background 0.15s; }
+.chart-fine-toggle:hover { color: var(--ink); background: var(--border); }
+/* Collapsible region — animates height smoothly via grid-template-rows. */
+.collapse-rows { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.25s ease; }
+.collapse-rows.open { grid-template-rows: 1fr; }
+.collapse-rows > div { overflow: hidden; min-height: 0; }
+.chart-fine-list { margin: 2px 0 2px 10px; padding-left: 12px; border-left: 2px solid var(--border); }
+.chart-fine-list .setting-row:first-child { padding-top: 12px; }
+/* GitHub project card at the foot of the settings drawer. */
+.gh-profile { display: flex; align-items: center; gap: 12px; padding: 11px 12px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; text-decoration: none; color: inherit; transition: border-color 0.15s, background 0.15s; }
+.gh-profile:hover { border-color: var(--accent); background: color-mix(in oklch, var(--accent) 6%, var(--bg-2)); }
+.gh-avatar { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; background: var(--border); object-fit: cover; }
+.gh-meta { flex: 1; min-width: 0; }
+.gh-user { font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gh-repo { font-size: 11px; color: var(--muted); font-family: var(--mono); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gh-open { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px; color: var(--muted); flex-shrink: 0; transition: color 0.15s, background 0.15s; }
+.gh-profile:hover .gh-open { color: var(--accent); background: var(--border); }
 .tension-slider-wrap { display: flex; align-items: center; gap: 6px; overflow: hidden; max-width: 0; opacity: 0; pointer-events: none; transition: max-width 0.22s ease, opacity 0.18s ease; }
 .tension-slider-wrap.visible { max-width: 120px; opacity: 1; pointer-events: auto; }
 .tension-slider { -webkit-appearance: none; appearance: none; width: 72px; height: 4px; border-radius: 99px; outline: none; cursor: pointer; }
@@ -785,7 +812,7 @@ html.theme-switching .theme-toggle-icon {
 .up-tick-up { background: var(--success); }
 .up-tick-partial { background: var(--warn); }
 .up-tick-down { background: var(--danger); }
-.up-tick-unknown { background: var(--border); }
+.up-tick-unknown { background: var(--border-strong); }
 .up-strip-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); }
 .up-legend { display: flex; gap: 14px; font-size: 10px; color: var(--muted); padding-top: 6px; border-top: 1px dashed var(--border); }
 .up-legend span { display: inline-flex; align-items: center; gap: 5px; }
@@ -819,6 +846,16 @@ html.theme-switching .theme-toggle-icon {
   border-radius: 8px;
   font-size: 12px; color: var(--ink-2);
 }
+.up-loadmore {
+  display: flex; align-items: center; justify-content: center;
+  padding: 9px 12px;
+  background: var(--bg-2);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  font-size: 11.5px; font-weight: 500; color: var(--ink-2);
+  cursor: pointer; transition: border-color 0.15s, color 0.15s;
+}
+.up-loadmore:hover { border-color: var(--border-strong); color: var(--ink); }
 .up-footnote { font-size: 10px; color: var(--muted); margin-top: 10px; }
 
 /* Ping chart hover tooltip (PingBars — uptime + peer drawers) */

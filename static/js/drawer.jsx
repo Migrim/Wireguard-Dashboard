@@ -1827,7 +1827,7 @@ function ChangePasswordSection() {
   );
 }
 
-function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose, onUpdateAvailable }) {
+function SettingsDrawer({ tweaks, setTweaks, onClose, onUpdateAvailable }) {
   const accent = tweaks.accent || 'terracotta';
   const [version, setVersion] = _useState('…');
   const [newVersion, setNewVersion] = _useState('');
@@ -1876,6 +1876,7 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
   });
   const onCooldown = remaining > 0;
   const [advancedOpen, setAdvancedOpen] = _useState(false);
+  const [chartFineOpen, setChartFineOpen] = _useState(false);
   const devUpdatesRef = _useRef(tweaks.devUpdates);
   devUpdatesRef.current = tweaks.devUpdates;
   const prevDevUpdatesRef = _useRef(tweaks.devUpdates);
@@ -2009,8 +2010,6 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
     { label: 'Uptime',       value: SI.uptime     || null,                           skelW: 120, mono: false },
     { label: 'Interface',    value: SI.interface  || null,                           skelW: 36,  mono: true  },
     { label: 'Service',      value: SI.service    || null,                           skelW: 100, mono: true  },
-    { label: 'Status',       value: SI.service_enabled != null ? (SI.service_enabled ? 'enabled' : 'disabled') : null, skelW: 52, mono: true },
-    { label: 'Peers online', value: `${connectedCount} / ${totalPeers}`,             skelW: 40,  mono: true  },
   ];
 
   const accents = [
@@ -2061,68 +2060,108 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
             </div>
           </section>
 
+          {(() => {
+            const chartsAllOn = tweaks.splineChart && tweaks.smoothThroughput && tweaks.smoothScale;
+            const chartsAnyOn = tweaks.splineChart || tweaks.smoothThroughput || tweaks.smoothScale;
+            return (
           <section className="drawer-section">
             <div className="section-head"><span className="section-label">CHARTS</span></div>
             <div className="settings-list">
+              {/* Master switch — flips all three chart-smoothing settings at once. */}
               <div className="setting-row">
                 <div>
-                  <div className="setting-title">Smooth lines</div>
-                  <div className="setting-desc">Use spline interpolation on the live throughput chart</div>
+                  <div className="setting-title">Smooth charts</div>
+                  <div className="setting-desc">Spline lines, continuous scroll and animated Y-axis scaling</div>
                 </div>
-                <div className="setting-control" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div className={`tension-slider-wrap${tweaks.splineChart ? ' visible' : ''}`}>
-                    <span style={{ fontSize: 10, color: 'var(--muted)', fontFamily: 'var(--mono)', minWidth: 26, textAlign: 'right' }}>
-                      {(tweaks.splineTension ?? 1).toFixed(1)}
-                    </span>
-                    <input
-                      type="range" min="0" max="3" step="0.1"
-                      value={tweaks.splineTension ?? 1}
-                      onChange={e => setTweaks({ ...tweaks, splineTension: parseFloat(e.target.value) })}
-                      className="tension-slider"
-                      style={{ background: `linear-gradient(to right, var(--accent) ${((tweaks.splineTension ?? 1) / 3) * 100}%, var(--border) ${((tweaks.splineTension ?? 1) / 3) * 100}%)` }}
-                    />
+                <div className="setting-control" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <button
+                    className="chart-fine-toggle"
+                    onClick={() => setChartFineOpen(v => !v)}
+                    aria-expanded={chartFineOpen}
+                    title="Fine-tune individual chart settings"
+                  >
+                    Customize
+                    <svg style={{ transform: chartFineOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
+                  </button>
+                  <button
+                    className={`toggle ${chartsAnyOn ? 'on' : ''} ${chartsAnyOn && !chartsAllOn ? 'mixed' : ''}`}
+                    onClick={() => setTweaks({ ...tweaks, splineChart: !chartsAllOn, smoothThroughput: !chartsAllOn, smoothScale: !chartsAllOn })}
+                    aria-pressed={chartsAllOn}
+                    title={chartsAllOn ? 'Turn all chart smoothing off' : 'Turn all chart smoothing on'}
+                  >
+                    <span className="toggle-knob" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Fine controls — collapsed by default, animates open via grid-rows. */}
+              <div className={`collapse-rows${chartFineOpen ? ' open' : ''}`}>
+                <div>
+                  <div className="chart-fine-list">
+                    <div className="setting-row">
+                      <div>
+                        <div className="setting-title">Smooth lines</div>
+                        <div className="setting-desc">Use spline interpolation on the live throughput chart</div>
+                      </div>
+                      <div className="setting-control" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div className={`tension-slider-wrap${tweaks.splineChart ? ' visible' : ''}`}>
+                          <span style={{ fontSize: 10, color: 'var(--muted)', fontFamily: 'var(--mono)', minWidth: 26, textAlign: 'right' }}>
+                            {(tweaks.splineTension ?? 1).toFixed(1)}
+                          </span>
+                          <input
+                            type="range" min="0" max="3" step="0.1"
+                            value={tweaks.splineTension ?? 1}
+                            onChange={e => setTweaks({ ...tweaks, splineTension: parseFloat(e.target.value) })}
+                            className="tension-slider"
+                            style={{ background: `linear-gradient(to right, var(--accent) ${((tweaks.splineTension ?? 1) / 3) * 100}%, var(--border) ${((tweaks.splineTension ?? 1) / 3) * 100}%)` }}
+                          />
+                        </div>
+                        <button
+                          className={`toggle ${tweaks.splineChart ? 'on' : ''}`}
+                          onClick={() => setTweaks({ ...tweaks, splineChart: !tweaks.splineChart })}
+                          aria-pressed={tweaks.splineChart}
+                        >
+                          <span className="toggle-knob" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="setting-row">
+                      <div>
+                        <div className="setting-title">Continuous scroll</div>
+                        <div className="setting-desc">Scrolls the chart between poll updates instead of jumping at each interval</div>
+                      </div>
+                      <div className="setting-control">
+                        <button
+                          className={`toggle ${tweaks.smoothThroughput ? 'on' : ''}`}
+                          onClick={() => setTweaks({ ...tweaks, smoothThroughput: !tweaks.smoothThroughput })}
+                          aria-pressed={tweaks.smoothThroughput}
+                        >
+                          <span className="toggle-knob" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="setting-row">
+                      <div>
+                        <div className="setting-title">Smooth Y-axis scaling</div>
+                        <div className="setting-desc">Animates the Y-axis when throughput crosses unit boundaries instead of snapping</div>
+                      </div>
+                      <div className="setting-control">
+                        <button
+                          className={`toggle ${tweaks.smoothScale ? 'on' : ''}`}
+                          onClick={() => setTweaks({ ...tweaks, smoothScale: !tweaks.smoothScale })}
+                          aria-pressed={tweaks.smoothScale}
+                        >
+                          <span className="toggle-knob" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <button
-                    className={`toggle ${tweaks.splineChart ? 'on' : ''}`}
-                    onClick={() => setTweaks({ ...tweaks, splineChart: !tweaks.splineChart })}
-                    aria-pressed={tweaks.splineChart}
-                  >
-                    <span className="toggle-knob" />
-                  </button>
-                </div>
-              </div>
-              <div className="setting-row">
-                <div>
-                  <div className="setting-title">Continuous scroll</div>
-                  <div className="setting-desc">Scrolls the chart between poll updates instead of jumping at each interval</div>
-                </div>
-                <div className="setting-control">
-                  <button
-                    className={`toggle ${tweaks.smoothThroughput ? 'on' : ''}`}
-                    onClick={() => setTweaks({ ...tweaks, smoothThroughput: !tweaks.smoothThroughput })}
-                    aria-pressed={tweaks.smoothThroughput}
-                  >
-                    <span className="toggle-knob" />
-                  </button>
-                </div>
-              </div>
-              <div className="setting-row">
-                <div>
-                  <div className="setting-title">Smooth Y-axis scaling</div>
-                  <div className="setting-desc">Animates the Y-axis when throughput crosses unit boundaries instead of snapping</div>
-                </div>
-                <div className="setting-control">
-                  <button
-                    className={`toggle ${tweaks.smoothScale ? 'on' : ''}`}
-                    onClick={() => setTweaks({ ...tweaks, smoothScale: !tweaks.smoothScale })}
-                    aria-pressed={tweaks.smoothScale}
-                  >
-                    <span className="toggle-knob" />
-                  </button>
                 </div>
               </div>
             </div>
           </section>
+            );
+          })()}
 
           <section className="drawer-section">
             <div className="section-head"><span className="section-label">SERVER</span></div>
@@ -2270,8 +2309,8 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
                 <span style={{ fontSize: '12px', color: 'var(--muted)', fontWeight: '500' }}>Advanced settings</span>
                 <svg style={{ transform: advancedOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', color: 'var(--muted)', flexShrink: 0 }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
               </button>
-              {advancedOpen && (
-                <>
+              <div className={`collapse-rows${advancedOpen ? ' open' : ''}`}>
+                <div>
                   <div className="setting-row">
                     <div>
                       <div className="setting-title">Throughput refresh rate</div>
@@ -2342,9 +2381,35 @@ function SettingsDrawer({ tweaks, setTweaks, connectedCount, totalPeers, onClose
                       >Show</button>
                     </div>
                   </div>
-                </>
-              )}
+                </div>
+              </div>
             </div>
+          </section>
+
+          <section className="drawer-section">
+            <div className="section-head"><span className="section-label">ABOUT</span></div>
+            <a
+              className="gh-profile"
+              href="https://github.com/Migrim/OpenVPN-Dashboard"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <img
+                className="gh-avatar"
+                src="https://github.com/Migrim.png?size=80"
+                alt="Migrim"
+                width="40"
+                height="40"
+                loading="lazy"
+              />
+              <div className="gh-meta">
+                <div className="gh-user">Migrim</div>
+                <div className="gh-repo">OpenVPN-Dashboard</div>
+              </div>
+              <span className="gh-open" aria-hidden="true" title="Open on GitHub">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/></svg>
+              </span>
+            </a>
           </section>
         </div>
       </aside>
@@ -2384,6 +2449,25 @@ function _fmtPct(pct) {
   return `${pct.toFixed(pct >= 99 ? 2 : 1)}%`;
 }
 
+// European (DD.MM.YYYY HH:MM) formatting for the downtime/outage log.
+function _fmtEuTime(ms) {
+  if (!ms) return '—';
+  const d = new Date(ms);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function _fmtEuRange(startMs, endMs) {
+  if (!endMs) return _fmtEuTime(startMs);
+  const s = new Date(startMs), e = new Date(endMs);
+  const p = (n) => String(n).padStart(2, '0');
+  // Collapse to a single date when the outage starts and ends the same day.
+  const endStr = s.toDateString() === e.toDateString() ? `${p(e.getHours())}:${p(e.getMinutes())}` : _fmtEuTime(endMs);
+  return `${_fmtEuTime(startMs)} → ${endStr}`;
+}
+
+const INCIDENTS_PAGE = 5;
+const LAT_BARS = 96; // fixed latency-chart bar count (matches backend downsample cap)
+
 const UPTIME_TARGET_NAMES = { '1.1.1.1': 'Cloudflare', '1.0.0.1': 'Cloudflare', '8.8.8.8': 'Google', '8.8.4.4': 'Google' };
 const _pingTargetLabel = (ip) => ip ? `${ip}${UPTIME_TARGET_NAMES[ip] ? ` (${UPTIME_TARGET_NAMES[ip]})` : ''}` : '—';
 
@@ -2399,10 +2483,9 @@ function UpAvailabilitySection({ stats, loaded }) {
       : pct < 95 ? 'var(--danger)'
       : pct < 99.5 ? 'var(--warn)'
       : 'var(--ink)';
-    const sub = s.down_s > 0
-      ? `${_fmtDurS(s.down_s)} down · ${s.incidents} incident${s.incidents === 1 ? '' : 's'}`
-      : pct == null ? 'no data yet' : 'no downtime';
-    return { key, label, pct, color, sub };
+    const sub = s.down_s > 0 ? `${_fmtDurS(s.down_s)} down` : pct == null ? 'no data yet' : 'no downtime';
+    const subExtra = s.down_s > 0 ? `${s.incidents} incident${s.incidents === 1 ? '' : 's'}` : '';
+    return { key, label, pct, color, sub, subExtra };
   });
   return (
     <section className="drawer-section">
@@ -2418,6 +2501,7 @@ function UpAvailabilitySection({ stats, loaded }) {
               {loaded ? _fmtPct(c.pct) : <span className="skel" style={{ width: 64 }} />}
             </div>
             <div className="up-stat-sub mono">{loaded ? c.sub : <span className="skel skel-sub" style={{ width: 80 }} />}</div>
+            {loaded && c.subExtra && <div className="up-stat-sub mono">{c.subExtra}</div>}
           </div>
         ))}
       </div>
@@ -2515,6 +2599,9 @@ function UpTimelineSection({ timeline, range, setRange, loaded, ariaLabel }) {
 
 function UpIncidentsSection({ incidents, loaded, now, sectionLabel, downTitle, emptyLabel, monitorSince }) {
   incidents = incidents || [];
+  const [shown, setShown] = _useState(INCIDENTS_PAGE);
+  const visible = incidents.slice(0, shown);
+  const remaining = incidents.length - visible.length;
   return (
     <section className="drawer-section">
       <div className="section-head">
@@ -2538,11 +2625,11 @@ function UpIncidentsSection({ incidents, loaded, now, sectionLabel, downTitle, e
       ) : incidents.length === 0 ? (
         <div className="up-empty">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2.2"><path d="M5 12l5 5L20 7"/></svg>
-          <span>{emptyLabel}{monitorSince ? ` since ${window.WG.formatAbsTime(monitorSince)}` : ''}</span>
+          <span>{emptyLabel}{monitorSince ? ` since ${_fmtEuTime(monitorSince)}` : ''}</span>
         </div>
       ) : (
         <div className="up-events">
-          {incidents.map((ev, i) => {
+          {visible.map((ev, i) => {
             const isDown = ev.state === 'down';
             const dur = ev.ongoing ? Math.floor((now - ev.start_ms) / 1000) : ev.duration_s;
             return (
@@ -2554,18 +2641,23 @@ function UpIncidentsSection({ incidents, loaded, now, sectionLabel, downTitle, e
                     {ev.ongoing && <span className="up-event-ongoing">ongoing</span>}
                   </div>
                   <div className="up-event-sub mono">
-                    {window.WG.formatAbsTime(ev.start_ms)}{ev.end_ms ? ` → ${window.WG.formatAbsTime(ev.end_ms)}` : ''}
+                    {ev.ongoing ? _fmtEuTime(ev.start_ms) : _fmtEuRange(ev.start_ms, ev.end_ms)}
                   </div>
                 </div>
                 <span className="up-event-dur mono">{_fmtDurS(dur)}</span>
               </div>
             );
           })}
+          {remaining > 0 && (
+            <button className="up-loadmore" onClick={() => setShown(s => s + INCIDENTS_PAGE)}>
+              Load more ({remaining})
+            </button>
+          )}
         </div>
       )}
       <div className="up-footnote mono">
         {monitorSince
-          ? `Monitoring since ${window.WG.formatAbsTime(monitorSince)} · history kept for 90 days`
+          ? `Monitoring since ${_fmtEuTime(monitorSince)} · history kept for 90 days`
           : 'Monitoring starts with the first sample · history kept for 90 days'}
       </div>
     </section>
@@ -2619,9 +2711,14 @@ function UptimeDrawer({ unit, onClose }) {
   const netSinceMs = netCur?.since_ms || 0;
   const netTarget = _pingTargetLabel(netCur?.target || net?.monitor?.targets?.[0]);
   const netLatency = net?.latency || {};
-  const latSeries = (netLatency.series || []).map(s => s.ms);
-  const latLabels = (netLatency.series || []).map(s =>
-    new Date(s.ts_ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+  // Pad to a fixed bar count (matches the backend's 96-point downsample cap) so the
+  // chart keeps a stable shape instead of a few fat bars on first boot. Real samples
+  // stay right-aligned (newest at the far right); empty slots render as no-data gaps.
+  const latRaw = netLatency.series || [];
+  const latPad = Math.max(0, LAT_BARS - latRaw.length);
+  const latSeries = [...Array(latPad).fill(null), ...latRaw.map(s => s.ms)];
+  const latLabels = [...Array(latPad).fill(''), ...latRaw.map(s =>
+    new Date(s.ts_ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))];
   const latMeta = netLatency.avg_ms != null
     ? `avg ${netLatency.avg_ms} ms · min ${netLatency.min_ms} · max ${netLatency.max_ms} · last 24h`
     : 'last 24h';
@@ -2731,7 +2828,7 @@ function UptimeDrawer({ unit, onClose }) {
               <span className="section-meta">{latMeta}</span>
             </div>
             <div className="drawer-chart">
-              {loaded && latSeries.length > 1 ? (
+              {loaded && latRaw.length > 0 ? (
                 <PingBars data={latSeries} labels={latLabels} height={72} color="var(--accent-2)" />
               ) : (
                 <div className="empty-chart" style={{ height: 72 }}>{loaded ? 'no latency data yet' : 'loading…'}</div>

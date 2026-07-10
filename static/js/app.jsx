@@ -50,6 +50,7 @@ function App({ tweaks, setTweaks, onLogout }) {
   const [startedAt, setStartedAt] = uS(0);
   const [servicePort, setServicePort] = uS(null);
   const [ifaceName, setIfaceName] = uS('wg0');
+  const [internetState, setInternetState] = uS('unknown');
 
   const [trafficRange, setTrafficRange] = uS(() => localStorage.getItem('trafficRange') || '1m');
   const [trafficPaused, setTrafficPaused] = uS(false);
@@ -191,6 +192,7 @@ function App({ tweaks, setTweaks, onLogout }) {
         if (j.service.started_at) setStartedAt(j.service.started_at);
         if (j.network?.port) setServicePort(`${j.network.port}/udp`);
         if (j.network?.iface) setIfaceName(j.network.iface);
+        if (j.network?.internet) setInternetState(j.network.internet);
         if (j.data_budget) {
           setBudgetUsage(j.data_budget);
           setDataBudget(j.data_budget.settings?.budget_gb || 50);
@@ -659,6 +661,7 @@ function App({ tweaks, setTweaks, onLogout }) {
           servicePort={servicePort}
           connectedCount={connectedCount}
           totalCount={peers.length}
+          internetState={internetState}
           doService={doService}
           serviceLoading={serviceLoading}
           updateAvailable={updateAvailable}
@@ -813,7 +816,7 @@ function App({ tweaks, setTweaks, onLogout }) {
           onClose={() => setTrafficModeOpen(false)}
         />
       )}
-      {settingsOpen && <SettingsDrawer tweaks={tweaks} setTweaks={setTweaks} connectedCount={connectedCount} totalPeers={peers.length} onClose={() => setSettingsOpen(false)} onUpdateAvailable={setUpdateAvailable} />}
+      {settingsOpen && <SettingsDrawer tweaks={tweaks} setTweaks={setTweaks} onClose={() => setSettingsOpen(false)} onUpdateAvailable={setUpdateAvailable} />}
       {uptimeOpen && <UptimeDrawer unit={unit} onClose={() => setUptimeOpen(false)} />}
       {dyndnsOpen && <DynDNSDrawer onClose={() => setDyndnsOpen(false)} />}
       {portCheckOpen && <PortCheckDrawer peers={peers} onClose={() => setPortCheckOpen(false)} />}
@@ -840,7 +843,8 @@ function App({ tweaks, setTweaks, onLogout }) {
 // ============================================================
 // KPI tiles
 // ============================================================
-function KPIServiceControl({ serviceActive, startedAt, servicePort, connectedCount, totalCount, doService, serviceLoading, updateAvailable, onOpenSettings, onOpenUptime }) {
+function KPIServiceControl({ serviceActive, startedAt, servicePort, connectedCount, totalCount, internetState, doService, serviceLoading, updateAvailable, onOpenSettings, onOpenUptime }) {
+  const internetDown = internetState === 'down';
   const uptime = (() => {
     if (!serviceActive) return 'stopped';
     if (!startedAt) return '—';
@@ -887,9 +891,10 @@ function KPIServiceControl({ serviceActive, startedAt, servicePort, connectedCou
         </button>
       </div>
       <div className="svc-stats">
-        <button className="svc-stat svc-stat-btn" onClick={onOpenUptime} title="Show uptime history">
+        <button className="svc-stat svc-stat-btn" onClick={onOpenUptime} title={internetDown ? 'Internet is unreachable — show uptime history' : 'Show uptime history'}>
           <div className="svc-stat-label">
             Uptime
+            {internetDown && <span className="svc-stat-dot" title="Internet is unreachable" />}
             <svg className="svc-stat-chev" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M9 18l6-6-6-6"/></svg>
           </div>
           <div className="svc-stat-val mono">{uptime}</div>

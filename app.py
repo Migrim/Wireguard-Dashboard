@@ -2556,6 +2556,14 @@ def api_status():
         payload["network"]["ping_ok"]=ping_ok()
     except:
         pass
+    # Current internet reachability (from the background sampler) so the dashboard can
+    # flag an ongoing outage without opening the uptime drawer. Cheap in-memory read.
+    try:
+        with _uptime_lock:
+            _net_ev=_uptime_db().get("net_events") or []
+        payload["network"]["internet"]=_net_ev[-1]["state"] if _net_ev else "unknown"
+    except Exception:
+        payload["network"]["internet"]="unknown"
     return jsonify(payload)
 
 @app.route("/api/service",methods=["POST"])
@@ -2595,10 +2603,10 @@ def api_service():
     return jsonify({"ok":c==0,"out":o,"active":active,"enabled":service_enabled()})
 
 _UPTIME_RANGES = {
-    "24h": (24 * 3600, 48),
-    "7d":  (7 * 24 * 3600, 84),
-    "30d": (30 * 24 * 3600, 60),
-    "90d": (90 * 24 * 3600, 90),
+    "24h": (24 * 3600, 48),          # one bar per half-hour — finer, so short outages stand out
+    "7d":  (7 * 24 * 3600, 7),       # one bar per day
+    "30d": (30 * 24 * 3600, 30),     # one bar per day
+    "90d": (90 * 24 * 3600, 90),     # one bar per day
 }
 
 @app.route("/api/uptime")
