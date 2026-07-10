@@ -257,9 +257,80 @@ function DnsActivity({ peer, onPeerUpdated }) {
 }
 
 // ============================================================
+// PeerQrModal — scannable provisioning QR for the live config
+// ============================================================
+function PeerQrModal({ peer, onClose }) {
+  const [qr, setQr] = _useState({ loading: true, url: '', error: '' });
+  const closeRef = _useRef(null);
+
+  _useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    closeRef.current?.focus({ preventScroll: true });
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  _useEffect(() => {
+    let cancelled = false;
+    setQr({ loading: true, url: '', error: '' });
+    (async () => {
+      try {
+        const profile = await window.WG.fetchPeerConfig(peer.name);
+        if (cancelled) return;
+        // level L keeps the module count low enough to stay scannable at 240px
+        const url = new window.QRious({ value: profile, size: 240, level: 'L' }).toDataURL();
+        setQr({ loading: false, url, error: '' });
+      } catch (e) {
+        if (!cancelled) setQr({ loading: false, url: '', error: e.message || 'Could not build the config' });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [peer.name]);
+
+  // A portal still bubbles events up the React tree, so clicks must be contained
+  // or the peer row hosting this modal treats them as "open the drawer".
+  const contain = (e) => e.stopPropagation();
+
+  return ReactDOM.createPortal(
+    <>
+      <div className="qr-modal-scrim" onClick={(e) => { contain(e); onClose(); }} />
+      <div className="qr-modal" role="dialog" aria-modal="true" aria-label={`Provisioning QR code for ${peer.name}`}
+        onClick={contain} onContextMenu={(e) => { e.preventDefault(); contain(e); }}>
+        <header className="qr-modal-head">
+          <div>
+            <div className="qr-modal-title">Provision a device</div>
+            <div className="qr-modal-sub mono">{peer.name}</div>
+          </div>
+          <button ref={closeRef} className="icon-btn-sm" onClick={onClose} aria-label="Close">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </header>
+        <div className="qr-modal-body">
+          <div className="qr-modal-frame">
+            {/* 260 = 240px QR + the 10px padding ap-qr-img adds on each side (border-box) */}
+            {qr.url && <img src={qr.url} width={260} height={260} alt={`WireGuard config QR code for ${peer.name}`} className="ap-qr-img" />}
+            {qr.loading && <div className="qr-modal-state">Generating…</div>}
+            {qr.error && <div className="qr-modal-state qr-modal-err">{qr.error}</div>}
+          </div>
+          <div className="qr-modal-steps">
+            <span>Open the WireGuard app, then <em>Add tunnel → Scan from QR code</em>.</span>
+          </div>
+          <div className="qr-modal-warn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+            <span>This code carries the peer's private key — don't share or screenshot it.</span>
+          </div>
+        </div>
+      </div>
+    </>,
+    document.body
+  );
+}
+
+// ============================================================
 // PeerDrawer — slide-out detail with charts + controls
 // ============================================================
 function PeerDrawer({ peer, onClose, throughputBuffers, peerPingHistory = {}, onRevoke, onPeerUpdated, tweaks = {} }) {
+  const [qrOpen, setQrOpen] = _useState(false);
   const [copied, setCopied] = _useState('');
   const [downloading, setDownloading] = _useState(false);
   const [revoking, setRevoking] = _useState(false);
@@ -273,10 +344,11 @@ function PeerDrawer({ peer, onClose, throughputBuffers, peerPingHistory = {}, on
   const latestPing = pingHistory[pingHistory.length - 1] > 0 ? pingHistory[pingHistory.length - 1] : null;
 
   _useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    // The QR modal owns Escape while it is open, otherwise one press closes both
+    const onKey = (e) => { if (e.key === 'Escape' && !qrOpen) onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, qrOpen]);
 
   _useEffect(() => {
     if (!peer) return;
@@ -540,6 +612,10 @@ function PeerDrawer({ peer, onClose, throughputBuffers, peerPingHistory = {}, on
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
                 {downloading ? 'Downloading…' : 'Download config'}
               </button>
+              <button className="btn btn-ghost" onClick={() => setQrOpen(true)} title="Show a QR code to import this config on a phone">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3M21 14v3M14 17v4h3M17 21h4"/></svg>
+                Show QR
+              </button>
               {(() => {
                 // Use pendingAction to determine display so background status polls
                 // can't flip the icon/text mid-operation.
@@ -575,6 +651,7 @@ function PeerDrawer({ peer, onClose, throughputBuffers, peerPingHistory = {}, on
         </div>
         )}
       </aside>
+      {qrOpen && <PeerQrModal peer={peer} onClose={() => setQrOpen(false)} />}
     </>
   );
 }
@@ -2904,4 +2981,4 @@ function UptimeDrawer({ unit, onClose }) {
 }
 
 // ============================================================
-Object.assign(window, { PeerDrawer, LogsPanel, DataBudgetDrawer, LogsDrawer, PortCheckDrawer, SettingsDrawer, NotifIcon, UptimeDrawer });
+Object.assign(window, { PeerDrawer, PeerQrModal, LogsPanel, DataBudgetDrawer, LogsDrawer, PortCheckDrawer, SettingsDrawer, NotifIcon, UptimeDrawer });

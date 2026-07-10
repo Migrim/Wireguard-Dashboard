@@ -1074,6 +1074,7 @@ const CTX_ICON = {
   details: <><path d="M4 5h16a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1z" /><path d="M14 5v14" /></>,
   copy: <><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 012-2h8" /></>,
   download: <><path d="M12 3v12" /><path d="M8 11l4 4 4-4" /><path d="M4 20h16" /></>,
+  qr: <><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><path d="M14 14h3v3M21 14v3M14 17v4h3M17 21h4" /></>,
   pause: <><rect x="7" y="5" width="3.5" height="14" rx="1" /><rect x="13.5" y="5" width="3.5" height="14" rx="1" /></>,
   resume: <path d="M7 4.5l12 7.5-12 7.5z" />,
   revoke: <><path d="M4 7h16" /><path d="M9 7V4h6v3" /><path d="M6 7l1 13h10l1-13" /><path d="M10 11v6M14 11v6" /></>,
@@ -1082,7 +1083,7 @@ const CTX_ICON = {
 const ARROW = 10;
 const ARROW_INSET = 22; // distance from the menu's right edge to the arrow's tip
 
-function PeerContextMenu({ peer, anchor, triggerRef, onClose, onOpenDetails, onPeerUpdated }) {
+function PeerContextMenu({ peer, anchor, triggerRef, onClose, onOpenDetails, onShowQr, onPeerUpdated }) {
   const menuRef = uR(null);
   const [pos, setPos] = uS(null);
   const [active, setActive] = uS(-1);
@@ -1142,6 +1143,7 @@ function PeerContextMenu({ peer, anchor, triggerRef, onClose, onOpenDetails, onP
     { key: 'details', label: 'View details', icon: CTX_ICON.details, run: onOpenDetails },
     { key: 'copy', label: 'Copy address', icon: CTX_ICON.copy, hint: peer.addr, run: copyAddress, disabled: !peer.addr || peer.addr === '—' },
     { key: 'download', label: 'Download config', icon: CTX_ICON.download, hint: '.conf', run: downloadConfig },
+    { key: 'qr', label: 'Show QR code', icon: CTX_ICON.qr, hint: 'phone', run: onShowQr },
     { key: 'pause', label: peer.paused ? 'Resume peer' : 'Pause peer', icon: peer.paused ? CTX_ICON.resume : CTX_ICON.pause, run: togglePause },
     { sep: true },
     { key: 'revoke', label: 'Revoke peer', icon: CTX_ICON.revoke, run: revoke, danger: true },
@@ -1280,6 +1282,7 @@ const CTX_MENU_W = 224;
 
 function PeerRow({ peer, spark, onClick, onPeerUpdated }) {
   const [menuAnchor, setMenuAnchor] = uS(null);
+  const [qrOpen, setQrOpen] = uS(false);
   const menuBtnRef = uR(null);
   const statusColor = peer.paused ? 'var(--warn)' : peer.throttled ? 'var(--danger)' : peer.status === 'connected' ? 'var(--success)' : 'var(--muted)';
   const isOnline = peer.status === 'connected';
@@ -1379,9 +1382,11 @@ function PeerRow({ peer, spark, onClick, onPeerUpdated }) {
           triggerRef={menuBtnRef}
           onClose={() => setMenuAnchor(null)}
           onOpenDetails={onClick}
+          onShowQr={() => setQrOpen(true)}
           onPeerUpdated={onPeerUpdated}
         />
       )}
+      {qrOpen && <window.PeerQrModal peer={peer} onClose={() => setQrOpen(false)} />}
     </div>
   );
 }

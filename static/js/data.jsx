@@ -193,9 +193,14 @@ function makeInitialLogs() {
 // ---- Peer actions (shared by the peer drawer and the row context menu) ----
 const peerUrl = (name, path) => '/api/users/' + encodeURIComponent(name) + path;
 
-async function downloadPeerConfig(name) {
+async function fetchPeerConfig(name) {
   const r = await apiCall(peerUrl(name, '/ovpn'), { silent: true });
   if (!r || !r.profile) throw new Error('Server returned an empty profile');
+  return r.profile;
+}
+
+async function downloadPeerConfig(name) {
+  const r = { profile: await fetchPeerConfig(name) };
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([r.profile], { type: 'text/plain' }));
   a.download = name + '.conf';
@@ -217,5 +222,5 @@ window.WG = {
   initThroughput, initSparkline, seededNoise,
   formatBytes, formatRate, formatRelTime, formatAbsTime,
   LOG_TEMPLATES, makeInitialLogs,
-  downloadPeerConfig, setPeerPaused, revokePeer,
+  fetchPeerConfig, downloadPeerConfig, setPeerPaused, revokePeer,
 };

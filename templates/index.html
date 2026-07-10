@@ -1640,6 +1640,63 @@ html.theme-switching .theme-toggle-icon {
   color: var(--muted);
   letter-spacing: 0.04em;
 }
+
+/* Peer provisioning QR — modal above the drawer */
+.qr-modal-scrim {
+  position: fixed; inset: 0;
+  background: rgba(20, 15, 10, 0.42);
+  backdrop-filter: blur(3px);
+  z-index: 80;
+  animation: fadeIn 0.2s ease;
+}
+.qr-modal {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 81;
+  width: 328px; max-width: calc(100vw - 32px);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  animation: qrModalIn 0.24s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+@keyframes qrModalIn {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.96); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .qr-modal, .qr-modal-scrim { animation: none; }
+}
+.qr-modal-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.qr-modal-title { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.qr-modal-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.qr-modal-body { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 18px 16px 16px; }
+.qr-modal-frame {
+  width: 276px; height: 276px;
+  display: grid; place-items: center;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.qr-modal-state { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.qr-modal-err { color: var(--danger); text-align: center; padding: 0 16px; }
+.qr-modal-steps { font-size: 11.5px; color: var(--ink-2); text-align: center; line-height: 1.5; }
+.qr-modal-steps em { font-style: normal; color: var(--ink); font-family: var(--mono); font-size: 11px; }
+.qr-modal-warn {
+  display: flex; align-items: flex-start; gap: 7px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--warn) 12%, transparent);
+  color: var(--warn);
+  font-size: 11px; line-height: 1.45;
+}
+.qr-modal-warn svg { flex-shrink: 0; margin-top: 1px; }
 .ap-conf-preview {
   width: 100%;
   background: var(--bg-2);
