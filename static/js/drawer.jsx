@@ -944,7 +944,6 @@ function DataBudgetDrawer({ total, budget, enabled = true, alerts, resetTime, pe
                 )}
                 {!enabled && (
                   <div className="budget-track">
-                    <span className="budget-track-chip">tracking only</span>
                     <button className="btn" disabled={saving} onClick={() => saveSettings({ enabled: true })}>Enable budget</button>
                   </div>
                 )}

@@ -37,6 +37,9 @@ function App({ tweaks, setTweaks, onLogout }) {
     });
   }, []);
   const [budgetUsage, setBudgetUsage] = uS({ total: 0, peers: [], pct: 0, period_start_iso: '' });
+  // Until /api/status lands we don't know whether a cap exists, and guessing one
+  // way flashes the wrong tile — gauge then bar, or bar then gauge.
+  const [budgetLoaded, setBudgetLoaded] = uS(false);
   const [filter, setFilter] = uS('');
   const searchRef = uR(null);
   const [statusFilter, setStatusFilter] = uS('all');
@@ -208,6 +211,9 @@ function App({ tweaks, setTweaks, onLogout }) {
           if (j.data_budget.settings?.peer_budgets) setPeerBudgets(j.data_budget.settings.peer_budgets);
           if (j.data_budget.settings?.enforcement) setEnforcement(j.data_budget.settings.enforcement);
         }
+        // Resolve even when the payload carries no data_budget, or the tile would
+        // shimmer forever.
+        setBudgetLoaded(true);
         const mapped = window.WG.mapApiPeers(j.clients.issued, j.clients.live);
         setPeers(prev => {
           const prevMap = new Map(prev.map(p => [p.id, p]));
@@ -679,7 +685,7 @@ function App({ tweaks, setTweaks, onLogout }) {
           onOpenUptime={() => setUptimeOpen(true)}
         />
         <KPIThroughput currentRx={currentRx} currentTx={currentTx} dataIn={chartTraffic.rx} dataOut={chartTraffic.tx} smooth={tweaks.smoothThroughput} />
-        <KPIDataToday total={totalToday} budget={dataBudget} enabled={budgetEnabled} peerBudgets={peerBudgets} peerRows={budgetUsage.peers} onClick={() => setDataDrawerOpen(true)} />
+        <KPIDataToday total={totalToday} budget={dataBudget} enabled={budgetEnabled} peerBudgets={peerBudgets} peerRows={budgetUsage.peers} loading={!budgetLoaded} onClick={() => setDataDrawerOpen(true)} />
         <KPIActiveSessions connectedCount={connectedCount} totalCount={peers.length} avgPingHistory={avgPingHistory} />
       </section>
 
@@ -979,7 +985,7 @@ function KPIThroughput({ currentRx, currentTx, dataIn, dataOut, smooth = false }
   );
 }
 
-function KPIDataToday({ total, budget = 50, enabled = true, peerBudgets = {}, peerRows = [], onClick }) {
+function KPIDataToday({ total, budget = 50, enabled = true, peerBudgets = {}, peerRows = [], loading = false, onClick }) {
   const entries = Object.values(peerBudgets);
   const budgetGB = entries.reduce((s, b) => s + (b === 'inf' || b == null ? 0 : b), 0);
   const allInfinite = entries.length > 0 && budgetGB === 0;
@@ -999,9 +1005,25 @@ function KPIDataToday({ total, budget = 50, enabled = true, peerBudgets = {}, pe
     <div className="kpi-tile kpi-clickable" onClick={onClick} role="button" tabIndex={0}>
       <div className="kpi-head">
         <span className="section-label">DATA TODAY</span>
-        {enabled && <span className="kpi-badge">{allInfinite ? '∞ no limit' : `of ${effectiveGB} GB`}</span>}
+        {!loading && enabled && <span className="kpi-badge">{allInfinite ? '∞ no limit' : `of ${effectiveGB} GB`}</span>}
       </div>
-      {unlimited ? (
+      {loading ? (
+        <div className="kpi-body kpi-body-comp" aria-busy="true">
+          <div className="skel skel-kpi-big" />
+          <div className="bcomp-wrap">
+            <div className="skel skel-kpi-bar" />
+            {/* Two rows, matching a loaded legend of three peers plus "+N more".
+                The last item takes a full basis so it wraps at any tile width. */}
+            <div className="bcomp-legend bcomp-legend-sm">
+              {[62, 58, 50, 44].map((w, i) => (
+                <span key={i} className="bcomp-item" style={i === 3 ? { flexBasis: '100%' } : undefined}>
+                  <span className="skel skel-dot" /><span className="skel" style={{ width: w }} />
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : unlimited ? (
         <div className="kpi-body kpi-body-comp">
           <div className="kpi-number">
             <span className="kpi-big">{window.WG.formatBytes(total).split(' ')[0]}</span>
@@ -1023,7 +1045,9 @@ function KPIDataToday({ total, budget = 50, enabled = true, peerBudgets = {}, pe
         </div>
       )}
       <div className="kpi-foot">
-        <span className="mono">{unlimited ? 'used today' : `${pct.toFixed(1)}% of budget`}</span>
+        {loading
+          ? <span className="skel skel-sub" style={{ width: 88 }} />
+          : <span className="mono">{unlimited ? 'used today' : `${pct.toFixed(1)}% of budget`}</span>}
         <span className="mono kpi-link">configure <svg className="kpi-link-chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M9 18l6-6-6-6"/></svg></span>
       </div>
     </div>

@@ -739,6 +739,10 @@ html.theme-switching .theme-toggle-icon {
 .skel-sub { height: 9px; border-radius: 3px; }
 .skel-dot { width: 7px; height: 7px; border-radius: 50%; }
 .skel-avatar { width: 28px; height: 28px; border-radius: 7px; flex-shrink: 0; }
+/* DATA TODAY placeholder while we don't yet know whether a cap exists. Holds the
+   tile's height instead of predicting gauge or bar. */
+.skel-kpi-big { height: 44px; width: 118px; border-radius: 6px; } /* = .kpi-big line box */
+.skel-kpi-bar { height: 8px; width: 100%; border-radius: 5px; }
 .row-skeleton { pointer-events: none; }
 
 /* Settings drawer — server stats grid */
@@ -812,7 +816,6 @@ html.theme-switching .theme-toggle-icon {
 .budget-enf-counts { display: flex; align-items: center; gap: 6px; }
 
 .budget-track { display: flex; align-items: center; gap: 10px; }
-.budget-track-chip { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--border-strong); border-radius: 999px; padding: 4px 9px; white-space: nowrap; }
 
 .peer-usage-list { display: flex; flex-direction: column; gap: 8px; }
 .peer-usage-row { display: grid; grid-template-columns: 100px 1fr 70px; gap: 12px; align-items: center; font-size: 12px; }
