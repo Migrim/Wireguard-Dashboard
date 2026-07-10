@@ -536,8 +536,15 @@ function App({ tweaks, setTweaks, onLogout }) {
     }
   });
 
+  const pausedCount = peers.filter(p => p.paused).length;
+  // The Paused pill is hidden when nothing is paused, so fall back to All rather
+  // than stranding the list on a filter the user can no longer see or unset.
+  const effectiveStatusFilter = statusFilter === 'paused' && pausedCount === 0 ? 'all' : statusFilter;
+
   const filtered = peers.filter(p => {
-    if (statusFilter !== 'all' && p.status !== statusFilter) return false;
+    if (effectiveStatusFilter === 'paused') {
+      if (!p.paused) return false;
+    } else if (effectiveStatusFilter !== 'all' && p.status !== effectiveStatusFilter) return false;
     if (!filter) return true;
     const f = filter.toLowerCase();
     return p.name.toLowerCase().includes(f) || p.addr.includes(f) || (p.pubKey || '').toLowerCase().includes(f);
@@ -736,8 +743,9 @@ function App({ tweaks, setTweaks, onLogout }) {
               { key: 'all',       label: 'All',     count: null },
               { key: 'connected', label: 'Online',  count: peers.filter(p => p.status === 'connected').length },
               { key: 'offline',   label: 'Offline', count: peers.filter(p => p.status === 'offline').length },
+              ...(pausedCount > 0 ? [{ key: 'paused', label: 'Paused', count: pausedCount }] : []),
             ].map(({ key, label, count }) => (
-              <button key={key} className={`filter-pill ${statusFilter === key ? 'active' : ''}`} onClick={() => setStatusFilter(key)}>
+              <button key={key} className={`filter-pill ${effectiveStatusFilter === key ? 'active' : ''}`} onClick={() => setStatusFilter(key)}>
                 {label}{count !== null && <span className="filter-pill-count">{count}</span>}
               </button>
             ))}
@@ -1067,6 +1075,18 @@ function PeerRowSkeleton({ seed = 0 }) {
   );
 }
 
+// Avatar glyphs — a paused or throttled peer swaps its initials for one of these.
+const PauseGlyph = ({ size = 12 }) => (
+  <svg className="peer-avatar-pause" width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" />
+  </svg>
+);
+const ThrottleGlyph = ({ size = 12 }) => (
+  <svg className="peer-avatar-throttle" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4 17a8 8 0 1 1 16 0" /><path d="M12 17l4.4-4.4" />
+  </svg>
+);
+
 // ============================================================
 // Peer row context menu — portaled so the table never clips it
 // ============================================================
@@ -1243,10 +1263,12 @@ function PeerContextMenu({ peer, anchor, triggerRef, onClose, onOpenDetails, onS
         />
       )}
       <div className="ctx-menu-head">
-        <div className={`peer-avatar-sm${peer.paused ? ' is-paused' : ''}`}>
+        <div className={`peer-avatar-sm${peer.paused ? ' is-paused' : peer.throttled ? ' is-throttled' : ''}`}>
           {peer.paused
-            ? <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" /></svg>
-            : peer.name.split('-').map(s => s[0]).join('').slice(0, 2).toUpperCase()}
+            ? <PauseGlyph size={11} />
+            : peer.throttled
+              ? <ThrottleGlyph size={11} />
+              : peer.name.split('-').map(s => s[0]).join('').slice(0, 2).toUpperCase()}
         </div>
         <div className="ctx-menu-ident">
           <div className="ctx-menu-name">{peer.name}</div>
@@ -1286,6 +1308,7 @@ function PeerRow({ peer, spark, onClick, onPeerUpdated }) {
   const menuBtnRef = uR(null);
   const statusColor = peer.paused ? 'var(--warn)' : peer.throttled ? 'var(--danger)' : peer.status === 'connected' ? 'var(--success)' : 'var(--muted)';
   const isOnline = peer.status === 'connected';
+  const isThrottled = peer.throttled && !peer.paused;
   const statusLabel = peer.paused ? 'Paused' : peer.throttled ? 'Throttled' : isOnline ? 'Online' : 'Offline';
   const statusDetail = peer.paused ? 'Traffic suspended'
     : peer.throttled ? 'Rate limited'
@@ -1332,20 +1355,19 @@ function PeerRow({ peer, spark, onClick, onPeerUpdated }) {
         </div>
       </div>
       <div className="peer-name-cell">
-        <div className={`peer-avatar-sm${peer.paused ? ' is-paused' : ''}`}
-          role={peer.paused ? 'img' : undefined}
-          aria-label={peer.paused ? 'Paused' : undefined}>
+        <div className={`peer-avatar-sm${peer.paused ? ' is-paused' : isThrottled ? ' is-throttled' : ''}`}
+          role={peer.paused || isThrottled ? 'img' : undefined}
+          aria-label={peer.paused ? 'Paused' : isThrottled ? 'Throttled' : undefined}>
           {peer.paused
-            ? <svg className="peer-avatar-pause" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" /></svg>
-            : peer.name.split('-').map(s => s[0]).join('').slice(0, 2).toUpperCase()}
+            ? <PauseGlyph />
+            : isThrottled
+              ? <ThrottleGlyph />
+              : peer.name.split('-').map(s => s[0]).join('').slice(0, 2).toUpperCase()}
         </div>
         <div>
           <div className="peer-name">
             {peer.name}
             {hasDraft && <span className="peer-draft-dot" title="Unsaved config changes" />}
-            {peer.throttled && !peer.paused && (
-              <span style={{ marginLeft: 6, fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--danger)', background: 'color-mix(in oklch, var(--danger) 12%, transparent)', padding: '1px 5px', borderRadius: 4, verticalAlign: 'middle' }}>throttled</span>
-            )}
           </div>
           <div className="peer-device">{peer.device}</div>
         </div>

@@ -1403,6 +1403,12 @@ html.theme-switching .theme-toggle-icon {
   background: color-mix(in oklch, var(--warn) 14%, transparent);
   color: var(--warn);
 }
+/* Throttled peers get the same treatment in danger tint. No pulse — paused is the
+   state that pulses, so a still glyph keeps the two distinguishable at a glance. */
+.peer-avatar-sm.is-throttled {
+  background: color-mix(in oklch, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
 .peer-avatar-pause { animation: avatarPauseBlink 1.4s ease-in-out infinite; }
 @keyframes avatarPauseBlink {
   0%, 100% { opacity: 1; }
